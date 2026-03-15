@@ -1,5 +1,5 @@
 const CONFIG = {
   SUPABASE_URL: 'https://rapusxysanvicnnkssph.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhcHVzeHlzYW52aWNubmtzc3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1NzE0MDIsImV4cCI6MjA4OTE0NzQwMn0.dwGf9F8DqUUTXVBpk2Ja7HW87le0TscBkRccGEsVGPE',
-  ADMIN_PASSWORD: 'la tua password',
+  ADMIN_PASSWORD: 'Spe_2026@',
 };
