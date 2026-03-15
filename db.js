@@ -74,23 +74,7 @@ async function dbGetAllPartite(categoria_id) {
   return data || [];
 }
 async function dbSavePartita(p) {
-  const { data, error } = await db
-    .from('partite')
-    .update({
-      girone_id: p.girone_id,
-      gol_home: p.gol_home,
-      gol_away: p.gol_away,
-      giocata: p.giocata
-    })
-    .eq('id', p.id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('dbSavePartita error:', error);
-    throw error;
-  }
-
+  const { data } = await db.from('partite').upsert(p).select().single();
   return data;
 }
 async function dbGeneraPartite(girone_id, squadra_ids) {
@@ -122,7 +106,8 @@ async function dbGetKnockout(categoria_id) {
   return data || [];
 }
 async function dbSaveKnockoutMatch(m) {
-  const { data } = await db.from('knockout').upsert(m).select().single();
+  const { data, error } = await db.from('knockout').upsert(m).select().single();
+  if (error) { console.error('dbSaveKnockoutMatch:', error); throw error; }
   return data;
 }
 async function dbDeleteKnockout(categoria_id) {
