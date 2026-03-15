@@ -442,11 +442,12 @@ async function renderAdminRisultati() {
       html += `<div class="admin-match">
         <div class="admin-match-header">
           <div class="admin-team-name">${logoHTML(p.home, 'sm')}<span>${p.home?.nome || '?'}</span></div>
-          <input class="score-input" type="number" min="0" max="30" value="${p.giocata ? p.gol_home : ''}" placeholder="—" id="sh_${p.id}" onchange="saveRisultato(${p.id}, ${g.id})">
+          <input class="score-input" type="number" min="0" max="30" value="${p.giocata ? p.gol_home : ''}" placeholder="—" id="sh_${p.id}">
           <span class="score-dash">—</span>
-          <input class="score-input" type="number" min="0" max="30" value="${p.giocata ? p.gol_away : ''}" placeholder="—" id="sa_${p.id}" onchange="saveRisultato(${p.id}, ${g.id})">
+          <input class="score-input" type="number" min="0" max="30" value="${p.giocata ? p.gol_away : ''}" placeholder="—" id="sa_${p.id}">
           <div class="admin-team-name right"><span>${p.away?.nome || '?'}</span>${logoHTML(p.away, 'sm')}</div>
           <div class="match-actions">
+            <button class="btn btn-p btn-sm" onclick="saveRisultato(${p.id}, ${g.id})">✓ Conferma</button>
             ${badge}
             ${p.giocata ? `<button class="btn btn-accent btn-sm" onclick="toggleScorers('${key}')">${open ? 'Chiudi' : '+ Marcatori'}</button>` : ''}
           </div>
@@ -481,10 +482,12 @@ async function renderAdminRisultati() {
 async function saveRisultato(partita_id, girone_id) {
   const sh = document.getElementById('sh_' + partita_id).value;
   const sa = document.getElementById('sa_' + partita_id).value;
-  if (sh === '' || sa === '') return;
-  await dbSavePartita({ id: partita_id, girone_id, gol_home: parseInt(sh), gol_away: parseInt(sa), giocata: true });
-  toast('Risultato salvato');
-  await renderAdminRisultati();
+  if (sh === '' || sa === '') { toast('Inserisci entrambi i gol'); return; }
+  try {
+    const result = await dbSavePartita({ id: partita_id, girone_id, gol_home: parseInt(sh), gol_away: parseInt(sa), giocata: true });
+    if (result) { toast('Salvato!'); await renderAdminRisultati(); }
+    else { toast('Errore nel salvataggio'); console.error('dbSavePartita returned null'); }
+  } catch(e) { console.error('Errore saveRisultato:', e); toast('Errore: ' + (e.message||'sconosciuto')); }
 }
 
 function toggleScorers(key) {
