@@ -1,5 +1,5 @@
 // ============================================================
-//  DATABASE LAYER - Supabase
+//  DATABASE LAYER - Multi-torneo
 // ============================================================
 
 let db = null;
@@ -8,18 +8,25 @@ function initDB() {
   db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 }
 
-// ---- TORNEO CONFIG ----
-async function dbGetTorneo() {
-  const { data } = await db.from('torneo').select('*').eq('id', 1).single();
-  return data;
+// ---- TORNEI ----
+async function dbGetTornei() {
+  const { data } = await db.from('tornei').select('*').order('created_at', { ascending: false });
+  return data || [];
 }
 async function dbSaveTorneo(obj) {
-  await db.from('torneo').upsert({ id: 1, ...obj });
+  const { data } = await db.from('tornei').insert(obj).select().single();
+  return data;
+}
+async function dbUpdateTorneo(id, obj) {
+  await db.from('tornei').update(obj).eq('id', id);
+}
+async function dbDeleteTorneo(id) {
+  await db.from('tornei').delete().eq('id', id);
 }
 
 // ---- CATEGORIE ----
-async function dbGetCategorie() {
-  const { data } = await db.from('categorie').select('*').order('ordine');
+async function dbGetCategorie(torneo_id) {
+  const { data } = await db.from('categorie').select('*').eq('torneo_id', torneo_id).order('ordine');
   return data || [];
 }
 async function dbSaveCategoria(cat) {
@@ -41,8 +48,8 @@ async function dbSaveGirone(g) {
 }
 
 // ---- SQUADRE ----
-async function dbGetSquadre() {
-  const { data } = await db.from('squadre').select('*').order('nome');
+async function dbGetSquadre(torneo_id) {
+  const { data } = await db.from('squadre').select('*').eq('torneo_id', torneo_id).order('nome');
   return data || [];
 }
 async function dbSaveSquadra(s) {
@@ -50,7 +57,7 @@ async function dbSaveSquadra(s) {
   return data;
 }
 
-// ---- GIRONE-SQUADRE (membership) ----
+// ---- GIRONE-SQUADRE ----
 async function dbGetGironeSquadre(girone_id) {
   const { data } = await db.from('girone_squadre').select('*, squadre(*)').eq('girone_id', girone_id).order('posizione');
   return data || [];
@@ -67,24 +74,17 @@ async function dbGetPartite(girone_id) {
   const { data } = await db.from('partite').select('*, home:squadre!home_id(*), away:squadre!away_id(*)').eq('girone_id', girone_id).order('created_at');
   return data || [];
 }
-async function dbGetAllPartite(categoria_id) {
-  const { data } = await db.from('partite')
-    .select('*, home:squadre!home_id(*), away:squadre!away_id(*), gironi(*)')
-    .eq('gironi.categoria_id', categoria_id);
-  return data || [];
-}
 async function dbSavePartita(p) {
-  const { data } = await db.from('partite').upsert(p).select().single();
+  const { data, error } = await db.from('partite').update({ girone_id: p.girone_id, gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata }).eq('id', p.id).select().single();
+  if (error) { console.error('dbSavePartita:', error); throw error; }
   return data;
 }
 async function dbGeneraPartite(girone_id, squadra_ids) {
   await db.from('partite').delete().eq('girone_id', girone_id);
   const matches = [];
-  for (let i = 0; i < squadra_ids.length; i++) {
-    for (let j = i + 1; j < squadra_ids.length; j++) {
+  for (let i = 0; i < squadra_ids.length; i++)
+    for (let j = i + 1; j < squadra_ids.length; j++)
       matches.push({ girone_id, home_id: squadra_ids[i], away_id: squadra_ids[j], giocata: false });
-    }
-  }
   if (matches.length) await db.from('partite').insert(matches);
 }
 
@@ -96,8 +96,7 @@ async function dbGetMarcatori(partita_id) {
 async function dbSaveMarcatori(partita_id, marcatori) {
   await db.from('marcatori').delete().eq('partita_id', partita_id);
   if (!marcatori.length) return;
-  const rows = marcatori.map(m => ({ partita_id, squadra_id: m.squadra_id, nome: m.nome, minuto: m.minuto || null }));
-  await db.from('marcatori').insert(rows);
+  await db.from('marcatori').insert(marcatori.map(m => ({ partita_id, squadra_id: m.squadra_id, nome: m.nome, minuto: m.minuto || null })));
 }
 
 // ---- KNOCKOUT ----
@@ -114,12 +113,12 @@ async function dbDeleteKnockout(categoria_id) {
   await db.from('knockout').delete().eq('categoria_id', categoria_id);
 }
 
-// ---- LOGHI (base64 su squadre) ----
+// ---- LOGHI ----
 async function dbUpdateLogo(squadra_id, logo_base64) {
   await db.from('squadre').update({ logo: logo_base64 }).eq('id', squadra_id);
 }
 
-// ---- REALTIME SUBSCRIPTION ----
+// ---- REALTIME ----
 function subscribeRealtime(callback) {
   db.channel('torneo-updates')
     .on('postgres_changes', { event: '*', schema: 'public' }, callback)
