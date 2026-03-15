@@ -445,9 +445,9 @@ async function renderAdminRisultati() {
           <input class="score-input" type="number" min="0" max="30" value="${p.giocata ? p.gol_home : ''}" placeholder="—" id="sh_${p.id}">
           <span class="score-dash">—</span>
           <input class="score-input" type="number" min="0" max="30" value="${p.giocata ? p.gol_away : ''}" placeholder="—" id="sa_${p.id}">
+          <button class="btn btn-success btn-sm" onclick="saveRisultato(${p.id}, ${g.id})">✓ Conferma</button>
           <div class="admin-team-name right"><span>${p.away?.nome || '?'}</span>${logoHTML(p.away, 'sm')}</div>
           <div class="match-actions">
-            <button class="btn btn-success btn-sm" onclick="saveRisultato(${p.id}, ${g.id})">✓ Conferma</button>
             ${badge}
             ${p.giocata ? `<button class="btn btn-accent btn-sm" onclick="toggleScorers('${key}')">${open ? 'Chiudi' : '+ Marcatori'}</button>` : ''}
           </div>
@@ -464,18 +464,18 @@ async function renderAdminRisultati() {
             </select>
             <input placeholder="Nome giocatore" value="${m.nome || ''}" id="mnm_${p.id}_${mi}">
             <input placeholder="Min" value="${m.minuto || ''}" id="mmin_${p.id}_${mi}" class="min-input">
+            <button class="btn btn-danger btn-sm" onclick="removeMarcatore(${p.id}, ${mi})">✕</button>
           </div>`;
         });
         (tempMarcatori[p.id] || []).forEach((m, ti) => {
           const idx = marcatori.length + ti;
           html += `<div class="scorer-row">
-            <select id="tmsq_${p.id}_${ti}" onchange="setTempMarcatoreValue(${p.id}, ${ti}, 'squadra_id', this.value)">
-              <option value="">Squadra</option>
-              <option value="${p.home_id}" ${String(getTempMarcatoreValue(p.id, ti, 'squadra_id', '')) === String(p.home_id) ? 'selected' : ''}>${p.home?.nome}</option>
-              <option value="${p.away_id}" ${String(getTempMarcatoreValue(p.id, ti, 'squadra_id', '')) === String(p.away_id) ? 'selected' : ''}>${p.away?.nome}</option>
+            <select id="msq_${p.id}_${idx}">
+              <option value="${p.home_id}" ${m.squadra_id === p.home_id ? 'selected' : ''}>${p.home?.nome}</option>
+              <option value="${p.away_id}" ${m.squadra_id === p.away_id ? 'selected' : ''}>${p.away?.nome}</option>
             </select>
-            <input placeholder="Nome giocatore" value="${getTempMarcatoreValue(p.id, ti, 'nome', '')}" id="tmnm_${p.id}_${ti}" oninput="setTempMarcatoreValue(${p.id}, ${ti}, 'nome', this.value)">
-            <input placeholder="Min" value="${getTempMarcatoreValue(p.id, ti, 'minuto', '')}" id="tmmin_${p.id}_${ti}" class="min-input" oninput="setTempMarcatoreValue(${p.id}, ${ti}, 'minuto', this.value)">
+            <input placeholder="Nome giocatore" value="${m.nome || ''}" id="mnm_${p.id}_${idx}">
+            <input placeholder="Min" value="${m.minuto || ''}" id="mmin_${p.id}_${idx}" class="min-input">
             <button class="btn btn-danger btn-sm" onclick="removeMarcatore(${p.id}, ${ti})">✕</button>
           </div>`;
         });
@@ -494,10 +494,12 @@ async function renderAdminRisultati() {
 async function saveRisultato(partita_id, girone_id) {
   const sh = document.getElementById('sh_' + partita_id).value;
   const sa = document.getElementById('sa_' + partita_id).value;
+
   if (sh === '' || sa === '') {
     toast('Inserisci entrambi i gol');
     return;
   }
+
   try {
     await dbSavePartita({
       id: partita_id,
@@ -509,7 +511,7 @@ async function saveRisultato(partita_id, girone_id) {
     toast('Risultato salvato');
     await renderAdminRisultati();
   } catch (e) {
-    console.error('saveRisultato', e);
+    console.error('Errore saveRisultato:', e);
     toast('Errore nel salvataggio');
   }
 }
@@ -530,14 +532,6 @@ function removeMarcatore(partita_id, idx) {
   tempMarcatori[partita_id].splice(idx, 1);
   renderAdminRisultati();
 }
-function getTempMarcatoreValue(partita_id, idx, field, fallback = '') {
-  return tempMarcatori[partita_id]?.[idx]?.[field] ?? fallback;
-}
-function setTempMarcatoreValue(partita_id, idx, field, value) {
-  if (!tempMarcatori[partita_id]) tempMarcatori[partita_id] = [];
-  if (!tempMarcatori[partita_id][idx]) tempMarcatori[partita_id][idx] = { squadra_id: null, nome: '', minuto: null };
-  tempMarcatori[partita_id][idx][field] = value;
-}
 
 async function saveMarcatori(partita_id, girone_id) {
   const gironi = await getGironiWithData(STATE.activeCat);
@@ -546,6 +540,7 @@ async function saveMarcatori(partita_id, girone_id) {
   if (!partita) return;
 
   const existing = partita.marcatori || [];
+  const nuovi = tempMarcatori[partita_id] || [];
   const all = [];
 
   for (let i = 0; i < existing.length; i++) {
@@ -553,32 +548,33 @@ async function saveMarcatori(partita_id, girone_id) {
     const nmEl = document.getElementById(`mnm_${partita_id}_${i}`);
     const mnEl = document.getElementById(`mmin_${partita_id}_${i}`);
     if (sqEl && nmEl && nmEl.value.trim()) {
-      all.push({ squadra_id: parseInt(sqEl.value, 10), nome: nmEl.value.trim(), minuto: mnEl ? mnEl.value || null : null });
+      all.push({
+        squadra_id: parseInt(sqEl.value, 10),
+        nome: nmEl.value.trim(),
+        minuto: mnEl ? (mnEl.value || null) : null
+      });
     }
   }
 
-  (tempMarcatori[partita_id] || []).forEach((m, idx) => {
-    const sqEl = document.getElementById(`tmsq_${partita_id}_${idx}`);
-    const nmEl = document.getElementById(`tmnm_${partita_id}_${idx}`);
-    const mnEl = document.getElementById(`tmmin_${partita_id}_${idx}`);
-    const squadraId = sqEl?.value || m.squadra_id;
-    const nome = nmEl?.value?.trim() || m.nome || '';
-    const minuto = mnEl?.value || m.minuto || null;
-    if (squadraId && nome) {
-      all.push({ squadra_id: parseInt(squadraId, 10), nome, minuto });
+  for (let i = 0; i < nuovi.length; i++) {
+    const idx = existing.length + i;
+    const sqEl = document.getElementById(`msq_${partita_id}_${idx}`);
+    const nmEl = document.getElementById(`mnm_${partita_id}_${idx}`);
+    const mnEl = document.getElementById(`mmin_${partita_id}_${idx}`);
+    if (sqEl && nmEl && nmEl.value.trim()) {
+      all.push({
+        squadra_id: parseInt(sqEl.value, 10),
+        nome: nmEl.value.trim(),
+        minuto: mnEl ? (mnEl.value || null) : null
+      });
     }
-  });
-
-  try {
-    await dbSaveMarcatori(partita_id, all.filter(m => m.nome));
-    delete tempMarcatori[partita_id];
-    openScorers['p' + partita_id] = false;
-    toast('Marcatori salvati');
-    await renderAdminRisultati();
-  } catch (e) {
-    console.error('saveMarcatori', e);
-    toast('Errore salvataggio marcatori');
   }
+
+  await dbSaveMarcatori(partita_id, all.filter(m => m.nome));
+  delete tempMarcatori[partita_id];
+  openScorers['p' + partita_id] = false;
+  toast('Marcatori salvati');
+  await renderAdminRisultati();
 }
 
 // ===== ADMIN: KNOCKOUT =====
