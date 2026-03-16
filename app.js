@@ -1,5 +1,5 @@
 // ============================================================
-//  APP PRINCIPALE
+//  APP PRINCIPALE - VERSIONE CORRETTA
 // ============================================================
 
 let STATE = {
@@ -11,6 +11,9 @@ let STATE = {
   cache: {}
 };
 
+let openScorers = {};
+let tempMarcatori = {};
+
 // ===== INIT =====
 async function init() {
   initDB();
@@ -21,7 +24,9 @@ async function init() {
     updateHeader();
     renderCatBar();
     await renderCurrentSection();
-    subscribeRealtime(() => renderCurrentSection());
+    subscribeRealtime(async () => {
+      await renderCurrentSection();
+    });
   } catch (e) {
     console.error(e);
   }
@@ -47,7 +52,6 @@ function showSection(name, btn) {
 
   const hideCatBar = ['a-setup'].includes(name);
   document.getElementById('cat-bar').style.display = hideCatBar ? 'none' : '';
-
   renderCurrentSection();
 }
 
@@ -98,7 +102,7 @@ async function getGironiWithData(categoria_id) {
   const gironi = await dbGetGironi(categoria_id);
   for (const g of gironi) {
     const members = await dbGetGironeSquadre(g.id);
-    g.squadre = members.map(m => m.squadre);
+    g.squadre = members.map(m => m.squadre).filter(Boolean);
     g.partite = await dbGetPartite(g.id);
     for (const p of g.partite) {
       p.marcatori = await dbGetMarcatori(p.id);
@@ -147,7 +151,6 @@ function calcGironeClassifica(girone) {
   return rows.sort((a, b) => {
     if (b.pts !== a.pts) return b.pts - a.pts;
 
-    // scontro diretto
     const direct = girone.partite.find(p =>
       p.giocata &&
       (
@@ -166,9 +169,7 @@ function calcGironeClassifica(girone) {
     const diffA = a.gf - a.gs;
     const diffB = b.gf - b.gs;
     if (diffB !== diffA) return diffB - diffA;
-
     if (b.gf !== a.gf) return b.gf - a.gf;
-
     return a.sq.nome.localeCompare(b.sq.nome);
   });
 }
@@ -264,9 +265,11 @@ async function renderRisultati() {
           <div class="match-team right"><span>${p.away ? p.away.nome : '?'}</span>${logoHTML(p.away, 'sm')}</div>
         </div>`;
 
-        if (p.orario || p.campo) {
+        if (p.orario || p.campo || p.fase) {
           html += `<div class="match-meta" style="font-size:12px;color:#777;margin:4px 0 10px 0;">
-            ${p.orario ? `🕒 ${p.orario}` : ''} ${p.campo ? `• 📍 ${p.campo}` : ''}
+            ${p.fase ? `🏆 ${p.fase}` : ''}
+            ${p.orario ? ` • 🕒 ${p.orario}` : ''}
+            ${p.campo ? ` • 📍 ${p.campo}` : ''}
           </div>`;
         }
 
@@ -289,18 +292,18 @@ async function renderRisultati() {
           <div class="match-team right"><span>${p.away ? p.away.nome : '?'}</span>${logoHTML(p.away, 'sm')}</div>
         </div>`;
 
-        if (p.orario || p.campo) {
+        if (p.orario || p.campo || p.fase) {
           html += `<div class="match-meta" style="font-size:12px;color:#777;margin:4px 0 10px 0;">
-            ${p.orario ? `🕒 ${p.orario}` : ''} ${p.campo ? `• 📍 ${p.campo}` : ''}
+            ${p.fase ? `🏆 ${p.fase}` : ''}
+            ${p.orario ? ` • 🕒 ${p.orario}` : ''}
+            ${p.campo ? ` • 📍 ${p.campo}` : ''}
           </div>`;
         }
       }
       html += `</div>`;
     }
 
-    if (!g.partite.length) {
-      html += `<div class="empty-state" style="padding:16px;">Nessuna partita.</div>`;
-    }
+    if (!g.partite.length) html += `<div class="empty-state" style="padding:16px;">Nessuna partita.</div>`;
   }
 
   el.innerHTML = html || '<div class="empty-state">Nessun risultato.</div>';
@@ -344,7 +347,6 @@ async function renderTabellone() {
       const a = m.away_id ? sqMap[m.away_id] : null;
       const w1 = m.giocata && m.gol_home > m.gol_away;
       const w2 = m.giocata && m.gol_away > m.gol_home;
-
       html += `<div class="ko-match">
         <div class="ko-team-row ${w1 ? 'winner' : ''}">${logoHTML(h, 'sm')}<span style="flex:1;">${h ? h.nome : 'TBD'}</span>${m.giocata ? `<span class="ko-score">${m.gol_home}</span>` : ''}</div>
         <div class="ko-sep"></div>
@@ -494,20 +496,14 @@ async function addCategoria() {
   if (!STATE.activeCat) STATE.activeCat = cat.id;
 
   const lines = teamsText.split('\n').map(l => l.trim()).filter(Boolean);
-
   for (let gi = 0; gi < lines.length; gi++) {
     let line = lines[gi];
     if (line.includes(':')) line = line.split(':').slice(1).join(':').trim();
-
     const teamNames = line.split(',').map(t => t.trim()).filter(Boolean);
-    const girone = await dbSaveGirone({
-      categoria_id: cat.id,
-      nome: 'Girone ' + String.fromCharCode(65 + gi)
-    });
+    const girone = await dbSaveGirone({ categoria_id: cat.id, nome: 'Girone ' + String.fromCharCode(65 + gi) });
 
     const squadra_ids = [];
     const tutteSquadre = await dbGetSquadre();
-
     for (const tn of teamNames) {
       let sq = tutteSquadre.find(s => s.nome.toLowerCase() === tn.toLowerCase());
       if (!sq) sq = await dbSaveSquadra({ nome: tn });
@@ -536,7 +532,6 @@ async function deleteCat(id) {
 async function renderAdminLoghi() {
   const el = document.getElementById('sec-a-loghi');
   const squadre = await dbGetSquadre();
-
   if (!squadre.length) {
     el.innerHTML = '<div class="empty-state">Aggiungi prima le squadre nel setup.</div>';
     return;
@@ -544,7 +539,6 @@ async function renderAdminLoghi() {
 
   let html = '<div class="section-label">Loghi squadre</div><div class="card">';
   html += `<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo (o sulle iniziali) per caricare/cambiare l'immagine. Formati supportati: JPG, PNG, SVG.</div>`;
-
   for (const sq of squadre) {
     html += `<div class="logo-team-row">
       <div class="logo-upload-btn" title="Carica logo">
@@ -561,7 +555,6 @@ async function renderAdminLoghi() {
       </div>
     </div>`;
   }
-
   html += '</div>';
   el.innerHTML = html;
 }
@@ -569,7 +562,6 @@ async function renderAdminLoghi() {
 async function uploadLogo(event, squadra_id) {
   const file = event.target.files[0];
   if (!file) return;
-
   const reader = new FileReader();
   reader.onload = async (e) => {
     await dbUpdateLogo(squadra_id, e.target.result);
@@ -586,9 +578,6 @@ async function removeLogo(squadra_id) {
 }
 
 // ===== ADMIN: RISULTATI =====
-let openScorers = {};
-let tempMarcatori = {};
-
 async function renderAdminRisultati() {
   const el = document.getElementById('sec-a-risultati');
   if (!STATE.activeCat) {
@@ -628,9 +617,11 @@ async function renderAdminRisultati() {
           </div>
         </div>`;
 
-      if (p.orario || p.campo) {
+      if (p.fase || p.orario || p.campo) {
         html += `<div style="font-size:12px;color:#777;margin-top:8px;">
-          ${p.orario ? `🕒 ${p.orario}` : ''} ${p.campo ? `• 📍 ${p.campo}` : ''}
+          ${p.fase ? `🏆 ${p.fase}` : ''}
+          ${p.orario ? ` • 🕒 ${p.orario}` : ''}
+          ${p.campo ? ` • 📍 ${p.campo}` : ''}
         </div>`;
       }
 
@@ -660,7 +651,7 @@ async function renderAdminRisultati() {
         </div>`;
       }
 
-      html += `</div>`;
+      html += '</div>';
     }
   }
 
@@ -715,7 +706,6 @@ async function saveMarcatori(partita_id) {
       if (p.id === partita_id) partita = p;
     }
   }
-
   if (!partita) return;
 
   const existing = partita.marcatori || [];
@@ -782,11 +772,7 @@ async function renderAdminKnockout() {
     </div>`;
 
     const rounds = {};
-    ko.forEach(m => {
-      if (!rounds[m.round_name]) rounds[m.round_name] = [];
-      rounds[m.round_name].push(m);
-    });
-
+    ko.forEach(m => { if (!rounds[m.round_name]) rounds[m.round_name] = []; rounds[m.round_name].push(m); });
     const roundOrder = ['Quarti di finale', 'Semifinali', '3° posto', 'Finale'];
     const sorted = Object.keys(rounds).sort((a, b) => {
       const ia = roundOrder.indexOf(a), ib = roundOrder.indexOf(b);
@@ -804,7 +790,6 @@ async function renderAdminKnockout() {
           else if (m.gol_home < m.gol_away) badge = `<span class="badge badge-green">${a?.nome} vince</span>`;
           else badge = `<span class="badge badge-blue">Pareggio</span>`;
         }
-
         html += `<div class="admin-match">
           <div class="admin-match-header">
             <div class="admin-team-name">${logoHTML(h, 'sm')}<span>${h ? h.nome : 'TBD'}</span></div>
@@ -821,16 +806,13 @@ async function renderAdminKnockout() {
       }
     }
   }
-
   el.innerHTML = html;
 }
 
 async function generaKO() {
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
-  const firsts = [];
-  const seconds = [];
-
+  const firsts = [], seconds = [];
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
     if (cl[0]) firsts.push(cl[0].sq);
@@ -844,15 +826,7 @@ async function generaKO() {
   if (formato === 'quarter' || firsts.length >= 4) {
     firsts.forEach((f, i) => {
       const opp = seconds[(i + 1) % Math.max(seconds.length, 1)];
-      matches.push({
-        categoria_id: STATE.activeCat,
-        round_name: 'Quarti di finale',
-        round_order: 1,
-        match_order: i,
-        home_id: f.id,
-        away_id: opp?.id || null,
-        giocata: false
-      });
+      matches.push({ categoria_id: STATE.activeCat, round_name: 'Quarti di finale', round_order: 1, match_order: i, home_id: f.id, away_id: opp?.id || null, giocata: false });
     });
     matches.push({ categoria_id: STATE.activeCat, round_name: 'Semifinali', round_order: 2, match_order: 0, home_id: null, away_id: null, giocata: false });
     matches.push({ categoria_id: STATE.activeCat, round_name: 'Semifinali', round_order: 2, match_order: 1, home_id: null, away_id: null, giocata: false });
@@ -861,32 +835,15 @@ async function generaKO() {
   } else if (formato === 'semi' || firsts.length >= 2) {
     firsts.forEach((f, i) => {
       const opp = seconds[(i + 1) % Math.max(seconds.length, 1)];
-      matches.push({
-        categoria_id: STATE.activeCat,
-        round_name: 'Semifinali',
-        round_order: 1,
-        match_order: i,
-        home_id: f.id,
-        away_id: opp?.id || null,
-        giocata: false
-      });
+      matches.push({ categoria_id: STATE.activeCat, round_name: 'Semifinali', round_order: 1, match_order: i, home_id: f.id, away_id: opp?.id || null, giocata: false });
     });
     matches.push({ categoria_id: STATE.activeCat, round_name: '3° posto', round_order: 2, match_order: 0, home_id: null, away_id: null, giocata: false });
     matches.push({ categoria_id: STATE.activeCat, round_name: 'Finale', round_order: 3, match_order: 0, home_id: null, away_id: null, giocata: false });
   } else {
-    matches.push({
-      categoria_id: STATE.activeCat,
-      round_name: 'Finale',
-      round_order: 1,
-      match_order: 0,
-      home_id: firsts[0]?.id || null,
-      away_id: seconds[0]?.id || null,
-      giocata: false
-    });
+    matches.push({ categoria_id: STATE.activeCat, round_name: 'Finale', round_order: 1, match_order: 0, home_id: firsts[0]?.id || null, away_id: seconds[0]?.id || null, giocata: false });
   }
 
   for (const m of matches) await dbSaveKnockoutMatch(m);
-
   toast('Tabellone generato!');
   await renderAdminKnockout();
 }
@@ -895,18 +852,10 @@ async function saveKO(match_id) {
   const sh = document.getElementById('ksh_' + match_id).value;
   const sa = document.getElementById('ksa_' + match_id).value;
   if (sh === '' || sa === '') return;
-
   const ko = await dbGetKnockout(STATE.activeCat);
   const m = ko.find(x => x.id === match_id);
   if (!m) return;
-
-  await dbSaveKnockoutMatch({
-    ...m,
-    gol_home: parseInt(sh, 10),
-    gol_away: parseInt(sa, 10),
-    giocata: true
-  });
-
+  await dbSaveKnockoutMatch({ ...m, gol_home: parseInt(sh, 10), gol_away: parseInt(sa, 10), giocata: true });
   await promoteKO();
   toast('Risultato salvato');
   await renderAdminKnockout();
@@ -915,19 +864,15 @@ async function saveKO(match_id) {
 async function promoteKO() {
   const ko = await dbGetKnockout(STATE.activeCat);
   const roundOrder = ['Quarti di finale', 'Semifinali'];
-
   for (const rname of roundOrder) {
     const thisRound = ko.filter(m => m.round_name === rname && m.giocata);
     if (!thisRound.length) continue;
-
     const nextRoundName = rname === 'Quarti di finale' ? 'Semifinali' : 'Finale';
     const thirdName = '3° posto';
-    const nextRound = ko.filter(m => m.round_name === nextRoundName).sort((a, b) => a.match_order - b.match_order);
+    const nextRound = ko.filter(m => m.round_name === nextRoundName).sort((a,b) => a.match_order - b.match_order);
     const thirdRound = ko.filter(m => m.round_name === thirdName);
-
     const winners = thisRound.map(m => m.gol_home >= m.gol_away ? m.home_id : m.away_id);
     const losers = thisRound.map(m => m.gol_home < m.gol_away ? m.home_id : m.away_id);
-
     winners.forEach((w, i) => {
       const nm = nextRound[Math.floor(i / 2)];
       if (nm) {
@@ -935,7 +880,6 @@ async function promoteKO() {
         else dbSaveKnockoutMatch({ ...nm, away_id: w });
       }
     });
-
     if (thirdRound[0] && losers.length >= 2) {
       dbSaveKnockoutMatch({ ...thirdRound[0], home_id: losers[0], away_id: losers[1] });
     }
@@ -975,15 +919,11 @@ function enterAdmin() {
   document.getElementById('pub-nav').style.display = 'none';
   document.getElementById('admin-nav').style.display = 'flex';
   document.getElementById('admin-btn').textContent = 'Esci';
-
   STATE.currentSection = 'a-setup';
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
-  const btn = document.querySelector('[data-section="a-setup"]');
-  if (btn) btn.classList.add('active');
-
+  document.querySelector('[data-section="a-setup"]').classList.add('active');
   document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-a-setup').classList.add('active');
-
   renderAdminSetup();
 }
 
@@ -992,15 +932,11 @@ function exitAdmin() {
   document.getElementById('pub-nav').style.display = 'flex';
   document.getElementById('admin-nav').style.display = 'none';
   document.getElementById('admin-btn').textContent = 'Admin';
-
   STATE.currentSection = 'classifiche';
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
-  const btn = document.querySelector('[data-section="classifiche"]');
-  if (btn) btn.classList.add('active');
-
+  document.querySelector('[data-section="classifiche"]').classList.add('active');
   document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-classifiche').classList.add('active');
-
   renderClassifiche();
 }
 
@@ -1041,15 +977,15 @@ async function importExcel() {
     const squadreRows = squadreSheet ? XLSX.utils.sheet_to_json(squadreSheet, { defval: '' }) : [];
 
     if (!partiteRows.length) {
-      alert('Nel file manca il foglio "partite" oppure è vuoto.');
+      alert('Il foglio "partite" è vuoto o mancante');
       return;
     }
 
-    const existingCats = await dbGetCategorie();
-    const existingTeams = await dbGetSquadre();
+    const categorie = await dbGetCategorie();
+    const squadre = await dbGetSquadre();
 
-    const catMap = new Map(existingCats.map(c => [String(c.nome).trim().toLowerCase(), c]));
-    const teamMap = new Map(existingTeams.map(s => [String(s.nome).trim().toLowerCase(), s]));
+    const catMap = new Map(categorie.map(c => [c.nome.toLowerCase(), c]));
+    const teamMap = new Map(squadre.map(s => [s.nome.toLowerCase(), s]));
     const gironeCache = new Map();
 
     for (const row of squadreRows) {
@@ -1059,12 +995,7 @@ async function importExcel() {
 
       let cat = catMap.get(categoriaNome.toLowerCase());
       if (!cat) {
-        cat = await dbSaveCategoria({
-          nome: categoriaNome,
-          qualificate: 2,
-          formato: 'semi',
-          ordine: catMap.size
-        });
+        cat = await dbSaveCategoria({ nome: categoriaNome, qualificate: 2, formato: 'semi', ordine: catMap.size });
         catMap.set(categoriaNome.toLowerCase(), cat);
       }
 
@@ -1091,12 +1022,7 @@ async function importExcel() {
 
       let cat = catMap.get(categoriaNome.toLowerCase());
       if (!cat) {
-        cat = await dbSaveCategoria({
-          nome: categoriaNome,
-          qualificate: 2,
-          formato: 'semi',
-          ordine: catMap.size
-        });
+        cat = await dbSaveCategoria({ nome: categoriaNome, qualificate: 2, formato: 'semi', ordine: catMap.size });
         catMap.set(categoriaNome.toLowerCase(), cat);
       }
 
@@ -1112,27 +1038,21 @@ async function importExcel() {
         teamMap.set(ospite.toLowerCase(), squadraOspite);
       }
 
-      const gironeKey = `${cat.id}__${gironeNome}`;
+      const gironeKey = `${cat.id}_${gironeNome}`;
       let girone = gironeCache.get(gironeKey);
-
       if (!girone) {
-        const existingGironi = await dbGetGironi(cat.id);
-        girone = existingGironi.find(g => String(g.nome).trim().toLowerCase() === gironeNome.toLowerCase());
-
+        const gironi = await dbGetGironi(cat.id);
+        girone = gironi.find(g => g.nome.toLowerCase() === gironeNome.toLowerCase());
         if (!girone) {
-          girone = await dbSaveGirone({
-            categoria_id: cat.id,
-            nome: gironeNome
-          });
+          girone = await dbSaveGirone({ categoria_id: cat.id, nome: gironeNome });
         }
-
         gironeCache.set(gironeKey, girone);
       }
 
       const members = await dbGetGironeSquadre(girone.id);
       const currentIds = members.map(m => m.squadra_id || m.squadre?.id).filter(Boolean);
-      const toSet = Array.from(new Set([...currentIds, squadraCasa.id, squadraOspite.id]));
-      await dbSetGironeSquadre(girone.id, toSet);
+      const newIds = Array.from(new Set([...currentIds, squadraCasa.id, squadraOspite.id]));
+      await dbSetGironeSquadre(girone.id, newIds);
 
       await dbInsertPartitaManuale({
         girone_id: girone.id,
@@ -1150,7 +1070,6 @@ async function importExcel() {
     for (const row of legendaRows) {
       const categoriaNome = String(row.categoria || '').trim();
       if (!categoriaNome) continue;
-
       const cat = catMap.get(categoriaNome.toLowerCase());
       if (!cat) continue;
 
