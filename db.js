@@ -1,133 +1,158 @@
-// ============================================================
-//  DATABASE LAYER - Supabase
-// ============================================================
-
 let db = null;
 
 function initDB() {
   db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 }
 
-// ---- TORNEO CONFIG ----
+async function safeSingle(q) {
+  const { data, error } = await q.single();
+  if (error) throw error;
+  return data;
+}
+
 async function dbGetTorneo() {
-  const { data } = await db.from('torneo').select('*').eq('id', 1).single();
+  const { data, error } = await db.from('torneo').select('*').eq('id', 1).single();
+  if (error) throw error;
   return data;
 }
 async function dbSaveTorneo(obj) {
-  await db.from('torneo').upsert({ id: 1, ...obj });
+  const { error } = await db.from('torneo').upsert({ id: 1, ...obj });
+  if (error) throw error;
 }
 
-// ---- CATEGORIE ----
 async function dbGetCategorie() {
-  const { data } = await db.from('categorie').select('*').order('ordine');
+  const { data, error } = await db.from('categorie').select('*').order('ordine', { ascending: true }).order('id', { ascending: true });
+  if (error) throw error;
   return data || [];
 }
 async function dbSaveCategoria(cat) {
-  const { data } = await db.from('categorie').upsert(cat).select().single();
-  return data;
+  return safeSingle(db.from('categorie').upsert(cat).select());
 }
 async function dbDeleteCategoria(id) {
-  await db.from('categorie').delete().eq('id', id);
+  const { error } = await db.from('categorie').delete().eq('id', id);
+  if (error) throw error;
 }
 
-// ---- GIRONI ----
 async function dbGetGironi(categoria_id) {
-  const { data } = await db.from('gironi').select('*').eq('categoria_id', categoria_id).order('nome');
+  const { data, error } = await db.from('gironi').select('*').eq('categoria_id', categoria_id).order('nome', { ascending: true });
+  if (error) throw error;
   return data || [];
+}
+async function dbFindGirone(categoria_id, nome) {
+  const { data, error } = await db.from('gironi').select('*').eq('categoria_id', categoria_id).eq('nome', nome).maybeSingle();
+  if (error) throw error;
+  return data;
 }
 async function dbSaveGirone(g) {
-  const { data } = await db.from('gironi').upsert(g).select().single();
-  return data;
+  return safeSingle(db.from('gironi').upsert(g).select());
 }
 
-// ---- SQUADRE ----
 async function dbGetSquadre() {
-  const { data } = await db.from('squadre').select('*').order('nome');
+  const { data, error } = await db.from('squadre').select('*').order('nome', { ascending: true });
+  if (error) throw error;
   return data || [];
 }
-async function dbSaveSquadra(s) {
-  const { data } = await db.from('squadre').upsert(s).select().single();
+async function dbFindSquadra(nome) {
+  const { data, error } = await db.from('squadre').select('*').eq('nome', nome).maybeSingle();
+  if (error) throw error;
   return data;
 }
+async function dbSaveSquadra(s) {
+  return safeSingle(db.from('squadre').upsert(s).select());
+}
+async function dbUpdateLogo(squadra_id, logo_base64) {
+  const { error } = await db.from('squadre').update({ logo: logo_base64 }).eq('id', squadra_id);
+  if (error) throw error;
+}
 
-// ---- GIRONE-SQUADRE (membership) ----
 async function dbGetGironeSquadre(girone_id) {
-  const { data } = await db.from('girone_squadre').select('*, squadre(*)').eq('girone_id', girone_id).order('posizione');
+  const { data, error } = await db.from('girone_squadre').select('*, squadre(*)').eq('girone_id', girone_id).order('posizione', { ascending: true });
+  if (error) throw error;
   return data || [];
 }
 async function dbSetGironeSquadre(girone_id, squadra_ids) {
-  await db.from('girone_squadre').delete().eq('girone_id', girone_id);
+  let { error } = await db.from('girone_squadre').delete().eq('girone_id', girone_id);
+  if (error) throw error;
   if (!squadra_ids.length) return;
   const rows = squadra_ids.map((sid, i) => ({ girone_id, squadra_id: sid, posizione: i }));
-  await db.from('girone_squadre').insert(rows);
+  ({ error } = await db.from('girone_squadre').insert(rows));
+  if (error) throw error;
 }
 
-// ---- PARTITE ----
 async function dbGetPartite(girone_id) {
-  const { data, error } = await db.from('partite').select('*, home:squadre!home_id(*), away:squadre!away_id(*)').eq('girone_id', girone_id).order('giornata', { ascending: true }).order('ordine', { ascending: true }).order('created_at', { ascending: true });
-  if (error) { console.error('dbGetPartite:', error); return []; }
+  const { data, error } = await db.from('partite')
+    .select('*, home:squadre!home_id(*), away:squadre!away_id(*)')
+    .eq('girone_id', girone_id)
+    .order('giornata', { ascending: true })
+    .order('orario', { ascending: true })
+    .order('ordine', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw error;
   return data || [];
 }
 
-async function dbCreatePartita(p) {
-  const { data, error } = await db.from('partite').insert(p).select().single();
-  if (error) { console.error('dbCreatePartita:', error); throw error; }
-  return data;
-}
-async function dbGetAllPartite(categoria_id) {
-  const { data } = await db.from('partite')
-    .select('*, home:squadre!home_id(*), away:squadre!away_id(*), gironi(*)')
-    .eq('gironi.categoria_id', categoria_id);
-  return data || [];
-}
 async function dbSavePartita(p) {
-  const { data } = await db.from('partite').upsert(p).select().single();
-  return data;
-}
-async function dbGeneraPartite(girone_id, squadra_ids) {
-  await db.from('partite').delete().eq('girone_id', girone_id);
-  const matches = [];
-  for (let i = 0; i < squadra_ids.length; i++) {
-    for (let j = i + 1; j < squadra_ids.length; j++) {
-      matches.push({ girone_id, home_id: squadra_ids[i], away_id: squadra_ids[j], giocata: false });
-    }
+  if (p.id) {
+    const { data, error } = await db.from('partite').update({
+      girone_id: p.girone_id,
+      home_id: p.home_id,
+      away_id: p.away_id,
+      gol_home: p.gol_home,
+      gol_away: p.gol_away,
+      giocata: p.giocata,
+      fase: p.fase,
+      giornata: p.giornata,
+      orario: p.orario,
+      campo: p.campo,
+      ordine: p.ordine,
+      manuale: p.manuale ?? false,
+    }).eq('id', p.id).select().single();
+    if (error) throw error;
+    return data;
   }
-  if (matches.length) await db.from('partite').insert(matches);
+  return safeSingle(db.from('partite').insert({
+    girone_id: p.girone_id,
+    home_id: p.home_id,
+    away_id: p.away_id,
+    gol_home: p.gol_home ?? 0,
+    gol_away: p.gol_away ?? 0,
+    giocata: p.giocata ?? false,
+    fase: p.fase || 'Fase 1',
+    giornata: p.giornata || 1,
+    orario: p.orario || '',
+    campo: p.campo || '',
+    ordine: p.ordine || 0,
+    manuale: p.manuale ?? true,
+  }).select());
 }
 
-// ---- MARCATORI ----
+async function dbDeletePartiteByGirone(girone_id) {
+  const { error } = await db.from('partite').delete().eq('girone_id', girone_id);
+  if (error) throw error;
+}
+
 async function dbGetMarcatori(partita_id) {
-  const { data } = await db.from('marcatori').select('*, squadre(*)').eq('partita_id', partita_id).order('minuto');
+  const { data, error } = await db.from('marcatori').select('*, squadre(*)').eq('partita_id', partita_id).order('minuto', { ascending: true });
+  if (error) throw error;
   return data || [];
 }
 async function dbSaveMarcatori(partita_id, marcatori) {
-  await db.from('marcatori').delete().eq('partita_id', partita_id);
+  let { error } = await db.from('marcatori').delete().eq('partita_id', partita_id);
+  if (error) throw error;
   if (!marcatori.length) return;
   const rows = marcatori.map(m => ({ partita_id, squadra_id: m.squadra_id, nome: m.nome, minuto: m.minuto || null }));
-  await db.from('marcatori').insert(rows);
+  ({ error } = await db.from('marcatori').insert(rows));
+  if (error) throw error;
 }
 
-// ---- KNOCKOUT ----
-async function dbGetKnockout(categoria_id) {
-  const { data } = await db.from('knockout').select('*').eq('categoria_id', categoria_id).order('round_order').order('match_order');
-  return data || [];
-}
-async function dbSaveKnockoutMatch(m) {
-  const { data } = await db.from('knockout').upsert(m).select().single();
-  return data;
-}
-async function dbDeleteKnockout(categoria_id) {
-  await db.from('knockout').delete().eq('categoria_id', categoria_id);
-}
-
-// ---- LOGHI (base64 su squadre) ----
-async function dbUpdateLogo(squadra_id, logo_base64) {
-  await db.from('squadre').update({ logo: logo_base64 }).eq('id', squadra_id);
-}
-
-// ---- REALTIME SUBSCRIPTION ----
 function subscribeRealtime(callback) {
-  db.channel('torneo-updates')
+  db.channel('torneo-import-excel')
     .on('postgres_changes', { event: '*', schema: 'public' }, callback)
     .subscribe();
+}
+
+
+async function dbDeletePartita(id) {
+  const { error } = await db.from('partite').delete().eq('id', id);
+  if (error) throw error;
 }
