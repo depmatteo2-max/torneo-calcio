@@ -64,7 +64,7 @@ async function dbSetGironeSquadre(girone_id, squadra_ids) {
 
 // ---- PARTITE ----
 async function dbGetPartite(girone_id) {
-  const { data } = await db.from('partite').select('*, home:squadre!home_id(*), away:squadre!away_id(*)').eq('girone_id', girone_id).order('created_at');
+  const { data } = await db.from('partite').select('*, home:squadre!home_id(*), away:squadre!away_id(*)').eq('girone_id', girone_id).order('giornata', {ascending:true}).order('ordine', {ascending:true}).order('orario', {ascending:true}).order('created_at', {ascending:true});
   return data || [];
 }
 async function dbGetAllPartite(categoria_id) {
@@ -123,4 +123,58 @@ function subscribeRealtime(callback) {
   db.channel('torneo-updates')
     .on('postgres_changes', { event: '*', schema: 'public' }, callback)
     .subscribe();
+}
+
+
+// ---- IMPORT EXCEL / PARTITE MANUALI ----
+async function dbInsertPartitaManuale(p) {
+  const { data, error } = await db
+    .from('partite')
+    .insert({
+      girone_id: p.girone_id,
+      home_id: p.home_id,
+      away_id: p.away_id,
+      fase: p.fase || 'Fase 1',
+      giornata: p.giornata || 1,
+      orario: p.orario || '',
+      campo: p.campo || '',
+      ordine: p.ordine || 0,
+      priorita: p.priorita || 0,
+      giocata: false
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('dbInsertPartitaManuale:', error);
+    throw error;
+  }
+  return data;
+}
+
+async function dbSaveLegenda(item) {
+  const { data, error } = await db
+    .from('legenda_torneo')
+    .upsert(item)
+    .select();
+
+  if (error) {
+    console.error('dbSaveLegenda:', error);
+    throw error;
+  }
+  return data;
+}
+
+async function dbGetLegenda(categoria_id) {
+  const { data, error } = await db
+    .from('legenda_torneo')
+    .select('*')
+    .eq('categoria_id', categoria_id)
+    .order('id');
+
+  if (error) {
+    console.error('dbGetLegenda:', error);
+    return [];
+  }
+  return data || [];
 }
