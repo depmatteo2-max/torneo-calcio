@@ -9,6 +9,7 @@
 </head>
 <body>
 <div id="app">
+
   <div id="loading-screen">
     <div class="loading-logo">
       <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="Soccer Pro Experience">
@@ -36,13 +37,7 @@
     <div id="admin-modal" class="modal-overlay" style="display:none;">
       <div class="modal-box">
         <div class="modal-title">Accesso admin</div>
-        <input
-          type="password"
-          id="admin-pw"
-          placeholder="Password"
-          class="modal-input"
-          onkeydown="if(event.key==='Enter')checkPw()"
-        >
+        <input type="password" id="admin-pw" placeholder="Password" class="modal-input" onkeydown="if(event.key==='Enter')checkPw()">
         <div id="pw-error" style="color:#A32D2D;font-size:12px;margin-top:6px;min-height:16px;"></div>
         <div class="modal-actions">
           <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">Annulla</button>
@@ -57,10 +52,8 @@
         <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
       </div>
-
       <div class="nav-inner" id="admin-nav" style="display:none;">
-        <button class="nav-btn active" data-section="a-tornei" onclick="showSection('a-tornei',this)">Tornei</button>
-        <button class="nav-btn" data-section="a-setup" onclick="showSection('a-setup',this)">Categorie</button>
+        <button class="nav-btn active" data-section="a-setup" onclick="showSection('a-setup',this)">Setup</button>
         <button class="nav-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">Loghi</button>
         <button class="nav-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">Fase finale</button>
@@ -68,15 +61,12 @@
       </div>
     </nav>
 
-    <div id="torneo-bar" class="torneo-bar"></div>
     <div class="cat-bar" id="cat-bar"></div>
 
     <main id="main-content">
       <div id="sec-classifiche" class="sec active"></div>
       <div id="sec-risultati" class="sec"></div>
       <div id="sec-tabellone" class="sec"></div>
-
-      <div id="sec-a-tornei" class="sec"></div>
       <div id="sec-a-setup" class="sec"></div>
       <div id="sec-a-loghi" class="sec"></div>
       <div id="sec-a-risultati" class="sec"></div>
@@ -84,14 +74,9 @@
     </main>
   </div>
 </div>
-
 <script src="config.js"></script>
 <script src="db.js"></script>
 <script src="logo.js"></script>
-
-<!-- Libreria Excel necessaria per Importa Excel -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
 <script src="app.js"></script>
 </body>
 </html>
