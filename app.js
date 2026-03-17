@@ -281,32 +281,135 @@ async function renderTabellone() {
   const squadre = await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
   if (!ko.length) { el.innerHTML='<div class="empty-state">Tabellone non ancora generato.</div>'; return; }
-  const renderRounds=(matches,label)=>{
-    if(!matches.length) return '';
-    const rounds={};
-    matches.forEach(m=>{if(!rounds[m.round_name])rounds[m.round_name]=[];rounds[m.round_name].push(m);});
-    const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
-    const sorted=Object.keys(rounds).sort((a,b)=>(order.indexOf(a)===-1?99:order.indexOf(a))-(order.indexOf(b)===-1?99:order.indexOf(b)));
-    let h=`<div class="section-label">${label}</div><div class="ko-grid">`;
-    for(const rname of sorted){
-      h+=`<div class="ko-col"><div class="ko-col-title">${rname}</div>`;
-      for(const m of rounds[rname]){
+
+  // Raggruppa per round_name
+  const rounds={};
+  ko.forEach(m=>{if(!rounds[m.round_name])rounds[m.round_name]=[];rounds[m.round_name].push(m);});
+
+  const roundOrder = ['PLATINO','GOLD','SILVER','BRONZO','WHITE',
+    'Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto',
+    'Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
+  const sorted = Object.keys(rounds).sort((a,b)=>{
+    const ia=roundOrder.indexOf(a), ib=roundOrder.indexOf(b);
+    return (ia===-1?99:ia)-(ib===-1?99:ib);
+  });
+
+  const roundColors = {
+    'PLATINO':'#1A3A6B','GOLD':'#7a5200','SILVER':'#555','BRONZO':'#6B2A00','WHITE':'#1A6B3A'
+  };
+  const roundBg = {
+    'PLATINO':'#EBF3FB','GOLD':'#FFF9C4','SILVER':'#F0F0F0','BRONZO':'#FDF3EC','WHITE':'#EBF7EF'
+  };
+
+  let html = '';
+  for (const rname of sorted) {
+    const matches = rounds[rname];
+    const color = roundColors[rname] || '#1A3A6B';
+    const bg = roundBg[rname] || '#f5f5f5';
+    const isTriangolare = ['PLATINO','GOLD','SILVER','BRONZO','WHITE'].includes(rname);
+
+    html += `<div style="margin-bottom:16px;">
+      <div style="background:${color};color:white;padding:8px 14px;border-radius:10px 10px 0 0;font-weight:700;font-size:14px;">
+        ${rname === 'PLATINO' ? '🥇' : rname === 'GOLD' ? '🥈' : rname === 'SILVER' ? '🥉' : rname === 'BRONZO' ? '4°' : rname === 'WHITE' ? '5°' : '🏆'} ${rname}
+      </div>
+      <div style="background:${bg};border-radius:0 0 10px 10px;padding:10px;">`;
+
+    if (isTriangolare) {
+      // Calcola classifica del triangolare
+      const sqIds = [...new Set(matches.flatMap(m=>[m.home_id,m.away_id]).filter(Boolean))];
+      const clMap={};
+      sqIds.forEach(id=>{clMap[id]={sq:sqMap[id],g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0};});
+      matches.forEach(m=>{
+        if(!m.giocata) return;
+        const h=clMap[m.home_id], a=clMap[m.away_id];
+        if(!h||!a) return;
+        h.g++;a.g++;h.gf+=m.gol_home;h.gs+=m.gol_away;a.gf+=m.gol_away;a.gs+=m.gol_home;
+        if(m.gol_home>m.gol_away){h.v++;h.pts+=3;a.s++;}
+        else if(m.gol_home<m.gol_away){a.v++;a.pts+=3;h.s++;}
+        else{h.p++;h.pts++;a.p++;a.pts++;}
+      });
+      const cl=Object.values(clMap).sort((a,b)=>{
+        if(b.pts!==a.pts) return b.pts-a.pts;
+        const da=a.gf-a.gs, db=b.gf-b.gs;
+        if(db!==da) return db-da;
+        return b.gf-a.gf;
+      });
+      const giocate=matches.filter(m=>m.giocata).length;
+      html+=`<div style="font-size:11px;color:#888;margin-bottom:8px;">${giocate}/${matches.length} partite</div>`;
+      html+=`<table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="color:#888;font-size:11px;">
+          <th style="text-align:left;padding:3px 4px;">Squadra</th>
+          <th style="text-align:center;padding:3px 4px;">G</th>
+          <th style="text-align:center;padding:3px 4px;">V</th>
+          <th style="text-align:center;padding:3px 4px;">P</th>
+          <th style="text-align:center;padding:3px 4px;">S</th>
+          <th style="text-align:center;padding:3px 4px;">GD</th>
+          <th style="text-align:center;padding:3px 4px;font-weight:700;color:${color};">Pt</th>
+        </tr></thead><tbody>`;
+      cl.forEach((row,idx)=>{
+        const diff=row.gf-row.gs;
+        html+=`<tr style="border-top:1px solid rgba(0,0,0,0.05);">
+          <td style="padding:5px 4px;display:flex;align-items:center;gap:6px;">
+            <span style="font-weight:700;color:${color};width:16px;">${idx+1}°</span>
+            ${logoHTML(row.sq,'sm')} ${row.sq?.nome||'?'}
+          </td>
+          <td style="text-align:center;padding:5px 4px;">${row.g}</td>
+          <td style="text-align:center;padding:5px 4px;">${row.v}</td>
+          <td style="text-align:center;padding:5px 4px;">${row.p}</td>
+          <td style="text-align:center;padding:5px 4px;">${row.s}</td>
+          <td style="text-align:center;padding:5px 4px;color:${diff>0?'#2e7d32':diff<0?'#c62828':'#888'}">${diff>0?'+':''}${diff}</td>
+          <td style="text-align:center;padding:5px 4px;font-weight:700;color:${color};">${row.pts}</td>
+        </tr>`;
+      });
+      html+=`</tbody></table>`;
+      // Risultati
+      const giocateFull=matches.filter(m=>m.giocata);
+      if(giocateFull.length){
+        html+=`<div style="margin-top:10px;font-size:11px;color:#888;font-weight:600;margin-bottom:4px;">RISULTATI</div>`;
+        giocateFull.forEach(m=>{
+          const hm=sqMap[m.home_id], am=sqMap[m.away_id];
+          html+=`<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px solid rgba(0,0,0,0.05);">
+            <span>${hm?.nome||'?'}</span>
+            <span style="font-weight:700;color:${color};padding:0 8px;">${m.gol_home} — ${m.gol_away}</span>
+            <span>${am?.nome||'?'}</span>
+          </div>`;
+        });
+      }
+      // Partite da giocare
+      const daGiocare=matches.filter(m=>!m.giocata);
+      if(daGiocare.length){
+        html+=`<div style="margin-top:8px;font-size:11px;color:#888;font-weight:600;margin-bottom:4px;">DA GIOCARE</div>`;
+        daGiocare.forEach(m=>{
+          const hm=sqMap[m.home_id], am=sqMap[m.away_id];
+          html+=`<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:3px 0;border-top:1px solid rgba(0,0,0,0.05);color:#aaa;">
+            <span>${hm?.nome||'?'}</span>
+            <span style="padding:0 8px;">vs</span>
+            <span>${am?.nome||'?'}</span>
+          </div>`;
+        });
+      }
+    } else {
+      // Formato bracket normale
+      matches.forEach(m=>{
         const hm=m.home_id?sqMap[m.home_id]:null, am=m.away_id?sqMap[m.away_id]:null;
         const w1=m.giocata&&m.gol_home>m.gol_away, w2=m.giocata&&m.gol_away>m.gol_home;
-        const hmNome = hm ? hm.nome : (m.note_home || 'TBD');
-        const amNome = am ? am.nome : (m.note_away || 'TBD');
-        h+=`<div class="ko-match">
+        const hmNome=hm?hm.nome:(m.note_home||'TBD'), amNome=am?am.nome:(m.note_away||'TBD');
+        html+=`<div class="ko-match">
           <div class="ko-team-row ${w1?'winner':''}">${logoHTML(hm,'sm')}<span style="flex:1;">${hmNome}</span>${m.giocata?`<span class="ko-score">${m.gol_home}</span>`:''}</div>
           <div class="ko-sep"></div>
           <div class="ko-team-row ${w2?'winner':''}">${logoHTML(am,'sm')}<span style="flex:1;">${amNome}</span>${m.giocata?`<span class="ko-score">${m.gol_away}</span>`:''}</div>
         </div>`;
-      }
-      h+=`</div>`;
+      });
     }
-    return h+'</div>';
-  };
-  const main=ko.filter(m=>!m.is_consolazione), cons=ko.filter(m=>m.is_consolazione);
-  el.innerHTML=renderRounds(main,'Tabellone principale')+renderRounds(cons,'Consolazione');
+    html+=`</div></div>`;
+  }
+
+  // Leggenda spareggio
+  html+=`<div style="font-size:11px;color:#aaa;padding:8px 4px;">
+    Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
+  </div>`;
+
+  el.innerHTML=html;
 }
 
 // ===== ADMIN: TORNEI =====
@@ -654,6 +757,17 @@ async function renderAdminKnockout(){
   }
   const allSq=[...qualificate,...consolazione];
   const sqOptions=allSq.map(q=>`<option value="${q.sq.id}">${q.sq.nome} (${q.girone} ${q.pos}°)</option>`).join('');
+  // Pulsante genera fase 2 automatica
+  const allGironiCompleti = gironi.every(g => g.partite.length > 0 && g.partite.every(p => p.giocata));
+  if (allGironiCompleti && gironi.length >= 2) {
+    html+=`<div class="card" style="background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1.5px solid #66bb6a;margin-bottom:14px;">
+      <div style="font-size:14px;font-weight:700;color:#2e7d32;margin-bottom:6px;">✨ Fase 1 completata!</div>
+      <div style="font-size:13px;color:#555;margin-bottom:12px;">Tutte le partite sono state giocate. Puoi generare automaticamente gli accoppiamenti della Fase 2.</div>
+      <button class="btn" style="background:#2e7d32;color:white;font-weight:600;width:100%;padding:10px;" 
+        onclick="generaFase2()">⚡ Genera Fase 2 automaticamente</button>
+    </div>`;
+  }
+
   html+=`<div class="section-label">Aggiungi partita al tabellone</div>
   <div class="card" style="margin-bottom:14px;">
     <div class="form-grid-2" style="margin-bottom:10px;">
@@ -837,3 +951,74 @@ function loadScript(src){
 }
 
 window.addEventListener('DOMContentLoaded',init);
+
+// ===== GENERA FASE 2 AUTOMATICA =====
+async function generaFase2() {
+  if (!STATE.activeCat) return;
+  if (!confirm('Generare automaticamente gli accoppiamenti della Fase 2? Le partite esistenti verranno cancellate.')) return;
+
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const gironi = await getGironiWithData(STATE.activeCat);
+  const squadre = await dbGetSquadre(STATE.activeTorneo);
+  const sqMap = {}; squadre.forEach(s => sqMap[s.id] = s);
+
+  // Calcola classifiche per ogni girone
+  const classifiche = gironi.map(g => calcGironeClassifica(g));
+
+  // Estrai squadre per posizione
+  // pos 0 = 1°, 1 = 2°, ecc.
+  const getSquadraPos = (pos) => {
+    return gironi.map((g, gi) => {
+      const cl = classifiche[gi];
+      return cl[pos] ? cl[pos].sq : null;
+    }).filter(Boolean);
+  };
+
+  const prime   = getSquadraPos(0); // 1° di ogni girone → PLATINO
+  const seconde = getSquadraPos(1); // 2° → GOLD
+  const terze   = getSquadraPos(2); // 3° → SILVER
+  const quarte  = getSquadraPos(3); // 4° → BRONZO
+  const quinte  = getSquadraPos(4); // 5° → WHITE
+
+  // Cancella fase finale esistente
+  await dbDeleteKnockout(cat.id);
+
+  const order = ['PLATINO','GOLD','SILVER','BRONZO','WHITE'];
+  const gruppi = [prime, seconde, terze, quarte, quinte];
+  const tipi = ['principale','principale','consolazione','consolazione','consolazione'];
+
+  let matchOrder = 0;
+
+  // Per ogni gruppo crea il triangolare (tutti vs tutti = 3 partite)
+  for (let gi = 0; gi < gruppi.length; gi++) {
+    const gruppo = gruppi[gi];
+    const roundName = order[gi];
+    const isConsolazione = tipi[gi] === 'consolazione';
+
+    if (gruppo.length < 2) continue;
+
+    matchOrder = 0;
+    // Triangolare: tutti vs tutti
+    for (let i = 0; i < gruppo.length; i++) {
+      for (let j = i + 1; j < gruppo.length; j++) {
+        await dbSaveKnockoutMatch({
+          categoria_id: cat.id,
+          round_name: roundName,
+          round_order: gi,
+          match_order: matchOrder++,
+          home_id: gruppo[i].id,
+          away_id: gruppo[j].id,
+          gol_home: 0,
+          gol_away: 0,
+          giocata: false,
+          is_consolazione: isConsolazione,
+          note_home: null,
+          note_away: null,
+        });
+      }
+    }
+  }
+
+  toast('✅ Fase 2 generata! ' + prime.length + ' gironi per gruppo');
+  await renderAdminKnockout();
+}
