@@ -114,7 +114,6 @@ async function getGironiWithData(categoria_id) {
   for (const g of gironi) {
     const members = await dbGetGironeSquadre(g.id);
     g.squadre = members.map(m => m.squadre);
-
     g.partite = await dbGetPartite(g.id);
 
     for (const p of g.partite) {
@@ -346,7 +345,6 @@ async function renderTabellone() {
 
   const ko = await dbGetKnockout(STATE.activeCat);
   const squadre = await dbGetSquadre();
-
   const sqMap = {};
   squadre.forEach(s => sqMap[s.id] = s);
 
@@ -799,7 +797,6 @@ async function renderAdminKnockout() {
   const gironi = await getGironiWithData(STATE.activeCat);
   const ko = await dbGetKnockout(STATE.activeCat);
   const squadre = await dbGetSquadre();
-
   const sqMap = {};
   squadre.forEach(s => sqMap[s.id] = s);
 
@@ -1273,11 +1270,6 @@ async function importExcel() {
     await renderAdminRisultati();
     await renderClassifiche();
     await renderRisultati();
-
-    console.log('Import completato:', {
-      partite_importate: createdMatches,
-      categoria_attiva: lastImportedCat?.nome || null
-    });
 
     alert(
       `Import Excel completato.\n\nPartite create: ${createdMatches}` +
