@@ -858,73 +858,38 @@ async function resetKOSection(is_consolazione){
 function toggleAdmin(){
   if(STATE.isAdmin){exitAdmin();return;}
   // Controlla sessione salvata
-  try {
-    const saved = JSON.parse(localStorage.getItem('spe_session') || 'null');
-    if(saved && saved.username && saved.ruolo) {
-      STATE.currentUser = saved;
-      enterAdmin();
-      return;
-    }
-  } catch(e) {}
+  try { if(localStorage.getItem('spe_admin_ok')==='1'){enterAdmin();return;} } catch(e){}
   document.getElementById('admin-modal').style.display='flex';
-  setTimeout(()=>document.getElementById('admin-user').focus(),100);
+  setTimeout(()=>document.getElementById('admin-pw').focus(),100);
 }
 
 function checkPw(){
-  const username = document.getElementById('admin-user').value.trim().toLowerCase();
-  const password = document.getElementById('admin-pw').value;
-  const user = (CONFIG.USERS || []).find(u =>
-    u.username.toLowerCase() === username && u.password === password
-  );
-  if(user){
+  const pw=document.getElementById('admin-pw').value;
+  const ok = pw===CONFIG.ADMIN_PASSWORD || (CONFIG.USERS||[]).some(u=>u.password===pw);
+  if(ok){
     document.getElementById('admin-modal').style.display='none';
-    document.getElementById('admin-user').value='';
     document.getElementById('admin-pw').value='';
     document.getElementById('pw-error').textContent='';
-    STATE.currentUser = user;
-    // Salva sessione
-    try { localStorage.setItem('spe_session', JSON.stringify({username:user.username,ruolo:user.ruolo,nome:user.nome})); } catch(e) {}
+    try{localStorage.setItem('spe_admin_ok','1');}catch(e){}
     enterAdmin();
-  } else {
-    document.getElementById('pw-error').textContent='Username o password errati';
-  }
+  } else document.getElementById('pw-error').textContent='Password errata';
 }
 function enterAdmin(){
   STATE.isAdmin=true;
-  const ruolo = STATE.currentUser?.ruolo || 'admin';
-  const nome = STATE.currentUser?.nome || 'Admin';
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
   document.getElementById('admin-btn').textContent='Esci';
-
-  // Mostra/nascondi voci menu in base al ruolo
-  const soloAdmin = ['a-tornei','a-setup','a-loghi'];
-  soloAdmin.forEach(sec => {
-    const btn = document.querySelector(`[data-section="${sec}"]`);
-    if(btn) btn.style.display = ruolo === 'admin' ? '' : 'none';
-  });
-
-  // Sezione iniziale in base al ruolo
-  const startSection = ruolo === 'admin' ? 'a-tornei' : 'a-risultati';
-  STATE.currentSection = startSection;
+  STATE.currentSection='a-tornei';
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
-  const startBtn = document.querySelector(`[data-section="${startSection}"]`);
-  if(startBtn) startBtn.classList.add('active');
+  document.querySelector('[data-section="a-tornei"]').classList.add('active');
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-  document.getElementById(`sec-${startSection}`).classList.add('active');
-  document.getElementById('cat-bar').style.display = startSection === 'a-tornei' ? 'none' : '';
-
-  // Mostra nome utente
-  const exitBtn = document.querySelector('.nav-exit');
-  if(exitBtn) exitBtn.textContent = `✕ ${nome}`;
-
-  if(startSection === 'a-tornei') renderAdminTornei();
-  else renderAdminRisultati();
+  document.getElementById('sec-a-tornei').classList.add('active');
+  document.getElementById('cat-bar').style.display='none';
+  renderAdminTornei();
 }
 function exitAdmin(){
   STATE.isAdmin=false;
-  STATE.currentUser=null;
-  try { localStorage.removeItem('spe_session'); } catch(e) {}
+  try{localStorage.removeItem('spe_admin_ok');}catch(e){}
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('admin-btn').textContent='Admin';
