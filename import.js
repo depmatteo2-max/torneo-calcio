@@ -29,18 +29,43 @@ async function importaExcel(event) {
       return;
     }
 
-    const cats  = XLSX.utils.sheet_to_json(sheetCat,  { defval: '' });
-    const girs  = XLSX.utils.sheet_to_json(sheetGir,  { defval: '' });
-    const parts = XLSX.utils.sheet_to_json(sheetP1,   { defval: '' });
-    const finals= sheetFF ? XLSX.utils.sheet_to_json(sheetFF, { defval: '' }) : [];
+    // Funzione per trovare la riga header (quella con CATEGORIA *)
+    function findHeaderRow(sheet) {
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:Z100');
+      for (let r = range.s.r; r <= Math.min(range.e.r, 5); r++) {
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = sheet[XLSX.utils.encode_cell({r,c})];
+          if (cell && cell.v && cell.v.toString().includes('CATEGORIA')) return r;
+        }
+      }
+      return 0;
+    }
+
+    function sheetToJsonFromRow(sheet, headerRow) {
+      if (!sheet || !sheet['!ref']) return [];
+      const range = XLSX.utils.decode_range(sheet['!ref']);
+      const newRange = { s: { r: headerRow, c: range.s.c }, e: range.e };
+      const newSheet = Object.assign({}, sheet, { '!ref': XLSX.utils.encode_range(newRange) });
+      return XLSX.utils.sheet_to_json(newSheet, { defval: '' });
+    }
+
+    const catHeader  = findHeaderRow(sheetCat);
+    const girHeader  = findHeaderRow(sheetGir);
+    const p1Header   = findHeaderRow(sheetP1);
+    const ffHeader   = sheetFF ? findHeaderRow(sheetFF) : 0;
+
+    const cats  = sheetToJsonFromRow(sheetCat, catHeader);
+    const girs  = sheetToJsonFromRow(sheetGir, girHeader);
+    const parts = sheetToJsonFromRow(sheetP1,  p1Header);
+    const finals= sheetFF ? sheetToJsonFromRow(sheetFF, ffHeader) : [];
 
     // Filtra righe vuote o di esempio
-    const catRows  = cats.filter(r  => r['CATEGORIA *'] && r['CATEGORIA *'].toString().trim());
-    const girRows  = girs.filter(r  => r['CATEGORIA *'] && r['GIRONE *']);
-    const partRows = parts.filter(r => r['CATEGORIA *'] && r['SQUADRA CASA *'] && r['SQUADRA OSPITE *']);
-    const finalRows= finals.filter(r => r['CATEGORIA *'] && r['ROUND *'] && r['SQUADRA 1 *'] && r['SQUADRA 2 *']);
+    const catRows  = cats.filter(r  => r['CATEGORIA *'] && r['CATEGORIA *'].toString().trim() && r['CATEGORIA *'] !== 'CATEGORIA *');
+    const girRows  = girs.filter(r  => r['CATEGORIA *'] && r['GIRONE *'] && r['CATEGORIA *'] !== 'CATEGORIA *');
+    const partRows = parts.filter(r => r['CATEGORIA *'] && r['SQUADRA CASA *'] && r['SQUADRA OSPITE *'] && r['CATEGORIA *'] !== 'CATEGORIA *');
+    const finalRows= finals.filter(r => r['CATEGORIA *'] && r['ROUND *'] && r['SQUADRA 1 *'] && r['SQUADRA 2 *'] && r['CATEGORIA *'] !== 'CATEGORIA *');
 
-    if (!catRows.length) { toast('❌ Nessuna categoria trovata nel foglio CATEGORIE'); return; }
+    if (!catRows.length) { toast('❌ Nessuna categoria trovata — controlla che il file sia il modello SPE'); return; }
 
     // Mostra preview
     const preview = document.getElementById('import-preview');
