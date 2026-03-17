@@ -49,6 +49,7 @@
         <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">Classifiche</button>
         <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
+        <button class="nav-btn" onclick="esportaExcel()" style="margin-left:auto;color:#185FA5;">↓ Excel</button>
       </div>
       <div class="nav-inner" id="admin-nav" style="display:none;">
         <button class="nav-btn active" data-section="a-tornei" onclick="showSection('a-tornei',this)">Tornei</button>
@@ -79,5 +80,6 @@
 <script src="db.js"></script>
 <script src="logo.js"></script>
 <script src="app.js"></script>
+<script src="export.js"></script>
 </body>
 </html>
