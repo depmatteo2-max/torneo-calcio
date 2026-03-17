@@ -12,8 +12,17 @@ async function init() {
   try {
     STATE.tornei = await dbGetTornei();
     const attivi = STATE.tornei.filter(t => t.attivo);
-    if (attivi.length) STATE.activeTorneo = attivi[0].id;
-    else if (STATE.tornei.length) STATE.activeTorneo = STATE.tornei[0].id;
+    // Prova a ripristinare il torneo salvato
+    let savedId = null;
+    try { savedId = parseInt(localStorage.getItem('spe_torneo_id')); } catch(e) {}
+    const savedTorneo = savedId && attivi.find(t => t.id === savedId);
+    if (savedTorneo) {
+      STATE.activeTorneo = savedTorneo.id;
+    } else if (attivi.length) {
+      STATE.activeTorneo = attivi[0].id;
+    } else if (STATE.tornei.length) {
+      STATE.activeTorneo = STATE.tornei[0].id;
+    }
     await loadTorneo();
     subscribeRealtime(() => renderCurrentSection());
   } catch(e) { console.error(e); }
@@ -39,7 +48,11 @@ function renderTorneoBar() {
   ).join('')}</div>`;
 }
 
-async function selectTorneo(id) { STATE.activeTorneo = id; await loadTorneo(); }
+async function selectTorneo(id) {
+  STATE.activeTorneo = id;
+  try { localStorage.setItem('spe_torneo_id', id); } catch(e) {}
+  await loadTorneo();
+}
 
 function updateHeader() {
   const t = STATE.tornei.find(t => t.id === STATE.activeTorneo);
@@ -118,7 +131,15 @@ function getScontroDisretto(girone, idA, idB) {
 
 function calcGironeClassifica(girone) {
   const map = {};
-  for (const sq of girone.squadre) map[sq.id]={sq,g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0};
+  // Prima aggiungi TUTTE le squadre del girone, anche quelle senza partite
+  for (const sq of girone.squadre) {
+    if (sq && sq.id) map[sq.id]={sq,g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0};
+  }
+  // Poi aggiungi anche le squadre che compaiono nelle partite (per sicurezza)
+  for (const p of girone.partite) {
+    if (p.home && !map[p.home_id]) map[p.home_id]={sq:p.home,g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0};
+    if (p.away && !map[p.away_id]) map[p.away_id]={sq:p.away,g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0};
+  }
   for (const p of girone.partite) {
     if (!p.giocata) continue;
     const h=map[p.home_id], a=map[p.away_id];
@@ -165,6 +186,39 @@ async function renderClassifiche() {
     <div style="font-size:11px;color:#aaa;margin-top:8px;padding-top:8px;border-top:1px solid #f5f5f5;">
       Spareggio: punti → scontro diretto → diff. reti → gol fatti → gol subiti → sorteggio/rigori
     </div></div>`;
+
+    // Classifica finale con coppa se tutte le partite sono giocate
+    const totPartite = g.partite.length;
+    const totGiocate = g.partite.filter(p=>p.giocata).length;
+    if (totPartite > 0 && totGiocate === totPartite) {
+      const oro = cl[0], argento = cl[1], bronzo = cl[2];
+      html += `<div class="card" style="margin-top:8px;background:linear-gradient(135deg,#fffbe6,#fff8d6);border:1.5px solid #f0c040;">
+        <div style="text-align:center;padding:8px 0 4px;">
+          <div style="font-size:28px;">🏆</div>
+          <div style="font-size:14px;font-weight:700;color:#7a5200;margin-top:2px;">CLASSIFICA FINALE — ${g.nome}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;">
+          ${oro ? `<div style="display:flex;align-items:center;gap:10px;background:#fff8d0;border-radius:10px;padding:10px 14px;">
+            <span style="font-size:22px;">🥇</span>
+            ${logoHTML(oro.sq,'md')}
+            <span style="flex:1;font-size:15px;font-weight:700;color:#7a5200;">${oro.sq.nome}</span>
+            <span style="font-size:13px;font-weight:600;color:#7a5200;">${oro.pts} pt</span>
+          </div>` : ''}
+          ${argento ? `<div style="display:flex;align-items:center;gap:10px;background:#f5f5f5;border-radius:10px;padding:10px 14px;">
+            <span style="font-size:22px;">🥈</span>
+            ${logoHTML(argento.sq,'md')}
+            <span style="flex:1;font-size:15px;font-weight:600;color:#444;">${argento.sq.nome}</span>
+            <span style="font-size:13px;font-weight:600;color:#444;">${argento.pts} pt</span>
+          </div>` : ''}
+          ${bronzo ? `<div style="display:flex;align-items:center;gap:10px;background:#fdf3ec;border-radius:10px;padding:10px 14px;">
+            <span style="font-size:22px;">🥉</span>
+            ${logoHTML(bronzo.sq,'md')}
+            <span style="flex:1;font-size:15px;font-weight:600;color:#6b3a1f;">${bronzo.sq.nome}</span>
+            <span style="font-size:13px;font-weight:600;color:#6b3a1f;">${bronzo.pts} pt</span>
+          </div>` : ''}
+        </div>
+      </div>`;
+    }
   }
   el.innerHTML = html;
 }

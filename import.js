@@ -32,10 +32,22 @@ async function importaExcel(event) {
     // Funzione per trovare la riga header (quella con CATEGORIA *)
     function findHeaderRow(sheet) {
       const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:Z100');
-      for (let r = range.s.r; r <= Math.min(range.e.r, 5); r++) {
+      for (let r = range.s.r; r <= Math.min(range.e.r, 8); r++) {
+        let foundCat = false, foundGirone = false;
         for (let c = range.s.c; c <= range.e.c; c++) {
           const cell = sheet[XLSX.utils.encode_cell({r,c})];
-          if (cell && cell.v && cell.v.toString().includes('CATEGORIA')) return r;
+          if (!cell || !cell.v) continue;
+          const v = cell.v.toString();
+          if (v.includes('CATEGORIA')) foundCat = true;
+          if (v.includes('GIRONE') || v.includes('SQUADRA') || v.includes('ROUND') || v.includes('ORE') || v.includes('ORARIO')) foundGirone = true;
+        }
+        if (foundCat && foundGirone) return r;
+      }
+      // Fallback: find any row with CATEGORIA *
+      for (let r = range.s.r; r <= Math.min(range.e.r, 8); r++) {
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = sheet[XLSX.utils.encode_cell({r,c})];
+          if (cell && cell.v && cell.v.toString().trim() === 'CATEGORIA *') return r;
         }
       }
       return 0;
@@ -124,13 +136,25 @@ async function confermaImportazione() {
         const girone = await dbSaveGirone({ categoria_id: cat.id, nome: girNome });
 
         // Squadre del girone
-        const squadreNomi = ['SQUADRA 1 *','SQUADRA 2 *','SQUADRA 3 *','SQUADRA 4 *','SQUADRA 5','SQUADRA 6']
-          .map(k => girRow[k]?.toString().trim()).filter(s => s && s.length > 0);
+        // Legge tutte le colonne SQUADRA dinamicamente (senza limite)
+        const squadreNomi = [];
+        for (const key of Object.keys(girRow)) {
+          if (key.toString().toUpperCase().startsWith('SQUADRA')) {
+            const v = girRow[key]?.toString().trim();
+            if (v && v.length > 0 && !v.toUpperCase().startsWith('SQUADRA')) squadreNomi.push(v);
+          }
+        }
 
         const squadra_ids = [];
         for (const nome of squadreNomi) {
-          let sq = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === nome.toLowerCase());
-          if (!sq) sq = await dbSaveSquadra({ nome, torneo_id: STATE.activeTorneo });
+          // Cerca squadra per nome E torneo (evita conflitti tra tornei diversi)
+          const tutteSquadre = await dbGetSquadre(STATE.activeTorneo);
+          let sq = tutteSquadre.find(s => s.nome.toLowerCase() === nome.toLowerCase() && s.torneo_id === STATE.activeTorneo);
+          if (!sq) {
+            // Inserisci direttamente senza upsert per evitare conflitti di nome tra tornei
+            const { data } = await db.from('squadre').insert({ nome, torneo_id: STATE.activeTorneo }).select().single();
+            sq = data;
+          }
           squadra_ids.push(sq.id);
         }
         await dbSetGironeSquadre(girone.id, squadra_ids);
