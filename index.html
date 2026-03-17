@@ -1,85 +1,215 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Soccer Pro Experience</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div id="app">
-  <div id="loading-screen">
-    <div class="loading-logo">
-      <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="Soccer Pro Experience">
-      <div class="loading-text">Caricamento in corso...</div>
-    </div>
-  </div>
+// ===== IMPORT EXCEL =====
+async function importExcel() {
+  const input = document.getElementById('excelFile');
+  const file = input?.files?.[0];
 
-  <div id="main-app" style="display:none;">
-    <header>
-      <div class="header-inner">
-        <div class="header-left">
-          <img id="header-logo" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.4);" alt="SPE">
-          <div>
-            <div id="header-title" class="h-title">Soccer Pro Experience</div>
-            <div id="header-date" class="h-date"></div>
-          </div>
-        </div>
-        <div class="header-right">
-          <span class="live-badge">● In corso</span>
-          <button class="admin-toggle" id="admin-btn" onclick="toggleAdmin()">Admin</button>
-        </div>
-      </div>
-    </header>
+  if (!file) {
+    alert('Seleziona un file Excel');
+    return;
+  }
 
-    <div id="admin-modal" class="modal-overlay" style="display:none;">
-      <div class="modal-box">
-        <div class="modal-title">Accesso admin</div>
-        <input type="password" id="admin-pw" placeholder="Password" class="modal-input" onkeydown="if(event.key==='Enter')checkPw()">
-        <div id="pw-error" style="color:#A32D2D;font-size:12px;margin-top:6px;min-height:16px;"></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">Annulla</button>
-          <button class="btn btn-p" onclick="checkPw()">Entra</button>
-        </div>
-      </div>
-    </div>
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: 'array' });
 
-    <nav>
-      <div class="nav-inner" id="pub-nav">
-        <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">Classifiche</button>
-        <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">Risultati</button>
-        <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
-      </div>
+    const partiteSheet = workbook.Sheets['partite'];
+    const legendaSheet = workbook.Sheets['legenda'];
+    const squadreSheet = workbook.Sheets['squadre'];
 
-      <div class="nav-inner" id="admin-nav" style="display:none;">
-        <button class="nav-btn active" data-section="a-setup" onclick="showSection('a-setup',this)">Setup</button>
-        <button class="nav-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">Loghi</button>
-        <button class="nav-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
-        <button class="nav-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">Fase finale</button>
-        <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
-      </div>
-    </nav>
+    const partiteRows = partiteSheet
+      ? XLSX.utils.sheet_to_json(partiteSheet, { defval: '' })
+      : [];
 
-    <div class="cat-bar" id="cat-bar"></div>
+    const legendaRows = legendaSheet
+      ? XLSX.utils.sheet_to_json(legendaSheet, { defval: '' })
+      : [];
 
-    <main id="main-content">
-      <div id="sec-classifiche" class="sec active"></div>
-      <div id="sec-risultati" class="sec"></div>
-      <div id="sec-tabellone" class="sec"></div>
+    const squadreRows = squadreSheet
+      ? XLSX.utils.sheet_to_json(squadreSheet, { defval: '' })
+      : [];
 
-      <div id="sec-a-setup" class="sec"></div>
-      <div id="sec-a-loghi" class="sec"></div>
-      <div id="sec-a-risultati" class="sec"></div>
-      <div id="sec-a-knockout" class="sec"></div>
-    </main>
-  </div>
-</div>
+    if (!partiteRows.length) {
+      alert('Il foglio "partite" è vuoto o mancante');
+      return;
+    }
 
-<script src="config.js"></script>
-<script src="db.js"></script>
-<script src="logo.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
+    const categorie = await dbGetCategorie();
+    const squadre = await dbGetSquadre();
+
+    const catMap = new Map(
+      categorie.map(c => [String(c.nome).trim().toLowerCase(), c])
+    );
+
+    const teamMap = new Map(
+      squadre.map(s => [String(s.nome).trim().toLowerCase(), s])
+    );
+
+    const gironeCache = new Map();
+    let createdMatches = 0;
+    let lastImportedCat = null;
+
+    // ===== CREA/AGGIORNA SQUADRE DAL FOGLIO "squadre" =====
+    for (const row of squadreRows) {
+      const categoriaNome = String(row.categoria || '').trim();
+      const squadraNome = String(row.squadra || '').trim();
+
+      if (!categoriaNome || !squadraNome) continue;
+
+      let cat = catMap.get(categoriaNome.toLowerCase());
+
+      if (!cat) {
+        cat = await dbSaveCategoria({
+          nome: categoriaNome,
+          qualificate: 2,
+          formato: 'semi',
+          ordine: catMap.size
+        });
+        catMap.set(categoriaNome.toLowerCase(), cat);
+      }
+
+      let sq = teamMap.get(squadraNome.toLowerCase());
+
+      if (!sq) {
+        sq = await dbSaveSquadra({ nome: squadraNome });
+        teamMap.set(squadraNome.toLowerCase(), sq);
+      }
+    }
+
+    // ===== CREA PARTITE DAL FOGLIO "partite" =====
+    for (const row of partiteRows) {
+      const categoriaNome = String(row.categoria || '').trim();
+      const gironeNome = String(row.girone || '').trim() || 'Girone A';
+      const fase = String(row.fase || '').trim() || 'Fase 1';
+      const giornata = Number(row.giornata || 1);
+      const orario = String(row.orario || '').trim();
+      const campo = String(row.campo || '').trim();
+      const casa = String(row['squadra casa'] || row.casa || '').trim();
+      const ospite = String(row['squadra ospite'] || row.ospite || '').trim();
+      const ordine = Number(row.ordine || 0);
+      const priorita = Number(row.priorita || 0);
+
+      if (!categoriaNome || !casa || !ospite) continue;
+
+      let cat = catMap.get(categoriaNome.toLowerCase());
+
+      if (!cat) {
+        cat = await dbSaveCategoria({
+          nome: categoriaNome,
+          qualificate: 2,
+          formato: 'semi',
+          ordine: catMap.size
+        });
+        catMap.set(categoriaNome.toLowerCase(), cat);
+      }
+
+      lastImportedCat = cat;
+
+      let squadraCasa = teamMap.get(casa.toLowerCase());
+      if (!squadraCasa) {
+        squadraCasa = await dbSaveSquadra({ nome: casa });
+        teamMap.set(casa.toLowerCase(), squadraCasa);
+      }
+
+      let squadraOspite = teamMap.get(ospite.toLowerCase());
+      if (!squadraOspite) {
+        squadraOspite = await dbSaveSquadra({ nome: ospite });
+        teamMap.set(ospite.toLowerCase(), squadraOspite);
+      }
+
+      const gironeKey = `${cat.id}__${gironeNome}`;
+      let girone = gironeCache.get(gironeKey);
+
+      if (!girone) {
+        const existingGironi = await dbGetGironi(cat.id);
+
+        girone = existingGironi.find(
+          g => String(g.nome).trim().toLowerCase() === gironeNome.toLowerCase()
+        );
+
+        if (!girone) {
+          girone = await dbSaveGirone({
+            categoria_id: cat.id,
+            nome: gironeNome
+          });
+        }
+
+        gironeCache.set(gironeKey, girone);
+      }
+
+      const members = await dbGetGironeSquadre(girone.id);
+      const currentIds = members
+        .map(m => m.squadra_id || m.squadre?.id)
+        .filter(Boolean);
+
+      const updatedIds = Array.from(
+        new Set([...currentIds, squadraCasa.id, squadraOspite.id])
+      );
+
+      await dbSetGironeSquadre(girone.id, updatedIds);
+
+      await dbInsertPartitaManuale({
+        girone_id: girone.id,
+        home_id: squadraCasa.id,
+        away_id: squadraOspite.id,
+        fase,
+        giornata,
+        orario,
+        campo,
+        ordine,
+        priorita
+      });
+
+      createdMatches++;
+    }
+
+    // ===== IMPORTA LEGENDA =====
+    for (const row of legendaRows) {
+      const categoriaNome = String(row.categoria || '').trim();
+      if (!categoriaNome) continue;
+
+      const cat = catMap.get(categoriaNome.toLowerCase());
+      if (!cat) continue;
+
+      await dbSaveLegenda({
+        categoria_id: cat.id,
+        fase: String(row.fase || '').trim(),
+        formula: String(row.formula || '').trim(),
+        qualificazioni: String(row.qualificazioni || '').trim(),
+        criteri_classifica: String(
+          row['criteri classifica'] || row.criteri_classifica || ''
+        ).trim(),
+        note: String(row.note || '').trim()
+      });
+    }
+
+    // ===== AGGIORNA INTERFACCIA =====
+    STATE.categorie = await dbGetCategorie();
+
+    if (lastImportedCat) {
+      const found = STATE.categorie.find(c => c.id === lastImportedCat.id);
+      if (found) STATE.activeCat = found.id;
+    } else if (!STATE.activeCat && STATE.categorie.length) {
+      STATE.activeCat = STATE.categorie[0].id;
+    }
+
+    renderCatBar();
+    await renderAdminSetup();
+    await renderAdminRisultati();
+    await renderClassifiche();
+    await renderRisultati();
+
+    console.log('Import completato:', {
+      partite_importate: createdMatches,
+      categoria_attiva: lastImportedCat?.nome || null
+    });
+
+    alert(
+      `Import Excel completato.\n\nPartite create: ${createdMatches}` +
+      `${lastImportedCat ? `\nCategoria attivata: ${lastImportedCat.nome}` : ''}`
+    );
+
+  } catch (err) {
+    console.error(err);
+    alert('Errore import Excel: ' + err.message);
+  }
+}
