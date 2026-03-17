@@ -131,11 +131,13 @@ async function confermaImportazione() {
       // Gironi di questa categoria
       const myGironi = girRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
       
+      // Carica squadre UNA VOLTA SOLA per tutto il torneo (ottimizzazione)
+      let cacheSquadre = await dbGetSquadre(STATE.activeTorneo);
+
       for (const girRow of myGironi) {
         const girNome = girRow['GIRONE *'].toString().trim();
         const girone = await dbSaveGirone({ categoria_id: cat.id, nome: girNome });
 
-        // Squadre del girone
         // Legge tutte le colonne SQUADRA dinamicamente (senza limite)
         const squadreNomi = [];
         for (const key of Object.keys(girRow)) {
@@ -147,15 +149,15 @@ async function confermaImportazione() {
 
         const squadra_ids = [];
         for (const nome of squadreNomi) {
-          // Cerca squadra per nome E torneo (evita conflitti tra tornei diversi)
-          const tutteSquadre = await dbGetSquadre(STATE.activeTorneo);
-          let sq = tutteSquadre.find(s => s.nome.toLowerCase() === nome.toLowerCase() && s.torneo_id === STATE.activeTorneo);
+          // Cerca nella cache locale (nessuna chiamata DB extra!)
+          let sq = cacheSquadre.find(s => s.nome.toLowerCase() === nome.toLowerCase());
           if (!sq) {
-            // Inserisci direttamente senza upsert per evitare conflitti di nome tra tornei
+            // Crea squadra nuova e aggiorna la cache
             const { data } = await db.from('squadre').insert({ nome, torneo_id: STATE.activeTorneo }).select().single();
             sq = data;
+            if (sq) cacheSquadre.push(sq);
           }
-          squadra_ids.push(sq.id);
+          if (sq) squadra_ids.push(sq.id);
         }
         await dbSetGironeSquadre(girone.id, squadra_ids);
 
@@ -171,8 +173,9 @@ async function confermaImportazione() {
           for (const p of myParts) {
             const sq1Nome = p['SQUADRA CASA *'].toString().trim();
             const sq2Nome = p['SQUADRA OSPITE *'].toString().trim();
-            const sq1 = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase());
-            const sq2 = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase());
+            // Usa la cache locale invece di chiamare DB ogni volta!
+            const sq1 = cacheSquadre.find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase());
+            const sq2 = cacheSquadre.find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase());
             if (sq1 && sq2) {
               await db.from('partite').insert({
                 girone_id: girone.id,
@@ -196,6 +199,8 @@ async function confermaImportazione() {
       const myFinals = finalRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
       if (myFinals.length > 0) {
         await dbDeleteKnockout(cat.id);
+        // Aggiorna cache squadre prima della fase finale
+        cacheSquadre = await dbGetSquadre(STATE.activeTorneo);
         const roundOrder = ['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto',
                            'Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
         const matchCount = {};
@@ -204,8 +209,9 @@ async function confermaImportazione() {
           if (!matchCount[round_name]) matchCount[round_name] = 0;
           const sq1Nome = f['SQUADRA 1 *'].toString().trim();
           const sq2Nome = f['SQUADRA 2 *'].toString().trim();
-          const sq1 = sq1Nome !== 'TBD' ? (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase()) : null;
-          const sq2 = sq2Nome !== 'TBD' ? (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase()) : null;
+          // Usa cache locale!
+          const sq1 = sq1Nome !== 'TBD' ? cacheSquadre.find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase()) : null;
+          const sq2 = sq2Nome !== 'TBD' ? cacheSquadre.find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase()) : null;
           const is_consolazione = (f['TIPO']?.toString().toLowerCase() || '').includes('consol');
           await dbSaveKnockoutMatch({
             categoria_id: cat.id,
