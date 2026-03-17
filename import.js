@@ -3,10 +3,13 @@
 //  Legge il modello SPE e importa tutto nel database
 // ============================================================
 
+let _importInProgress = false;
+
 async function importaExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!STATE.activeTorneo) { toast('Crea prima un torneo!'); return; }
+  if (_importInProgress) { toast('Importazione già in corso, aspetta...'); return; }
 
   toast('Lettura file Excel...');
 
@@ -105,11 +108,13 @@ async function importaExcel(event) {
 }
 
 async function confermaImportazione() {
+  if (_importInProgress) { toast('Importazione già in corso...'); return; }
   const { catRows, girRows, partRows, finalRows } = window._importData || {};
   if (!catRows) { toast('Nessun dato da importare'); return; }
 
+  _importInProgress = true;
   const preview = document.getElementById('import-preview');
-  if (preview) preview.innerHTML = '<div style="padding:12px;color:#185FA5;font-size:13px;">⏳ Importazione in corso...</div>';
+  if (preview) preview.innerHTML = '<div style="padding:12px;color:#185FA5;font-size:13px;">⏳ Importazione in corso... non chiudere la pagina!</div>';
 
   try {
     const formatoMap = { 'final':'final', 'semi':'semi', 'quarter':'quarter', 'quarti':'quarter', 'semifinali':'semi', 'solo finale':'final' };
@@ -235,11 +240,13 @@ async function confermaImportazione() {
     STATE.activeCat = STATE.categorie[0]?.id || null;
     renderCatBar();
     delete window._importData;
+    _importInProgress = false;
     toast('✅ Importazione completata!');
     await renderAdminSetup();
 
   } catch(e) {
     console.error(e);
+    _importInProgress = false;
     toast('❌ Errore importazione: ' + e.message);
   }
 }
