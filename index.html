@@ -1,233 +1,37 @@
-async function importExcel() {
-  const input = document.getElementById('excelFile');
-  const file = input?.files?.[0];
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Torneo Calcio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  if (!file) {
-    alert('Seleziona un file Excel');
-    return;
-  }
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  try {
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data, { type: 'array' });
+  <!-- XLSX per Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-    const findSheet = (name) => {
-      const exact = workbook.SheetNames.find(s => s.trim().toLowerCase() === name.toLowerCase());
-      return exact ? workbook.Sheets[exact] : null;
-    };
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
 
-    const partiteSheet = findSheet('partite');
-    const legendaSheet = findSheet('legenda');
-    const squadreSheet = findSheet('squadre');
+<body>
 
-    const partiteRows = partiteSheet
-      ? XLSX.utils.sheet_to_json(partiteSheet, { defval: '' })
-      : [];
+  <h1>Torneo Calcio</h1>
 
-    const legendaRows = legendaSheet
-      ? XLSX.utils.sheet_to_json(legendaSheet, { defval: '' })
-      : [];
+  <!-- IMPORT EXCEL -->
+  <div style="margin:20px 0;">
+    <input type="file" id="excelFile" accept=".xlsx,.xls">
+    <button onclick="importExcel()">Importa Excel</button>
+  </div>
 
-    const squadreRows = squadreSheet
-      ? XLSX.utils.sheet_to_json(squadreSheet, { defval: '' })
-      : [];
+  <!-- CONTENUTO -->
+  <div id="output"></div>
 
-    if (!partiteRows.length) {
-      alert(
-        'Il foglio "partite" è vuoto o non trovato.\n\n' +
-        'Fogli trovati: ' + workbook.SheetNames.join(', ')
-      );
-      return;
-    }
+  <!-- SCRIPT -->
+  <script src="config.js"></script>
+  <script src="db.js"></script>
+  <script src="app.js"></script>
 
-    const norm = (v) => String(v || '').trim();
-    const num = (v, fallback = 0) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : fallback;
-    };
-
-    const categorie = await dbGetCategorie();
-    const squadre = await dbGetSquadre();
-
-    const catMap = new Map(
-      categorie.map(c => [norm(c.nome).toLowerCase(), c])
-    );
-
-    const teamMap = new Map(
-      squadre.map(s => [norm(s.nome).toLowerCase(), s])
-    );
-
-    const gironeCache = new Map();
-    let createdMatches = 0;
-    let skippedRows = 0;
-    let lastImportedCat = null;
-
-    // squadre opzionali
-    for (const row of squadreRows) {
-      const categoriaNome = norm(row.categoria);
-      const squadraNome = norm(row.squadra || row.nome);
-
-      if (!categoriaNome || !squadraNome) continue;
-
-      let cat = catMap.get(categoriaNome.toLowerCase());
-      if (!cat) {
-        cat = await dbSaveCategoria({
-          nome: categoriaNome,
-          qualificate: 2,
-          formato: 'semi',
-          ordine: catMap.size
-        });
-        catMap.set(categoriaNome.toLowerCase(), cat);
-      }
-
-      let sq = teamMap.get(squadraNome.toLowerCase());
-      if (!sq) {
-        sq = await dbSaveSquadra({ nome: squadraNome });
-        teamMap.set(squadraNome.toLowerCase(), sq);
-      }
-    }
-
-    for (const row of partiteRows) {
-      const categoriaNome = norm(row.categoria);
-      const gironeNome = norm(row.girone) || 'Girone A';
-      const fase = norm(row.fase) || 'Fase 1';
-      const giornata = num(row.giornata, 1);
-      const orario = norm(row.orario);
-      const campo = norm(row.campo);
-
-      const casa = norm(
-        row['squadra casa'] ||
-        row.squadra_casa ||
-        row.casa ||
-        row.home
-      );
-
-      const ospite = norm(
-        row['squadra ospite'] ||
-        row.squadra_ospite ||
-        row.ospite ||
-        row.away
-      );
-
-      const ordine = num(row.ordine, 0);
-      const priorita = num(row.priorita, 0);
-
-      if (!categoriaNome || !casa || !ospite) {
-        skippedRows++;
-        continue;
-      }
-
-      let cat = catMap.get(categoriaNome.toLowerCase());
-      if (!cat) {
-        cat = await dbSaveCategoria({
-          nome: categoriaNome,
-          qualificate: 2,
-          formato: 'semi',
-          ordine: catMap.size
-        });
-        catMap.set(categoriaNome.toLowerCase(), cat);
-      }
-
-      lastImportedCat = cat;
-
-      let squadraCasa = teamMap.get(casa.toLowerCase());
-      if (!squadraCasa) {
-        squadraCasa = await dbSaveSquadra({ nome: casa });
-        teamMap.set(casa.toLowerCase(), squadraCasa);
-      }
-
-      let squadraOspite = teamMap.get(ospite.toLowerCase());
-      if (!squadraOspite) {
-        squadraOspite = await dbSaveSquadra({ nome: ospite });
-        teamMap.set(ospite.toLowerCase(), squadraOspite);
-      }
-
-      const gironeKey = `${cat.id}__${gironeNome}`;
-      let girone = gironeCache.get(gironeKey);
-
-      if (!girone) {
-        const existingGironi = await dbGetGironi(cat.id);
-        girone = existingGironi.find(
-          g => norm(g.nome).toLowerCase() === gironeNome.toLowerCase()
-        );
-
-        if (!girone) {
-          girone = await dbSaveGirone({
-            categoria_id: cat.id,
-            nome: gironeNome
-          });
-        }
-
-        gironeCache.set(gironeKey, girone);
-      }
-
-      const members = await dbGetGironeSquadre(girone.id);
-      const currentIds = members
-        .map(m => m.squadra_id || m.squadre?.id)
-        .filter(Boolean);
-
-      const updatedIds = Array.from(
-        new Set([...currentIds, squadraCasa.id, squadraOspite.id])
-      );
-
-      await dbSetGironeSquadre(girone.id, updatedIds);
-
-      await dbInsertPartitaManuale({
-        girone_id: girone.id,
-        home_id: squadraCasa.id,
-        away_id: squadraOspite.id,
-        fase,
-        giornata,
-        orario,
-        campo,
-        ordine,
-        priorita
-      });
-
-      createdMatches++;
-    }
-
-    for (const row of legendaRows) {
-      const categoriaNome = norm(row.categoria);
-      if (!categoriaNome) continue;
-
-      const cat = catMap.get(categoriaNome.toLowerCase());
-      if (!cat) continue;
-
-      await dbSaveLegenda({
-        categoria_id: cat.id,
-        fase: norm(row.fase),
-        formula: norm(row.formula),
-        qualificazioni: norm(row.qualificazioni),
-        criteri_classifica: norm(row['criteri classifica'] || row.criteri_classifica),
-        note: norm(row.note)
-      });
-    }
-
-    STATE.categorie = await dbGetCategorie();
-
-    if (lastImportedCat) {
-      const found = STATE.categorie.find(c => c.id === lastImportedCat.id);
-      if (found) STATE.activeCat = found.id;
-    } else if (!STATE.activeCat && STATE.categorie.length) {
-      STATE.activeCat = STATE.categorie[0].id;
-    }
-
-    renderCatBar();
-    await renderAdminSetup();
-    await renderAdminRisultati();
-    await renderClassifiche();
-    await renderRisultati();
-
-    alert(
-      `Import Excel completato.\n\n` +
-      `Righe lette: ${partiteRows.length}\n` +
-      `Partite create: ${createdMatches}\n` +
-      `Righe scartate: ${skippedRows}` +
-      `${lastImportedCat ? `\nCategoria attivata: ${lastImportedCat.nome}` : ''}`
-    );
-  } catch (err) {
-    console.error(err);
-    alert('Errore import Excel: ' + err.message);
-  }
-}
+</body>
+</html>
