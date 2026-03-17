@@ -5,6 +5,7 @@
 let STATE = {
   tornei: [], activeTorneo: null, categorie: [],
   activeCat: null, isAdmin: false, currentSection: 'classifiche',
+  currentUser: null,
 };
 
 async function init() {
@@ -530,7 +531,7 @@ async function renderAdminRisultati(){
         else badge=`<span class="badge badge-blue">Pareggio</span>`;
       }
       const orInfo = p.orario ? `<span style="font-size:11px;color:#888;">${p.orario}${p.campo?' · '+p.campo:''}</span>` : '';
-      html+=`<div class="admin-match"><div class="admin-match-header">
+      html+=`<div class="admin-match" id="match-row-${p.id}"><div class="admin-match-header">
         <div class="admin-team-name">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
         <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_home:''}" placeholder="—" id="sh_${p.id}">
         <span class="score-dash">—</span>
@@ -570,11 +571,29 @@ async function saveRisultato(partita_id,girone_id){
   const sh=document.getElementById('sh_'+partita_id).value;
   const sa=document.getElementById('sa_'+partita_id).value;
   if(sh===''||sa===''){toast('Inserisci entrambi i gol');return;}
+  // Disabilita il pulsante per evitare doppi click
+  const btn=document.querySelector(`button[onclick="saveRisultato(${partita_id},${girone_id})"]`);
+  if(btn){btn.disabled=true;btn.textContent='...';}
   try{
     const result=await dbSavePartita({id:partita_id,girone_id,gol_home:parseInt(sh),gol_away:parseInt(sa),giocata:true});
-    if(result){toast('✓ Salvato!');await renderAdminRisultati();}
-    else toast('Errore nel salvataggio');
-  }catch(e){console.error(e);toast('Errore: '+(e.message||'sconosciuto'));}
+    if(result){
+      toast('✓ Salvato!');
+      // Aggiorna solo la riga della partita, non tutto
+      const row=document.getElementById('match-row-'+partita_id);
+      if(row){
+        row.style.background='#e8f5e9';
+        setTimeout(()=>{if(row)row.style.background='';},2000);
+      }
+      if(btn){btn.disabled=false;btn.textContent='✓ Conferma';}
+    } else {
+      toast('Errore nel salvataggio');
+      if(btn){btn.disabled=false;btn.textContent='✓ Conferma';}
+    }
+  }catch(e){
+    console.error(e);
+    toast('Errore: '+(e.message||'sconosciuto'));
+    if(btn){btn.disabled=false;btn.textContent='✓ Conferma';}
+  }
 }
 
 function toggleScorers(key){openScorers[key]=!openScorers[key];renderAdminRisultati();}
@@ -724,32 +743,74 @@ async function resetKOSection(is_consolazione){
 // ===== AUTH =====
 function toggleAdmin(){
   if(STATE.isAdmin){exitAdmin();return;}
+  // Controlla sessione salvata
+  try {
+    const saved = JSON.parse(localStorage.getItem('spe_session') || 'null');
+    if(saved && saved.username && saved.ruolo) {
+      STATE.currentUser = saved;
+      enterAdmin();
+      return;
+    }
+  } catch(e) {}
   document.getElementById('admin-modal').style.display='flex';
-  setTimeout(()=>document.getElementById('admin-pw').focus(),100);
+  setTimeout(()=>document.getElementById('admin-user').focus(),100);
 }
+
 function checkPw(){
-  const pw=document.getElementById('admin-pw').value;
-  if(pw===CONFIG.ADMIN_PASSWORD){
+  const username = document.getElementById('admin-user').value.trim().toLowerCase();
+  const password = document.getElementById('admin-pw').value;
+  const user = (CONFIG.USERS || []).find(u =>
+    u.username.toLowerCase() === username && u.password === password
+  );
+  if(user){
     document.getElementById('admin-modal').style.display='none';
-    document.getElementById('admin-pw').value=''; document.getElementById('pw-error').textContent='';
+    document.getElementById('admin-user').value='';
+    document.getElementById('admin-pw').value='';
+    document.getElementById('pw-error').textContent='';
+    STATE.currentUser = user;
+    // Salva sessione
+    try { localStorage.setItem('spe_session', JSON.stringify({username:user.username,ruolo:user.ruolo,nome:user.nome})); } catch(e) {}
     enterAdmin();
-  } else document.getElementById('pw-error').textContent='Password errata';
+  } else {
+    document.getElementById('pw-error').textContent='Username o password errati';
+  }
 }
 function enterAdmin(){
   STATE.isAdmin=true;
+  const ruolo = STATE.currentUser?.ruolo || 'admin';
+  const nome = STATE.currentUser?.nome || 'Admin';
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
   document.getElementById('admin-btn').textContent='Esci';
-  STATE.currentSection='a-tornei';
+
+  // Mostra/nascondi voci menu in base al ruolo
+  const soloAdmin = ['a-tornei','a-setup','a-loghi'];
+  soloAdmin.forEach(sec => {
+    const btn = document.querySelector(`[data-section="${sec}"]`);
+    if(btn) btn.style.display = ruolo === 'admin' ? '' : 'none';
+  });
+
+  // Sezione iniziale in base al ruolo
+  const startSection = ruolo === 'admin' ? 'a-tornei' : 'a-risultati';
+  STATE.currentSection = startSection;
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
-  document.querySelector('[data-section="a-tornei"]').classList.add('active');
+  const startBtn = document.querySelector(`[data-section="${startSection}"]`);
+  if(startBtn) startBtn.classList.add('active');
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-  document.getElementById('sec-a-tornei').classList.add('active');
-  document.getElementById('cat-bar').style.display='none';
-  renderAdminTornei();
+  document.getElementById(`sec-${startSection}`).classList.add('active');
+  document.getElementById('cat-bar').style.display = startSection === 'a-tornei' ? 'none' : '';
+
+  // Mostra nome utente
+  const exitBtn = document.querySelector('.nav-exit');
+  if(exitBtn) exitBtn.textContent = `✕ ${nome}`;
+
+  if(startSection === 'a-tornei') renderAdminTornei();
+  else renderAdminRisultati();
 }
 function exitAdmin(){
   STATE.isAdmin=false;
+  STATE.currentUser=null;
+  try { localStorage.removeItem('spe_session'); } catch(e) {}
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('admin-btn').textContent='Admin';
