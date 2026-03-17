@@ -132,14 +132,28 @@ async function dbUpdateLogo(squadra_id, logo_base64) {
   await db.from('squadre').update({ logo: logo_base64 }).eq('id', squadra_id);
 }
 
-// ---- REALTIME ----
+// ---- POLLING (aggiorna ogni 30 secondi invece di WebSocket) ----
+// Questo permette migliaia di utenti senza crash
+let _pollingInterval = null;
+
 function subscribeRealtime(callback) {
-  db.channel('torneo-updates')
-    .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-      cacheClear('sq_');
-      callback();
-    })
-    .subscribe();
+  // Ferma polling precedente se esiste
+  if (_pollingInterval) clearInterval(_pollingInterval);
+  
+  // Aggiorna ogni 30 secondi
+  _pollingInterval = setInterval(() => {
+    cacheClear('sq_');
+    callback();
+  }, 30000);
+  
+  console.log('Polling attivo: aggiornamento ogni 30 secondi');
+}
+
+function stopPolling() {
+  if (_pollingInterval) {
+    clearInterval(_pollingInterval);
+    _pollingInterval = null;
+  }
 }
 
 // ---- OTTIMIZZAZIONE CHIAVE: carica tutto un girone in 3 query invece di N*3 ----
