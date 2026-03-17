@@ -1,14 +1,10 @@
 // ============================================================
-//  SOCCER PRO EXPERIENCE - Multi-torneo
+//  SOCCER PRO EXPERIENCE - App principale completa
 // ============================================================
 
 let STATE = {
-  tornei: [],
-  activeTorneo: null,
-  categorie: [],
-  activeCat: null,
-  isAdmin: false,
-  currentSection: 'classifiche',
+  tornei: [], activeTorneo: null, categorie: [],
+  activeCat: null, isAdmin: false, currentSection: 'classifiche',
 };
 
 async function init() {
@@ -29,42 +25,35 @@ async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
   STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
-  renderTorneoBar();
-  renderCatBar();
+  renderTorneoBar(); renderCatBar();
   await renderCurrentSection();
 }
 
-// ===== TORNEO BAR =====
 function renderTorneoBar() {
   const bar = document.getElementById('torneo-bar');
   const attivi = STATE.tornei.filter(t => t.attivo);
   if (attivi.length <= 1) { bar.style.display = 'none'; return; }
   bar.style.display = '';
   bar.innerHTML = `<div class="torneo-bar-inner">${attivi.map(t =>
-    `<button class="torneo-pill ${t.id === STATE.activeTorneo ? 'active' : ''}" onclick="selectTorneo(${t.id})">${t.nome}</button>`
+    `<button class="torneo-pill ${t.id===STATE.activeTorneo?'active':''}" onclick="selectTorneo(${t.id})">${t.nome}</button>`
   ).join('')}</div>`;
 }
 
-async function selectTorneo(id) {
-  STATE.activeTorneo = id;
-  await loadTorneo();
-}
+async function selectTorneo(id) { STATE.activeTorneo = id; await loadTorneo(); }
 
-// ===== HEADER =====
 function updateHeader() {
   const t = STATE.tornei.find(t => t.id === STATE.activeTorneo);
   document.getElementById('header-title').textContent = t ? t.nome : 'Soccer Pro Experience';
   document.getElementById('header-date').textContent = t ? t.data || '' : '';
 }
 
-// ===== NAVIGATION =====
 function showSection(name, btn) {
   STATE.currentSection = name;
   document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.getElementById('cat-bar').style.display = ['a-setup', 'a-tornei'].includes(name) ? 'none' : '';
+  document.getElementById('cat-bar').style.display = ['a-setup','a-tornei'].includes(name) ? 'none' : '';
   renderCurrentSection();
 }
 
@@ -81,22 +70,16 @@ async function renderCurrentSection() {
   else if (s === 'a-knockout') await renderAdminKnockout();
 }
 
-// ===== CATEGORY BAR =====
 function renderCatBar() {
   const bar = document.getElementById('cat-bar');
   if (!STATE.categorie.length) { bar.innerHTML = ''; return; }
   bar.innerHTML = `<div class="cat-bar-inner">${STATE.categorie.map(c =>
-    `<button class="cat-pill ${c.id === STATE.activeCat ? 'active' : ''}" onclick="selectCat(${c.id})">${c.nome}</button>`
+    `<button class="cat-pill ${c.id===STATE.activeCat?'active':''}" onclick="selectCat(${c.id})">${c.nome}</button>`
   ).join('')}</div>`;
 }
 
-async function selectCat(id) {
-  STATE.activeCat = id;
-  renderCatBar();
-  renderCurrentSection();
-}
+async function selectCat(id) { STATE.activeCat = id; renderCatBar(); renderCurrentSection(); }
 
-// ===== HELPERS =====
 function logoHTML(sq, size='md') {
   const cls = size==='sm' ? 'team-logo-sm' : 'team-logo';
   const avcls = size==='sm' ? 'team-avatar-sm' : 'team-avatar';
@@ -118,7 +101,7 @@ async function getGironiWithData(categoria_id) {
 }
 
 function getScontroDisretto(girone, idA, idB) {
-  let ptsA=0, ptsB=0, gfA=0, gfB=0;
+  let ptsA=0,ptsB=0,gfA=0,gfB=0;
   for (const p of girone.partite) {
     if (!p.giocata) continue;
     if (p.home_id===idA && p.away_id===idB) {
@@ -158,10 +141,10 @@ function calcGironeClassifica(girone) {
 // ===== PUBLIC: CLASSIFICHE =====
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
-  if (!STATE.activeCat) { el.innerHTML = '<div class="empty-state">Nessuna categoria configurata.</div>'; return; }
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria configurata.</div>'; return; }
   const cat = STATE.categorie.find(c=>c.id===STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
-  if (!gironi.length) { el.innerHTML = '<div class="empty-state">Nessun girone trovato.</div>'; return; }
+  if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
   let html = '';
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
@@ -178,7 +161,10 @@ async function renderClassifiche() {
         <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
         <td class="pts-col">${row.pts}</td></tr>`;
     });
-    html+=`</tbody></table><div style="font-size:11px;color:#aaa;margin-top:8px;padding-top:8px;border-top:1px solid #f5f5f5;">Spareggio: punti → scontro diretto → diff. reti → gol fatti</div></div>`;
+    html+=`</tbody></table>
+    <div style="font-size:11px;color:#aaa;margin-top:8px;padding-top:8px;border-top:1px solid #f5f5f5;">
+      Spareggio: punti → scontro diretto → diff. reti → gol fatti → gol subiti → sorteggio/rigori
+    </div></div>`;
   }
   el.innerHTML = html;
 }
@@ -186,7 +172,7 @@ async function renderClassifiche() {
 // ===== PUBLIC: RISULTATI =====
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
-  if (!STATE.activeCat) { el.innerHTML = '<div class="empty-state">Nessuna categoria.</div>'; return; }
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   const gironi = await getGironiWithData(STATE.activeCat);
   let html = '';
   for (const g of gironi) {
@@ -198,9 +184,13 @@ async function renderRisultati() {
       for (const p of giocate) {
         const mH=(p.marcatori||[]).filter(m=>m.squadra_id===p.home_id);
         const mA=(p.marcatori||[]).filter(m=>m.squadra_id===p.away_id);
+        const orario = p.orario ? `<span style="font-size:11px;color:#aaa;margin-right:6px;">${p.orario}${p.campo?' · '+p.campo:''}</span>` : '';
         html+=`<div class="match-result">
           <div class="match-team">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
-          <div class="match-score">${p.gol_home} — ${p.gol_away}</div>
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            ${orario}
+            <div class="match-score">${p.gol_home} — ${p.gol_away}</div>
+          </div>
           <div class="match-team right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
         </div>`;
         if(mH.length||mA.length){
@@ -215,9 +205,10 @@ async function renderRisultati() {
     if (dafar.length) {
       html+=`<div class="card">`;
       for (const p of dafar) {
+        const orario = p.orario ? `<span style="font-size:11px;color:#aaa;">${p.orario}${p.campo?' · '+p.campo:''}</span>` : '';
         html+=`<div class="match-result">
           <div class="match-team">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
-          <div class="match-score pending">vs</div>
+          <div style="display:flex;flex-direction:column;align-items:center;">${orario}<div class="match-score pending">vs</div></div>
           <div class="match-team right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
         </div>`;
       }
@@ -235,31 +226,32 @@ async function renderTabellone() {
   const squadre = await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
   if (!ko.length) { el.innerHTML='<div class="empty-state">Tabellone non ancora generato.</div>'; return; }
-  const main_rounds=ko.filter(m=>!m.is_consolazione);
-  const cons_rounds=ko.filter(m=>m.is_consolazione);
   const renderRounds=(matches,label)=>{
     if(!matches.length) return '';
     const rounds={};
     matches.forEach(m=>{if(!rounds[m.round_name])rounds[m.round_name]=[];rounds[m.round_name].push(m);});
     const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
-    const sorted=Object.keys(rounds).sort((a,b)=>(order.indexOf(a)||99)-(order.indexOf(b)||99));
+    const sorted=Object.keys(rounds).sort((a,b)=>(order.indexOf(a)===-1?99:order.indexOf(a))-(order.indexOf(b)===-1?99:order.indexOf(b)));
     let h=`<div class="section-label">${label}</div><div class="ko-grid">`;
     for(const rname of sorted){
       h+=`<div class="ko-col"><div class="ko-col-title">${rname}</div>`;
       for(const m of rounds[rname]){
         const hm=m.home_id?sqMap[m.home_id]:null, am=m.away_id?sqMap[m.away_id]:null;
         const w1=m.giocata&&m.gol_home>m.gol_away, w2=m.giocata&&m.gol_away>m.gol_home;
+        const hmNome = hm ? hm.nome : (m.note_home || 'TBD');
+        const amNome = am ? am.nome : (m.note_away || 'TBD');
         h+=`<div class="ko-match">
-          <div class="ko-team-row ${w1?'winner':''}">${logoHTML(hm,'sm')}<span style="flex:1;">${hm?hm.nome:'TBD'}</span>${m.giocata?`<span class="ko-score">${m.gol_home}</span>`:''}</div>
+          <div class="ko-team-row ${w1?'winner':''}">${logoHTML(hm,'sm')}<span style="flex:1;">${hmNome}</span>${m.giocata?`<span class="ko-score">${m.gol_home}</span>`:''}</div>
           <div class="ko-sep"></div>
-          <div class="ko-team-row ${w2?'winner':''}">${logoHTML(am,'sm')}<span style="flex:1;">${am?am.nome:'TBD'}</span>${m.giocata?`<span class="ko-score">${m.gol_away}</span>`:''}</div>
+          <div class="ko-team-row ${w2?'winner':''}">${logoHTML(am,'sm')}<span style="flex:1;">${amNome}</span>${m.giocata?`<span class="ko-score">${m.gol_away}</span>`:''}</div>
         </div>`;
       }
       h+=`</div>`;
     }
     return h+'</div>';
   };
-  el.innerHTML=renderRounds(main_rounds,'Tabellone principale')+renderRounds(cons_rounds,'Consolazione');
+  const main=ko.filter(m=>!m.is_consolazione), cons=ko.filter(m=>m.is_consolazione);
+  el.innerHTML=renderRounds(main,'Tabellone principale')+renderRounds(cons,'Consolazione');
 }
 
 // ===== ADMIN: TORNEI =====
@@ -269,23 +261,16 @@ async function renderAdminTornei() {
   let html = `<div class="section-label">Tornei</div>`;
   if (!STATE.tornei.length) html += `<div class="empty-state">Nessun torneo. Creane uno!</div>`;
   for (const t of STATE.tornei) {
-    html += `<div class="card">
-      <div class="card-title">
-        <div style="display:flex;align-items:center;gap:8px;">
-          ${logoHTML(null,'sm')}
-          <div>
-            <div style="font-weight:600;">${t.nome}</div>
-            <div style="font-size:12px;color:#aaa;">${t.data||'Data non impostata'}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span class="badge ${t.attivo?'badge-green':'badge-gray'}">${t.attivo?'Attivo':'Archiviato'}</span>
-          <button class="btn btn-sm ${t.attivo?'':'btn-p'}" onclick="toggleTorneo(${t.id},${t.attivo})">${t.attivo?'Archivia':'Riattiva'}</button>
-          <button class="btn btn-sm" onclick="editTorneo(${t.id})">Modifica</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteTorneo(${t.id})">Elimina</button>
-        </div>
+    html += `<div class="card"><div class="card-title">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div><div style="font-weight:600;">${t.nome}</div><div style="font-size:12px;color:#aaa;">${t.data||'Data non impostata'}</div></div>
       </div>
-    </div>`;
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span class="badge ${t.attivo?'badge-green':'badge-gray'}">${t.attivo?'Attivo':'Archiviato'}</span>
+        <button class="btn btn-sm ${t.attivo?'':'btn-p'}" onclick="toggleTorneo(${t.id},${t.attivo})">${t.attivo?'Archivia':'Riattiva'}</button>
+        <button class="btn btn-sm" onclick="editTorneo(${t.id})">Modifica</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTorneo(${t.id})">Elimina</button>
+      </div></div></div>`;
   }
   html += `<div class="section-label">Nuovo torneo</div>
   <div class="card">
@@ -301,92 +286,110 @@ async function renderAdminTornei() {
 }
 
 async function createTorneo() {
-  const nome = document.getElementById('new-t-nome').value.trim();
-  const data = document.getElementById('new-t-data').value.trim();
-  if (!nome) { alert('Inserisci il nome del torneo'); return; }
-  const t = await dbSaveTorneo({ nome, data, attivo: true });
-  STATE.tornei = await dbGetTornei();
-  STATE.activeTorneo = t.id;
-  await loadTorneo();
-  toast('Torneo creato!');
-  await renderAdminTornei();
+  const nome=document.getElementById('new-t-nome').value.trim();
+  const data=document.getElementById('new-t-data').value.trim();
+  if(!nome){alert('Inserisci il nome');return;}
+  const t=await dbSaveTorneo({nome,data,attivo:true});
+  STATE.tornei=await dbGetTornei(); STATE.activeTorneo=t.id;
+  await loadTorneo(); toast('Torneo creato!'); await renderAdminTornei();
 }
-
-async function toggleTorneo(id, attivo) {
-  await dbUpdateTorneo(id, { attivo: !attivo });
-  STATE.tornei = await dbGetTornei();
-  await renderAdminTornei();
-  toast(attivo ? 'Torneo archiviato' : 'Torneo riattivato');
+async function toggleTorneo(id,attivo){
+  await dbUpdateTorneo(id,{attivo:!attivo});
+  STATE.tornei=await dbGetTornei(); await renderAdminTornei();
+  toast(attivo?'Torneo archiviato':'Torneo riattivato');
 }
-
-async function deleteTorneo(id) {
-  if (!confirm('Eliminare questo torneo e tutti i suoi dati?')) return;
+async function deleteTorneo(id){
+  if(!confirm('Eliminare questo torneo e tutti i suoi dati?')) return;
   await dbDeleteTorneo(id);
-  STATE.tornei = await dbGetTornei();
-  STATE.activeTorneo = STATE.tornei.find(t=>t.attivo)?.id || STATE.tornei[0]?.id || null;
-  await loadTorneo();
-  await renderAdminTornei();
-  toast('Torneo eliminato');
+  STATE.tornei=await dbGetTornei();
+  STATE.activeTorneo=STATE.tornei.find(t=>t.attivo)?.id||STATE.tornei[0]?.id||null;
+  await loadTorneo(); await renderAdminTornei(); toast('Torneo eliminato');
+}
+async function editTorneo(id){
+  const t=STATE.tornei.find(x=>x.id===id);
+  const nome=prompt('Nome torneo:',t.nome); if(!nome) return;
+  const data=prompt('Data:',t.data||'');
+  await dbUpdateTorneo(id,{nome,data});
+  STATE.tornei=await dbGetTornei(); updateHeader(); renderTorneoBar();
+  await renderAdminTornei(); toast('Torneo aggiornato');
 }
 
-async function editTorneo(id) {
-  const t = STATE.tornei.find(x=>x.id===id);
-  const nome = prompt('Nome torneo:', t.nome);
-  if (!nome) return;
-  const data = prompt('Data:', t.data||'');
-  await dbUpdateTorneo(id, { nome, data });
-  STATE.tornei = await dbGetTornei();
-  updateHeader();
-  renderTorneoBar();
-  await renderAdminTornei();
-  toast('Torneo aggiornato');
-}
-
-// ===== ADMIN: SETUP CATEGORIE =====
+// ===== ADMIN: CATEGORIE =====
 async function renderAdminSetup() {
   const el = document.getElementById('sec-a-setup');
   if (!STATE.activeTorneo) { el.innerHTML='<div class="empty-state">Crea prima un torneo.</div>'; return; }
   const t = STATE.tornei.find(x=>x.id===STATE.activeTorneo);
   const tutteSquadre = await dbGetSquadre(STATE.activeTorneo);
 
-  let html = `<div style="background:#e3f0fb;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+  let html = `<div style="background:#e3f0fb;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
     <div style="font-size:13px;color:#0c447c;">Torneo attivo: <strong>${t?.nome||'?'}</strong></div>
     <button class="btn" style="background:#27ae60;color:white;border-color:#27ae60;font-weight:500;" onclick="esportaExcel()">↓ Scarica Excel</button>
   </div>`;
 
   if (tutteSquadre.length) {
-    html += '<div class="section-label">Squadre caricate (' + tutteSquadre.length + ' totali)</div><div class="card" style="margin-bottom:14px;"><div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    html += `<div class="section-label">Squadre caricate (${tutteSquadre.length} totali)</div>
+    <div class="card" style="margin-bottom:14px;"><div style="display:flex;flex-wrap:wrap;gap:6px;">`;
     tutteSquadre.forEach(sq => {
-      html += '<span style="display:inline-flex;align-items:center;gap:5px;background:#f0f6ff;border:1px solid #c5ddf5;border-radius:99px;padding:3px 10px;font-size:12px;color:#185FA5;">' + logoHTML(sq,'sm') + ' ' + sq.nome + '</span>';
+      html += `<span style="display:inline-flex;align-items:center;gap:5px;background:#f0f6ff;border:1px solid #c5ddf5;border-radius:99px;padding:3px 10px;font-size:12px;color:#185FA5;">${logoHTML(sq,'sm')} ${sq.nome}</span>`;
     });
-    html += '</div></div>';
+    html += `</div></div>`;
   }
 
-  html += '<div class="section-label">Categorie configurate</div>';
-  if (!STATE.categorie.length) html += '<div style="color:#aaa;font-size:13px;padding:8px 0 16px;">Nessuna categoria. Aggiungine una qui sotto.</div>';
+  html += `<div class="section-label">Categorie configurate</div>`;
+  if (!STATE.categorie.length) html += `<div style="color:#aaa;font-size:13px;padding:8px 0 12px;">Nessuna categoria. Aggiungine una o importa da Excel.</div>`;
 
   for (const cat of STATE.categorie) {
     const gironi = await dbGetGironi(cat.id);
-    let totP = 0, totG = 0;
+    let totP=0, totG=0;
     for (const g of gironi) {
       const pp = await dbGetPartite(g.id);
-      totP += pp.length; totG += pp.filter(p=>p.giocata).length;
+      totP+=pp.length; totG+=pp.filter(p=>p.giocata).length;
     }
-    html += '<div class="card" style="margin-bottom:10px;"><div class="card-title" style="margin-bottom:10px;"><div style="font-size:15px;font-weight:600;">' + cat.nome + '</div><div style="display:flex;gap:6px;align-items:center;"><span class="badge badge-blue">Top ' + (cat.qualificate||2) + ' si qualificano</span><span class="badge badge-gray">' + totG + '/' + totP + ' partite</span><button class="btn btn-danger btn-sm" onclick="deleteCat(' + cat.id + ')">Elimina</button></div></div>';
+    html += `<div class="card" style="margin-bottom:10px;">
+      <div class="card-title" style="margin-bottom:10px;">
+        <div style="font-size:15px;font-weight:600;">${cat.nome}</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="badge badge-blue">Top ${cat.qualificate||2} si qualificano</span>
+          <span class="badge badge-gray">${totG}/${totP} partite</span>
+          <button class="btn btn-danger btn-sm" onclick="deleteCat(${cat.id})">Elimina</button>
+        </div>
+      </div>`;
     for (const g of gironi) {
       const members = await dbGetGironeSquadre(g.id);
-      html += '<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">' + g.nome + '</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      html += `<div style="margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">${g.nome}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;">`;
       members.forEach(m => {
-        html += '<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">' + logoHTML(m.squadre,'sm') + ' ' + m.squadre.nome + '</span>';
+        html += `<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">${logoHTML(m.squadre,'sm')} ${m.squadre.nome}</span>`;
       });
-      html += '</div></div>';
+      html += `</div></div>`;
     }
-    html += '</div>';
+    html += `</div>`;
   }
 
-  html += '<div class="section-label">Aggiungi categoria</div><div class="card"><div class="form-grid-2"><div class="form-group"><label class="form-label">Nome (es. Under 12)</label><input class="form-input" id="cname" placeholder="Under 10"></div><div class="form-group"><label class="form-label">Si qualificano (prime N)</label><select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div></div><div class="form-group"><label class="form-label">Squadre — una riga per girone, separate da virgola</label><textarea class="form-input" id="cteams" rows="5" placeholder="Girone A: Milan, Inter, Juve, Roma&#10;Girone B: Napoli, Fiorentina, Lazio, Torino"></textarea></div><button class="btn btn-p" style="width:100%;" onclick="addCategoria()">+ Aggiungi categoria</button></div>';
+  html += `<div class="section-label">Aggiungi categoria manualmente</div>
+  <div class="card">
+    <div class="form-grid-2">
+      <div class="form-group"><label class="form-label">Nome (es. Under 12)</label>
+        <input class="form-input" id="cname" placeholder="Under 10"></div>
+      <div class="form-group"><label class="form-label">Si qualificano (prime N)</label>
+        <select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Squadre — una riga per girone, separate da virgola</label>
+      <textarea class="form-input" id="cteams" rows="4" placeholder="Girone A: Milan, Inter, Juve, Roma&#10;Girone B: Napoli, Fiorentina, Lazio, Torino"></textarea></div>
+    <button class="btn btn-p" style="width:100%;" onclick="addCategoria()">+ Aggiungi categoria</button>
+  </div>
 
-  html += '<div class="section-label">Importa da Excel</div><div class="card"><div style="font-size:13px;color:#555;margin-bottom:12px;">Carica il file Excel compilato con il modello SPE — importa automaticamente categorie, gironi, squadre, partite con orari e fase finale.</div><label style="display:inline-flex;align-items:center;gap:8px;background:#185FA5;color:white;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;">📂 Seleziona file Excel<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)"></label><div id="import-preview"></div></div>';
+  <div class="section-label">Importa da Excel</div>
+  <div class="card">
+    <div style="font-size:13px;color:#555;margin-bottom:12px;">Carica il file Excel compilato con il modello SPE — importa automaticamente categorie, gironi, squadre, orari e fase finale.</div>
+    <label style="display:inline-flex;align-items:center;gap:8px;background:#185FA5;color:white;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
+      📂 Seleziona file Excel
+      <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)">
+    </label>
+    <span style="font-size:12px;color:#aaa;margin-left:8px;">Formati supportati: .xlsx .xls</span>
+    <div id="import-preview"></div>
+  </div>`;
 
   el.innerHTML = html;
 }
@@ -414,9 +417,7 @@ async function addCategoria() {
     await dbSetGironeSquadre(girone.id,squadra_ids);
     await dbGeneraPartite(girone.id,squadra_ids);
   }
-  renderCatBar();
-  toast('Categoria aggiunta!');
-  await renderAdminSetup();
+  renderCatBar(); toast('Categoria aggiunta!'); await renderAdminSetup();
 }
 
 async function deleteCat(id){
@@ -424,8 +425,7 @@ async function deleteCat(id){
   await dbDeleteCategoria(id);
   STATE.categorie=await dbGetCategorie(STATE.activeTorneo);
   STATE.activeCat=STATE.categorie[0]?.id||null;
-  renderCatBar();
-  await renderAdminSetup();
+  renderCatBar(); await renderAdminSetup();
 }
 
 // ===== ADMIN: LOGHI =====
@@ -437,8 +437,7 @@ async function renderAdminLoghi(){
   html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
   for(const sq of squadre){
     html+=`<div class="logo-team-row">
-      <div class="logo-upload-btn">
-        ${logoHTML(sq,'md')}
+      <div class="logo-upload-btn">${logoHTML(sq,'md')}
         <div class="logo-plus"><svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 1v6M1 4h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
         <input type="file" accept="image/*" onchange="uploadLogo(event,${sq.id})">
       </div>
@@ -450,7 +449,6 @@ async function renderAdminLoghi(){
   html+='</div>';
   el.innerHTML=html;
 }
-
 async function uploadLogo(event,squadra_id){
   const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -470,14 +468,14 @@ async function renderAdminRisultati(){
     const played=g.partite.filter(p=>p.giocata).length;
     html+=`<div class="section-label">${g.nome} <span class="badge badge-gray" style="margin-left:6px;">${played}/${g.partite.length}</span></div>`;
     for(const p of g.partite){
-      const key='p'+p.id;
-      const open=!!openScorers[key];
+      const key='p'+p.id; const open=!!openScorers[key];
       let badge='';
       if(p.giocata){
         if(p.gol_home>p.gol_away) badge=`<span class="badge badge-green">${p.home?.nome} vince</span>`;
         else if(p.gol_home<p.gol_away) badge=`<span class="badge badge-green">${p.away?.nome} vince</span>`;
         else badge=`<span class="badge badge-blue">Pareggio</span>`;
       }
+      const orInfo = p.orario ? `<span style="font-size:11px;color:#888;">${p.orario}${p.campo?' · '+p.campo:''}</span>` : '';
       html+=`<div class="admin-match"><div class="admin-match-header">
         <div class="admin-team-name">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
         <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_home:''}" placeholder="—" id="sh_${p.id}">
@@ -485,6 +483,7 @@ async function renderAdminRisultati(){
         <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_away:''}" placeholder="—" id="sa_${p.id}">
         <div class="admin-team-name right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
         <div class="match-actions">
+          ${orInfo}
           <button class="btn btn-p btn-sm" onclick="saveRisultato(${p.id},${g.id})">✓ Conferma</button>
           ${badge}
           ${p.giocata?`<button class="btn btn-accent btn-sm" onclick="toggleScorers('${key}')">${open?'Chiudi':'+ Marcatori'}</button>`:''}
@@ -505,8 +504,7 @@ async function renderAdminRisultati(){
           </div>`;
         });
         html+=`<button class="add-scorer-btn" onclick="addMarcatore(${p.id})">+ Aggiungi marcatore</button>
-          <div style="margin-top:10px;"><button class="btn btn-success btn-sm" onclick="saveMarcatori(${p.id},${g.id})">Salva marcatori</button></div>
-        </div>`;
+          <div style="margin-top:10px;"><button class="btn btn-success btn-sm" onclick="saveMarcatori(${p.id},${g.id})">Salva marcatori</button></div></div>`;
       }
       html+='</div>';
     }
@@ -526,36 +524,24 @@ async function saveRisultato(partita_id,girone_id){
 }
 
 function toggleScorers(key){openScorers[key]=!openScorers[key];renderAdminRisultati();}
-
 let tempMarcatori={};
-function addMarcatore(partita_id){
-  if(!tempMarcatori[partita_id])tempMarcatori[partita_id]=[];
-  tempMarcatori[partita_id].push({squadra_id:null,nome:'',minuto:null});
-  renderAdminRisultati();
-}
-function removeMarcatore(partita_id,idx){
-  if(!tempMarcatori[partita_id])tempMarcatori[partita_id]=[];
-  tempMarcatori[partita_id].splice(idx,1);
-  renderAdminRisultati();
-}
+function addMarcatore(partita_id){if(!tempMarcatori[partita_id])tempMarcatori[partita_id]=[];tempMarcatori[partita_id].push({});renderAdminRisultati();}
+function removeMarcatore(partita_id,idx){if(!tempMarcatori[partita_id])tempMarcatori[partita_id]=[];tempMarcatori[partita_id].splice(idx,1);renderAdminRisultati();}
 async function saveMarcatori(partita_id,girone_id){
   const gironi=await getGironiWithData(STATE.activeCat);
   let partita=null;
   for(const g of gironi) for(const p of g.partite) if(p.id===partita_id) partita=p;
   if(!partita) return;
-  const existing=partita.marcatori||[];
   const all=[];
-  for(let i=0;i<existing.length;i++){
+  for(let i=0;i<(partita.marcatori||[]).length;i++){
     const sqEl=document.getElementById(`msq_${partita_id}_${i}`);
     const nmEl=document.getElementById(`mnm_${partita_id}_${i}`);
     const mnEl=document.getElementById(`mmin_${partita_id}_${i}`);
     if(sqEl&&nmEl&&nmEl.value.trim()) all.push({squadra_id:parseInt(sqEl.value),nome:nmEl.value.trim(),minuto:mnEl?mnEl.value||null:null});
   }
   await dbSaveMarcatori(partita_id,all.filter(m=>m.nome));
-  delete tempMarcatori[partita_id];
-  openScorers['p'+partita_id]=false;
-  toast('Marcatori salvati');
-  await renderAdminRisultati();
+  delete tempMarcatori[partita_id]; openScorers['p'+partita_id]=false;
+  toast('Marcatori salvati'); await renderAdminRisultati();
 }
 
 // ===== ADMIN: KNOCKOUT =====
@@ -567,10 +553,8 @@ async function renderAdminKnockout(){
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
-
   const classifiche={};
   for(const g of gironi) classifiche[g.id]=calcGironeClassifica(g);
-
   const qualificate=[],consolazione=[];
   for(const g of gironi){
     const cl=classifiche[g.id];
@@ -579,50 +563,33 @@ async function renderAdminKnockout(){
       else consolazione.push({...row,girone:g.nome,pos:idx+1});
     });
   }
-
   let html=`<div class="section-label">Qualificate</div><div class="card" style="margin-bottom:14px;">`;
   qualificate.forEach(q=>{
     html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">
-      ${logoHTML(q.sq,'sm')}
-      <span class="badge ${q.pos===1?'badge-green':'badge-blue'}">${q.pos}°</span>
-      <span style="flex:1;">${q.sq.nome}</span>
-      <span style="color:#aaa;font-size:12px;">${q.girone} · ${q.pts} pt</span>
-    </div>`;
+      ${logoHTML(q.sq,'sm')}<span class="badge ${q.pos===1?'badge-green':'badge-blue'}">${q.pos}°</span>
+      <span style="flex:1;">${q.sq.nome}</span><span style="color:#aaa;font-size:12px;">${q.girone} · ${q.pts} pt</span></div>`;
   });
   html+=`</div>`;
-
   if(consolazione.length){
     html+=`<div class="section-label">Non qualificate</div><div class="card" style="margin-bottom:14px;">`;
     consolazione.forEach(q=>{
       html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px;">
-        ${logoHTML(q.sq,'sm')}
-        <span class="badge badge-gray">${q.pos}°</span>
-        <span style="flex:1;">${q.sq.nome}</span>
-        <span style="color:#aaa;font-size:12px;">${q.girone} · ${q.pts} pt</span>
-      </div>`;
+        ${logoHTML(q.sq,'sm')}<span class="badge badge-gray">${q.pos}°</span>
+        <span style="flex:1;">${q.sq.nome}</span><span style="color:#aaa;font-size:12px;">${q.girone} · ${q.pts} pt</span></div>`;
     });
     html+=`</div>`;
   }
-
   const allSq=[...qualificate,...consolazione];
   const sqOptions=allSq.map(q=>`<option value="${q.sq.id}">${q.sq.nome} (${q.girone} ${q.pos}°)</option>`).join('');
-
   html+=`<div class="section-label">Aggiungi partita al tabellone</div>
   <div class="card" style="margin-bottom:14px;">
     <div class="form-grid-2" style="margin-bottom:10px;">
-      <div><div class="form-label">Round</div>
-        <select class="form-input" id="new-round-name">
-          <option>Quarti di finale</option><option>Semifinali</option>
-          <option>3° posto</option><option>Finale</option>
-          <option>5° posto</option><option>7° posto</option>
-          <option>Consolazione semifinali</option><option>Consolazione finale</option>
-          <option>Consolazione 3° posto</option>
-        </select></div>
-      <div><div class="form-label">Tipo</div>
-        <select class="form-input" id="new-round-type">
-          <option value="0">Tabellone principale</option>
-          <option value="1">Consolazione</option>
-        </select></div>
+      <div><div class="form-label">Round</div><select class="form-input" id="new-round-name">
+        <option>Quarti di finale</option><option>Semifinali</option><option>3° posto</option><option>Finale</option>
+        <option>5° posto</option><option>7° posto</option><option>Consolazione semifinali</option>
+        <option>Consolazione finale</option><option>Consolazione 3° posto</option></select></div>
+      <div><div class="form-label">Tipo</div><select class="form-input" id="new-round-type">
+        <option value="0">Tabellone principale</option><option value="1">Consolazione</option></select></div>
     </div>
     <div class="form-grid-2" style="margin-bottom:10px;">
       <div><div class="form-label">Squadra 1</div><select class="form-input" id="new-home">${sqOptions}</select></div>
@@ -630,45 +597,41 @@ async function renderAdminKnockout(){
     </div>
     <button class="btn btn-p" onclick="addKOMatch()">+ Aggiungi partita</button>
   </div>`;
-
   const renderKOSection=(matches,label)=>{
     if(!matches.length) return '';
     const rounds={};
     matches.forEach(m=>{if(!rounds[m.round_name])rounds[m.round_name]=[];rounds[m.round_name].push(m);});
     const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
-    const sorted=Object.keys(rounds).sort((a,b)=>(order.indexOf(a)||99)-(order.indexOf(b)||99));
+    const sorted=Object.keys(rounds).sort((a,b)=>(order.indexOf(a)===-1?99:order.indexOf(a))-(order.indexOf(b)===-1?99:order.indexOf(b)));
     let h=`<div class="section-label">${label} <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="resetKOSection(${matches[0].is_consolazione?1:0})">Cancella tutto</button></div>`;
     for(const rname of sorted){
       h+=`<div style="font-size:12px;font-weight:600;color:#555;margin:10px 0 6px;text-transform:uppercase;letter-spacing:.04em;">${rname}</div>`;
       for(const m of rounds[rname]){
         const hm=m.home_id?sqMap[m.home_id]:null, am=m.away_id?sqMap[m.away_id]:null;
+        const hmNome=hm?hm.nome:(m.note_home||'TBD'), amNome=am?am.nome:(m.note_away||'TBD');
         let badge='';
         if(m.giocata){
-          if(m.gol_home>m.gol_away) badge=`<span class="badge badge-green">${hm?.nome} vince</span>`;
-          else if(m.gol_home<m.gol_away) badge=`<span class="badge badge-green">${am?.nome} vince</span>`;
+          if(m.gol_home>m.gol_away) badge=`<span class="badge badge-green">${hmNome} vince</span>`;
+          else if(m.gol_home<m.gol_away) badge=`<span class="badge badge-green">${amNome} vince</span>`;
           else badge=`<span class="badge badge-blue">Pareggio</span>`;
         }
         h+=`<div class="admin-match"><div class="admin-match-header">
-          <div class="admin-team-name">${logoHTML(hm,'sm')}<span>${hm?hm.nome:'TBD'}</span></div>
+          <div class="admin-team-name">${logoHTML(hm,'sm')}<span>${hmNome}</span></div>
           <input class="score-input" type="number" min="0" value="${m.giocata?m.gol_home:''}" placeholder="—" id="ksh_${m.id}">
           <span class="score-dash">—</span>
           <input class="score-input" type="number" min="0" value="${m.giocata?m.gol_away:''}" placeholder="—" id="ksa_${m.id}">
-          <div class="admin-team-name right"><span>${am?am.nome:'TBD'}</span>${logoHTML(am,'sm')}</div>
+          <div class="admin-team-name right"><span>${amNome}</span>${logoHTML(am,'sm')}</div>
           <div class="match-actions">
             <button class="btn btn-p btn-sm" onclick="saveKO(${m.id})">✓ Conferma</button>
             ${badge}
             <button class="btn btn-danger btn-sm" onclick="deleteKOMatch(${m.id})">✕</button>
-          </div>
-        </div></div>`;
+          </div></div></div>`;
       }
     }
     return h;
   };
-
-  const main_ko=ko.filter(m=>!m.is_consolazione);
-  const cons_ko=ko.filter(m=>m.is_consolazione);
-  html+=renderKOSection(main_ko,'Tabellone principale');
-  html+=renderKOSection(cons_ko,'Consolazione');
+  html+=renderKOSection(ko.filter(m=>!m.is_consolazione),'Tabellone principale');
+  html+=renderKOSection(ko.filter(m=>m.is_consolazione),'Consolazione');
   el.innerHTML=html;
 }
 
@@ -679,41 +642,32 @@ async function addKOMatch(){
   const away_id=parseInt(document.getElementById('new-away').value);
   if(home_id===away_id){toast('Seleziona due squadre diverse');return;}
   const ko=await dbGetKnockout(STATE.activeCat);
-  const existing=ko.filter(m=>m.round_name===round_name);
   const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
-  await dbSaveKnockoutMatch({categoria_id:STATE.activeCat,round_name,round_order:order.indexOf(round_name),match_order:existing.length,home_id,away_id,gol_home:0,gol_away:0,giocata:false,is_consolazione});
-  toast('Partita aggiunta!');
-  await renderAdminKnockout();
+  await dbSaveKnockoutMatch({categoria_id:STATE.activeCat,round_name,round_order:order.indexOf(round_name),match_order:ko.filter(m=>m.round_name===round_name).length,home_id,away_id,gol_home:0,gol_away:0,giocata:false,is_consolazione});
+  toast('Partita aggiunta!'); await renderAdminKnockout();
 }
-
 async function saveKO(match_id){
   const sh=document.getElementById('ksh_'+match_id).value;
   const sa=document.getElementById('ksa_'+match_id).value;
   if(sh===''||sa===''){toast('Inserisci i gol');return;}
   const ko=await dbGetKnockout(STATE.activeCat);
-  const m=ko.find(x=>x.id===match_id);
-  if(!m) return;
+  const m=ko.find(x=>x.id===match_id); if(!m) return;
   await dbSaveKnockoutMatch({...m,gol_home:parseInt(sh),gol_away:parseInt(sa),giocata:true});
-  toast('✓ Risultato salvato');
-  await renderAdminKnockout();
+  toast('✓ Risultato salvato'); await renderAdminKnockout();
 }
-
 async function deleteKOMatch(match_id){
   if(!confirm('Eliminare questa partita?')) return;
   await db.from('knockout').delete().eq('id',match_id);
-  toast('Eliminata');
-  await renderAdminKnockout();
+  toast('Eliminata'); await renderAdminKnockout();
 }
-
 async function resetKOSection(is_consolazione){
   if(!confirm('Eliminare tutte le partite di questa sezione?')) return;
   const ko=await dbGetKnockout(STATE.activeCat);
   for(const m of ko.filter(x=>x.is_consolazione===!!is_consolazione)) await db.from('knockout').delete().eq('id',m.id);
-  toast('Sezione eliminata');
-  await renderAdminKnockout();
+  toast('Sezione eliminata'); await renderAdminKnockout();
 }
 
-// ===== ADMIN AUTH =====
+// ===== AUTH =====
 function toggleAdmin(){
   if(STATE.isAdmin){exitAdmin();return;}
   document.getElementById('admin-modal').style.display='flex';
@@ -723,8 +677,7 @@ function checkPw(){
   const pw=document.getElementById('admin-pw').value;
   if(pw===CONFIG.ADMIN_PASSWORD){
     document.getElementById('admin-modal').style.display='none';
-    document.getElementById('admin-pw').value='';
-    document.getElementById('pw-error').textContent='';
+    document.getElementById('admin-pw').value=''; document.getElementById('pw-error').textContent='';
     enterAdmin();
   } else document.getElementById('pw-error').textContent='Password errata';
 }
@@ -757,9 +710,15 @@ function exitAdmin(){
 function toast(msg){
   let t=document.getElementById('toast');
   if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t);}
-  t.textContent=msg;t.style.display='block';
-  clearTimeout(t._timer);
-  t._timer=setTimeout(()=>t.style.display='none',2500);
+  t.textContent=msg; t.style.display='block';
+  clearTimeout(t._timer); t._timer=setTimeout(()=>t.style.display='none',2500);
+}
+
+function loadScript(src){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script'); s.src=src;
+    s.onload=resolve; s.onerror=reject; document.head.appendChild(s);
+  });
 }
 
 window.addEventListener('DOMContentLoaded',init);

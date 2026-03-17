@@ -11,7 +11,7 @@
 <div id="app">
   <div id="loading-screen">
     <div class="loading-logo">
-      <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="Soccer Pro Experience">
+      <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="SPE">
       <div class="loading-text">Caricamento in corso...</div>
     </div>
   </div>
@@ -49,7 +49,6 @@
         <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">Classifiche</button>
         <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
-        <button class="nav-btn" onclick="esportaExcel()" style="margin-left:auto;color:#185FA5;">↓ Excel</button>
       </div>
       <div class="nav-inner" id="admin-nav" style="display:none;">
         <button class="nav-btn active" data-section="a-tornei" onclick="showSection('a-tornei',this)">Tornei</button>
@@ -57,7 +56,6 @@
         <button class="nav-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">Loghi</button>
         <button class="nav-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">Fase finale</button>
-        <button class="nav-btn" onclick="esportaExcel()" style="color:#27ae60;font-weight:500;">↓ Excel</button>
         <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
       </div>
     </nav>
@@ -80,8 +78,8 @@
 <script src="config.js"></script>
 <script src="db.js"></script>
 <script src="logo.js"></script>
-<script src="app.js"></script>
 <script src="export.js"></script>
 <script src="import.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
