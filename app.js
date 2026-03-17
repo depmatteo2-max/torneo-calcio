@@ -385,6 +385,9 @@ async function renderAdminSetup() {
   }
 
   html += '<div class="section-label">Aggiungi categoria</div><div class="card"><div class="form-grid-2"><div class="form-group"><label class="form-label">Nome (es. Under 12)</label><input class="form-input" id="cname" placeholder="Under 10"></div><div class="form-group"><label class="form-label">Si qualificano (prime N)</label><select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div></div><div class="form-group"><label class="form-label">Squadre — una riga per girone, separate da virgola</label><textarea class="form-input" id="cteams" rows="5" placeholder="Girone A: Milan, Inter, Juve, Roma&#10;Girone B: Napoli, Fiorentina, Lazio, Torino"></textarea></div><button class="btn btn-p" style="width:100%;" onclick="addCategoria()">+ Aggiungi categoria</button></div>';
+
+  html += '<div class="section-label">Importa da Excel</div><div class="card"><div style="font-size:13px;color:#555;margin-bottom:12px;">Carica il file Excel compilato con il modello SPE — importa automaticamente categorie, gironi, squadre, partite con orari e fase finale.</div><label style="display:inline-flex;align-items:center;gap:8px;background:#185FA5;color:white;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;">📂 Seleziona file Excel<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)"></label><div id="import-preview"></div></div>';
+
   el.innerHTML = html;
 }
 
