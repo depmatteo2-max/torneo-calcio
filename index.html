@@ -34,8 +34,12 @@
 
     <div id="admin-modal" class="modal-overlay" style="display:none;">
       <div class="modal-box">
-        <div class="modal-title">Accesso admin</div>
-        <input type="password" id="admin-pw" placeholder="Password" class="modal-input" onkeydown="if(event.key==='Enter')checkPw()">
+        <div class="modal-title">🔐 Accesso</div>
+        <input type="text" id="admin-user" placeholder="Username" class="modal-input" 
+          autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('admin-pw').focus()"
+          style="margin-bottom:8px;">
+        <input type="password" id="admin-pw" placeholder="Password" class="modal-input" 
+          autocomplete="current-password" onkeydown="if(event.key==='Enter')checkPw()">
         <div id="pw-error" style="color:#A32D2D;font-size:12px;margin-top:6px;min-height:16px;"></div>
         <div class="modal-actions">
           <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">Annulla</button>
