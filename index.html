@@ -43,7 +43,11 @@
         <input type="password" id="admin-pw" placeholder="Password" class="modal-input" 
           autocomplete="current-password" onkeydown="if(event.key==='Enter')checkPw()">
         <div id="pw-error" style="color:#A32D2D;font-size:12px;margin-top:6px;min-height:16px;"></div>
-        <div class="modal-actions">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;margin-top:8px;cursor:pointer;">
+          <input type="checkbox" id="admin-remember" style="width:16px;height:16px;cursor:pointer;">
+          Ricorda accesso su questo dispositivo
+        </label>
+        <div class="modal-actions" style="margin-top:12px;">
           <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">Annulla</button>
           <button class="btn btn-p" onclick="checkPw()">Entra</button>
         </div>

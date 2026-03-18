@@ -939,19 +939,50 @@ function toggleAdmin(){
   // Controlla sessione salvata
   try { if(localStorage.getItem('spe_admin_ok')==='1'){enterAdmin();return;} } catch(e){}
   document.getElementById('admin-modal').style.display='flex';
-  setTimeout(()=>document.getElementById('admin-pw').focus(),100);
+  // Ripristina credenziali salvate se presenti
+  try {
+    const saved = JSON.parse(localStorage.getItem('spe_admin_creds') || 'null');
+    if(saved) {
+      const userEl = document.getElementById('admin-user');
+      const pwEl = document.getElementById('admin-pw');
+      const remEl = document.getElementById('admin-remember');
+      if(userEl) userEl.value = saved.u || '';
+      if(pwEl) pwEl.value = saved.p || '';
+      if(remEl) remEl.checked = true;
+    }
+  } catch(e){}
+  setTimeout(()=>{
+    const userEl = document.getElementById('admin-user');
+    if(userEl && !userEl.value) userEl.focus();
+    else document.getElementById('admin-pw')?.focus();
+  },100);
 }
 
 function checkPw(){
-  const pw=document.getElementById('admin-pw').value;
-  const ok = pw===CONFIG.ADMIN_PASSWORD || (CONFIG.USERS||[]).some(u=>u.password===pw);
+  const pw = document.getElementById('admin-pw').value;
+  const user = document.getElementById('admin-user')?.value?.trim() || '';
+  const remember = document.getElementById('admin-remember')?.checked || false;
+  // Accetta sia solo password (vecchio stile) che username+password
+  const ok = pw===CONFIG.ADMIN_PASSWORD ||
+             (CONFIG.USERS||[]).some(u=>u.password===pw) ||
+             (user && (CONFIG.USERS||[]).some(u=>u.username.toLowerCase()===user.toLowerCase()&&u.password===pw));
   if(ok){
     document.getElementById('admin-modal').style.display='none';
     document.getElementById('admin-pw').value='';
     document.getElementById('pw-error').textContent='';
-    try{localStorage.setItem('spe_admin_ok','1');}catch(e){}
+    try{
+      if(remember) {
+        // Salva credenziali cifrate (base64 semplice)
+        localStorage.setItem('spe_admin_creds', JSON.stringify({u:user,p:btoa(pw)}));
+        localStorage.setItem('spe_admin_ok','1');
+      } else {
+        // Salva solo sessione temporanea (senza credenziali)
+        localStorage.removeItem('spe_admin_creds');
+        localStorage.setItem('spe_admin_ok','1');
+      }
+    }catch(e){}
     enterAdmin();
-  } else document.getElementById('pw-error').textContent='Password errata';
+  } else document.getElementById('pw-error').textContent='Username o password errati';
 }
 function enterAdmin(){
   STATE.isAdmin=true;
@@ -968,7 +999,10 @@ function enterAdmin(){
 }
 function exitAdmin(){
   STATE.isAdmin=false;
-  try{localStorage.removeItem('spe_admin_ok');}catch(e){}
+  try{
+    localStorage.removeItem('spe_admin_ok');
+    // NON rimuovere spe_admin_creds se l'utente ha scelto "Ricorda accesso"
+  }catch(e){}
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('admin-btn').textContent='Admin';
