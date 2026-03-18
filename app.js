@@ -1335,9 +1335,15 @@ async function salvaRegolamento() {
 }
 
 // Funzione per leggere il regolamento nella classifica pubblica
+const _regCache = {};
 async function getRegolamento(categoria_id) {
+  if (_regCache[categoria_id] !== undefined) return _regCache[categoria_id];
   try {
-    const { data } = await db.from('regolamento').select('*').eq('categoria_id', categoria_id).single();
-    return data;
-  } catch(e) { return null; }
+    const { data, error } = await db.from('regolamento').select('*').eq('categoria_id', categoria_id).maybeSingle();
+    _regCache[categoria_id] = data || null;
+    return _regCache[categoria_id];
+  } catch(e) { 
+    _regCache[categoria_id] = null;
+    return null; 
+  }
 }
