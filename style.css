@@ -123,16 +123,20 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
 .badge-red { background: #fce8e8; color: #7a1a1a; }
 
 /* ===== STANDINGS TABLE ===== */
-.standings-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.standings-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
 .standings-table th {
-  text-align: left; padding: 5px 8px; color: #b0bbc8; font-weight: 800;
+  text-align: center; padding: 5px 6px; color: #b0bbc8; font-weight: 800;
   font-size: 9px; border-bottom: 1.5px solid #f0f3f7;
   text-transform: uppercase; letter-spacing: .06em;
 }
-.standings-table td { padding: 10px 8px; border-bottom: 1px solid #f5f7fa; vertical-align: middle; }
+.standings-table th:first-child,
+.standings-table th:nth-child(2) { text-align: left; }
+.standings-table td { padding: 9px 6px; border-bottom: 1px solid #f5f7fa; vertical-align: middle; text-align: center; }
+.standings-table td:first-child,
+.standings-table td:nth-child(2) { text-align: left; }
 .standings-table tr:last-child td { border-bottom: none; }
 .standings-table tr.qualifies td { background: #f7fff9; }
-.standings-table .pts-col { font-weight: 800; color: #27ae60; font-size: 14px; }
+.standings-table .pts-col { font-weight: 800; color: #27ae60; font-size: 15px; text-align: center; }
 .standings-table .diff-pos { color: #1b5e20; font-weight: 700; font-size: 11px; }
 .standings-table .diff-neg { color: #c0392b; font-weight: 700; font-size: 11px; }
 
@@ -144,7 +148,7 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
 }
 
 /* ===== TEAM AVATAR ===== */
-.team-cell { display: flex; align-items: center; gap: 8px; }
+.team-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .team-logo { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; border: 1px solid #eee; flex-shrink: 0; }
 .team-avatar {
   width: 34px; height: 34px; border-radius: 8px;
@@ -178,7 +182,7 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
   text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #eef0f3;
 }
 .match-card-time .done { color: #27ae60; }
-.match-card-body { padding: 10px 12px; }
+.match-card-body { padding: 11px 14px; }
 
 .match-score {
   font-size: 16px; font-weight: 800; color: #27ae60;
@@ -355,6 +359,28 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
 /* ===== SPAREGGIO INFO ===== */
 .spareggio-info { font-size: 11px; color: #b0bbc8; padding: 8px 4px 4px; border-top: 1px solid #f0f3f7; margin-top: 6px; font-weight: 500; }
 
+/* ===== WHATSAPP BUTTON ===== */
+.whatsapp-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #25D366; color: white; padding: 12px 28px;
+  border-radius: 99px; text-decoration: none; font-size: 14px;
+  font-weight: 700; letter-spacing: .02em; transition: transform .15s, background .15s;
+  border: none; cursor: pointer; font-family: inherit;
+}
+.whatsapp-btn:hover { background: #1fba57; transform: translateY(-1px); }
+.whatsapp-btn:active { transform: scale(.98); }
+
+/* ===== GIRONE LABEL ===== */
+.girone-section-label {
+  font-size: 10px; font-weight: 800; color: #8a9ab0;
+  text-transform: uppercase; letter-spacing: .08em;
+  margin: 16px 0 8px; padding-left: 2px;
+  display: flex; align-items: center; gap: 6px;
+}
+.girone-section-label::after {
+  content: ''; flex: 1; height: 1px; background: #e8ecf0;
+}
+
 /* ===== MOBILE ===== */
 @media (max-width: 600px) {
   .header-inner { padding: 10px 12px; }
@@ -364,3 +390,12 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
   .standings-table { font-size: 11px; }
   .match-score { min-width: 52px; font-size: 15px; }
 }
+
+/* Larghezze colonne classifica */
+.standings-table col.col-pos { width: 28px; }
+.standings-table col.col-team { width: auto; }
+.standings-table col.col-num { width: 32px; }
+.standings-table col.col-pts { width: 36px; }
+
+/* Nome squadra non troncare */
+.team-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
