@@ -9,7 +9,7 @@ body {
 }
 
 /* ===== LOADING ===== */
-#loading-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0d2347; }
+#loading-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0d2347; will-change: auto; }
 .loading-logo { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .loading-text { font-size: 14px; color: rgba(255,255,255,.5); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 
@@ -36,7 +36,7 @@ header { background: #0d2347; color: white; padding: 0; position: sticky; top: 0
   content: ''; width: 5px; height: 5px; border-radius: 50%;
   background: #27ae60; animation: livePulse 1.4s infinite; flex-shrink: 0;
 }
-@keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.7)} }
+@keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
 .admin-toggle {
   background: rgba(39,174,96,.2); border: 1px solid rgba(39,174,96,.35);
@@ -56,7 +56,7 @@ header { background: #0d2347; color: white; padding: 0; position: sticky; top: 0
   padding: 4px 14px; border-radius: 99px; font-size: 11px; cursor: pointer;
   border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07);
   color: rgba(255,255,255,.6); font-family: inherit; font-weight: 700;
-  white-space: nowrap; transition: all .15s; letter-spacing: .02em;
+  white-space: nowrap; transition: background .1s; letter-spacing: .02em;
 }
 .torneo-pill.active { background: #27ae60; color: white; border-color: #27ae60; }
 .torneo-pill:hover { background: rgba(255,255,255,.14); color: white; }
@@ -81,7 +81,7 @@ nav { background: white; border-bottom: 1px solid #e8ecf0; position: sticky; top
   padding: 5px 16px; border-radius: 99px; font-size: 11px; cursor: pointer;
   border: 1.5px solid #e0e5ec; background: white; color: #6b7a90;
   font-family: inherit; font-weight: 700; white-space: nowrap;
-  transition: all .15s; letter-spacing: .03em; text-transform: uppercase;
+  transition: background .1s; letter-spacing: .03em; text-transform: uppercase;
 }
 .cat-pill.active { background: #27ae60; color: white; border-color: #27ae60; }
 .cat-pill:hover { border-color: #0d2347; color: #0d2347; }
@@ -266,7 +266,7 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
 .btn {
   padding: 7px 15px; border-radius: 8px; border: 1px solid #e0e5ec;
   background: white; cursor: pointer; font-size: 12px; font-family: inherit;
-  color: #4a5568; font-weight: 700; transition: all .15s; letter-spacing: .02em;
+  color: #4a5568; font-weight: 700; transition: background .1s; letter-spacing: .02em;
 }
 .btn:hover { background: #f5f7fa; border-color: #c0cad6; }
 .btn-p { background: #0d2347; color: white; border-color: #0d2347; }
@@ -303,12 +303,12 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(13,35,71,0.6);
   display: flex; align-items: center; justify-content: center;
-  z-index: 999; padding: 16px; backdrop-filter: blur(4px);
+  z-index: 999; padding: 16px; 
 }
 .modal-box {
   background: white; border-radius: 18px; padding: 26px;
   width: 100%; max-width: 340px;
-  box-shadow: 0 24px 80px rgba(13,35,71,.2);
+  
 }
 .modal-title { font-size: 16px; font-weight: 800; margin-bottom: 16px; color: #0d2347; letter-spacing: -.3px; }
 .modal-input {
@@ -353,8 +353,8 @@ main { max-width: 960px; margin: 0 auto; padding: 14px; }
   cursor: pointer; width: 100%; font-family: inherit;
   transition: background .15s, transform .12s;
 }
-.welcome-torneo-btn:hover { background: rgba(255,255,255,.16); transform: translateY(-2px); }
-.welcome-torneo-btn:active { transform: scale(0.98); }
+.welcome-torneo-btn:hover { background: rgba(255,255,255,.16); }
+.welcome-torneo-btn:active { opacity: .9; }
 
 /* ===== SPAREGGIO INFO ===== */
 .spareggio-info { font-size: 11px; color: #b0bbc8; padding: 8px 4px 4px; border-top: 1px solid #f0f3f7; margin-top: 6px; font-weight: 500; }
