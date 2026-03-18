@@ -106,12 +106,38 @@ async function loadTorneo() {
 
 function renderTorneoBar() {
   const bar = document.getElementById('torneo-bar');
+  // In modalità pubblica mostra solo il nome del torneo + pulsante "Cambia torneo"
+  if (!STATE.isAdmin) {
+    const torneo = STATE.tornei.find(t => t.id === STATE.activeTorneo);
+    const attivi = STATE.tornei.filter(t => t.attivo);
+    if (attivi.length <= 1) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    bar.innerHTML = `<div class="torneo-bar-inner" style="justify-content:space-between;align-items:center;width:100%;">
+      <span style="font-size:13px;font-weight:600;color:var(--color-primary,#1A3A6B);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;">
+        🏆 ${torneo?.nome || ''}
+      </span>
+      <button class="torneo-pill" onclick="cambiaTorneo()" style="white-space:nowrap;flex-shrink:0;">
+        🔄 Cambia torneo
+      </button>
+    </div>`;
+    return;
+  }
+  // In modalità admin mostra tutti i tornei
   const attivi = STATE.tornei.filter(t => t.attivo);
   if (attivi.length <= 1) { bar.style.display = 'none'; return; }
   bar.style.display = '';
   bar.innerHTML = `<div class="torneo-bar-inner">${attivi.map(t =>
     `<button class="torneo-pill ${t.id===STATE.activeTorneo?'active':''}" onclick="selectTorneo(${t.id})">${t.nome}</button>`
   ).join('')}</div>`;
+}
+
+function cambiaTorneo() {
+  // Cancella il torneo salvato e mostra la welcome screen
+  try { localStorage.removeItem('spe_torneo_id'); } catch(e) {}
+  STATE.activeTorneo = null;
+  document.getElementById('main-app').style.display = 'none';
+  const attivi = STATE.tornei.filter(t => t.attivo);
+  mostraWelcome(attivi);
 }
 
 async function selectTorneo(id) {
