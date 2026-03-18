@@ -16,8 +16,12 @@ function initDB() {
 
 // ---- TORNEI ----
 async function dbGetTornei() {
+  const ckey = 'tornei_all';
+  if (cacheGet(ckey)) return cacheGet(ckey);
   const { data } = await db.from('tornei').select('*').order('created_at', { ascending: false });
-  return data || [];
+  const result = data || [];
+  cacheSet(ckey, result, 60000); // Cache 60 secondi
+  return result;
 }
 async function dbSaveTorneo(obj) {
   const { data } = await db.from('tornei').insert(obj).select().single();
@@ -28,8 +32,12 @@ async function dbDeleteTorneo(id) { await db.from('tornei').delete().eq('id', id
 
 // ---- CATEGORIE ----
 async function dbGetCategorie(torneo_id) {
+  const ckey = 'cat_' + torneo_id;
+  if (cacheGet(ckey)) return cacheGet(ckey);
   const { data } = await db.from('categorie').select('*').eq('torneo_id', torneo_id).order('ordine');
-  return data || [];
+  const result = data || [];
+  cacheSet(ckey, result, 30000);
+  return result;
 }
 async function dbSaveCategoria(cat) {
   const { data } = await db.from('categorie').upsert(cat).select().single();
@@ -53,7 +61,7 @@ async function dbGetSquadre(torneo_id) {
   if (cacheGet(ckey)) return cacheGet(ckey);
   const { data } = await db.from('squadre').select('*').eq('torneo_id', torneo_id).order('nome');
   const result = data || [];
-  cacheSet(ckey, result, 10000);
+  cacheSet(ckey, result, 30000);
   return result;
 }
 async function dbSaveSquadra(s) {
@@ -113,16 +121,22 @@ async function dbSaveMarcatori(partita_id, marcatori) {
 
 // ---- KNOCKOUT ----
 async function dbGetKnockout(categoria_id) {
+  const ckey = 'ko_' + categoria_id;
+  if (cacheGet(ckey)) return cacheGet(ckey);
   const { data } = await db.from('knockout').select('*').eq('categoria_id', categoria_id)
     .order('round_order').order('match_order');
-  return data || [];
+  const result = data || [];
+  cacheSet(ckey, result, 30000);
+  return result;
 }
 async function dbSaveKnockoutMatch(m) {
+  cacheClear('ko_');
   const { data, error } = await db.from('knockout').upsert(m).select().single();
   if (error) { console.error('dbSaveKnockoutMatch:', error); throw error; }
   return data;
 }
 async function dbDeleteKnockout(categoria_id) {
+  cacheClear('ko_');
   await db.from('knockout').delete().eq('categoria_id', categoria_id);
 }
 
@@ -133,27 +147,31 @@ async function dbUpdateLogo(squadra_id, logo_base64) {
 }
 
 // ---- POLLING (aggiorna ogni 30 secondi invece di WebSocket) ----
-// Questo permette migliaia di utenti senza crash
 let _pollingInterval = null;
+let _keepAliveInterval = null;
 
 function subscribeRealtime(callback) {
-  // Ferma polling precedente se esiste
   if (_pollingInterval) clearInterval(_pollingInterval);
   
-  // Aggiorna ogni 30 secondi
+  // Aggiorna classifiche ogni 30 secondi
   _pollingInterval = setInterval(() => {
     cacheClear('sq_');
     callback();
   }, 30000);
   
-  console.log('Polling attivo: aggiornamento ogni 30 secondi');
+  // Keep-alive: pinga Supabase ogni 4 minuti per tenerlo sveglio
+  if (!_keepAliveInterval) {
+    _keepAliveInterval = setInterval(async () => {
+      try {
+        await db.from('tornei').select('id').limit(1);
+      } catch(e) {}
+    }, 4 * 60 * 1000);
+  }
 }
 
 function stopPolling() {
-  if (_pollingInterval) {
-    clearInterval(_pollingInterval);
-    _pollingInterval = null;
-  }
+  if (_pollingInterval) { clearInterval(_pollingInterval); _pollingInterval = null; }
+  if (_keepAliveInterval) { clearInterval(_keepAliveInterval); _keepAliveInterval = null; }
 }
 
 // ---- OTTIMIZZAZIONE CHIAVE: carica tutto un girone in 3 query invece di N*3 ----

@@ -10,6 +10,14 @@ let STATE = {
 
 async function init() {
   initDB();
+  // Precarica i dati principali in parallelo subito
+  try {
+    await Promise.all([
+      dbGetTornei(),
+      // Piccolo ping per svegliare Supabase
+      db.from('tornei').select('id').limit(1)
+    ]);
+  } catch(e) {}
   try {
     STATE.tornei = await dbGetTornei();
     const attivi = STATE.tornei.filter(t => t.attivo);
