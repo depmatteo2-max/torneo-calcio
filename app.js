@@ -998,19 +998,18 @@ window.addEventListener('DOMContentLoaded', () => {
   // Carica logo SPE nella welcome screen
   try {
     const logoImg = document.getElementById('welcome-logo');
-    if (logoImg && typeof SPE_LOGO_BASE64 !== 'undefined') {
-      logoImg.src = SPE_LOGO_BASE64;
-      window._SPE_LOGO = SPE_LOGO_BASE64;
+    if (logoImg && typeof SPE_LOGO !== 'undefined') {
+      logoImg.src = SPE_LOGO;
     }
     // Anche loading screen
     const loadImg = document.getElementById('loading-img');
-    if (loadImg && typeof SPE_LOGO_BASE64 !== 'undefined') {
-      loadImg.src = SPE_LOGO_BASE64;
+    if (loadImg && typeof SPE_LOGO !== 'undefined') {
+      loadImg.src = SPE_LOGO;
     }
     // Header
     const headerLogo = document.getElementById('header-logo');
-    if (headerLogo && typeof SPE_LOGO_BASE64 !== 'undefined') {
-      headerLogo.src = SPE_LOGO_BASE64;
+    if (headerLogo && typeof SPE_LOGO !== 'undefined') {
+      headerLogo.src = SPE_LOGO;
     }
   } catch(e) {}
   init();
