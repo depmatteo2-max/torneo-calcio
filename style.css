@@ -176,12 +176,3 @@ header { background: #1a1a1a; }
 .torneo-bar-inner { display: flex; gap: 8px; padding: 8px 16px; max-width: 900px; margin: 0 auto; }
 .torneo-pill { padding: 5px 14px; border-radius: 99px; font-size: 13px; cursor: pointer; border: 1px solid #c5ddf5; background: white; color: #185FA5; font-family: inherit; font-weight: 500; white-space: nowrap; }
 .torneo-pill.active { background: #185FA5; color: white; border-color: #185FA5; }
-
-/* === ADMIN PAGE TITLE === */
-.admin-page-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #185FA5;
-  padding: 16px 0 8px;
-  margin-bottom: 4px;
-}

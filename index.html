@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Soccer Pro Experience</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -52,32 +51,35 @@
         <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
       </div>
       <div class="nav-inner" id="admin-nav" style="display:none;">
-        <button class="nav-btn admin-tab active" data-section="a-torneo" onclick="showAdminSection('a-torneo')">🏟 Torneo</button>
-        <button class="nav-btn admin-tab" data-section="a-categorie" onclick="showAdminSection('a-categorie')">📁 Categorie</button>
-        <button class="nav-btn admin-tab" data-section="a-loghi" onclick="showAdminSection('a-loghi')">🖼 Loghi</button>
-        <button class="nav-btn admin-tab" data-section="a-risultati" onclick="showAdminSection('a-risultati')">⚽ Risultati</button>
-        <button class="nav-btn admin-tab" data-section="a-knockout" onclick="showAdminSection('a-knockout')">🏆 Finale</button>
+        <button class="nav-btn active" data-section="a-tornei" onclick="showSection('a-tornei',this)">Tornei</button>
+        <button class="nav-btn" data-section="a-setup" onclick="showSection('a-setup',this)">Categorie</button>
+        <button class="nav-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">Loghi</button>
+        <button class="nav-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
+        <button class="nav-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">Fase finale</button>
         <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
       </div>
     </nav>
 
+    <div id="torneo-bar" class="torneo-bar"></div>
     <div class="cat-bar" id="cat-bar"></div>
 
     <main id="main-content">
       <div id="sec-classifiche" class="sec active"></div>
       <div id="sec-risultati" class="sec"></div>
       <div id="sec-tabellone" class="sec"></div>
-      <div id="sec-a-torneo" class="sec"></div>
-      <div id="sec-a-categorie" class="sec"></div>
+      <div id="sec-a-tornei" class="sec"></div>
+      <div id="sec-a-setup" class="sec"></div>
       <div id="sec-a-loghi" class="sec"></div>
       <div id="sec-a-risultati" class="sec"></div>
       <div id="sec-a-knockout" class="sec"></div>
     </main>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script src="db.js"></script>
 <script src="logo.js"></script>
+<script src="export.js"></script>
 <script src="import.js"></script>
 <script src="app.js"></script>
 </body>
