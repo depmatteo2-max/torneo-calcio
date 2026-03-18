@@ -338,7 +338,7 @@ async function renderAdminCategorie() {
 
 function scaricaModello() {
   // Genera link al modello
-  alert('Scarica il modello dalla sezione Download del sito, oppure chiedi all\'admin il file modello_SPE_semplice.xlsx');
+  window.open('https://depmatteo2-max.github.io/torneo-calcio/modello_SPE_semplice.xlsx', '_blank');
 }
 
 async function addCategoria() {
