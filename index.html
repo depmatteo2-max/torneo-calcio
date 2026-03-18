@@ -9,12 +9,14 @@
 </head>
 <body>
 <div id="app">
+
   <div id="loading-screen">
     <div class="loading-logo">
       <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="Soccer Pro Experience">
       <div class="loading-text">Caricamento in corso...</div>
     </div>
   </div>
+
   <div id="main-app" style="display:none;">
     <header>
       <div class="header-inner">
@@ -49,27 +51,22 @@
         <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">Classifiche</button>
         <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
-        <button class="nav-btn" onclick="esportaExcel()" style="margin-left:auto;color:#185FA5;">↓ Excel</button>
       </div>
       <div class="nav-inner" id="admin-nav" style="display:none;">
-        <button class="nav-btn active" data-section="a-tornei" onclick="showSection('a-tornei',this)">Tornei</button>
-        <button class="nav-btn" data-section="a-setup" onclick="showSection('a-setup',this)">Categorie</button>
+        <button class="nav-btn active" data-section="a-setup" onclick="showSection('a-setup',this)">Setup</button>
         <button class="nav-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">Loghi</button>
         <button class="nav-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
         <button class="nav-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">Fase finale</button>
-        <button class="nav-btn" onclick="esportaExcel()" style="color:#27ae60;font-weight:500;">↓ Excel</button>
         <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
       </div>
     </nav>
 
-    <div id="torneo-bar" class="torneo-bar"></div>
     <div class="cat-bar" id="cat-bar"></div>
 
     <main id="main-content">
       <div id="sec-classifiche" class="sec active"></div>
       <div id="sec-risultati" class="sec"></div>
       <div id="sec-tabellone" class="sec"></div>
-      <div id="sec-a-tornei" class="sec"></div>
       <div id="sec-a-setup" class="sec"></div>
       <div id="sec-a-loghi" class="sec"></div>
       <div id="sec-a-risultati" class="sec"></div>
@@ -77,13 +74,9 @@
     </main>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script src="db.js"></script>
 <script src="logo.js"></script>
-<script src="import.js"></script>
 <script src="app.js"></script>
-<script src="export.js"></script>
-<script src="import.js"></script>
 </body>
 </html>
