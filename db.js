@@ -1,17 +1,3 @@
-// ===== CLOUDFLARE WORKER CACHE LAYER =====
-// Tutte le chiamate GET a Supabase passano per Cloudflare Worker
-const CF_WORKER = "https://spe-cache.depmatteo46.workers.dev";
-const _origFetch = window.fetch.bind(window);
-window.fetch = function(url, opts) {
-  if (typeof url === 'string' &&
-      url.includes('rapusxysanvicnnkssph.supabase.co') &&
-      (!opts || !opts.method || opts.method === 'GET')) {
-    // Sostituisce l'URL Supabase con il Worker
-    const newUrl = url.replace('https://rapusxysanvicnnkssph.supabase.co', CF_WORKER);
-    return _origFetch(newUrl, opts);
-  }
-  return _origFetch(url, opts);
-};
 // ============================================================
 //  DATABASE LAYER - Multi-torneo OTTIMIZZATO
 // ============================================================
