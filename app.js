@@ -4,6 +4,7 @@ let STATE = {
   activeCat: null,
   isAdmin: false,
   currentSection: 'classifiche',
+  adminSection: 'a-torneo',
 };
 
 async function init() {
@@ -25,34 +26,46 @@ function updateHeader() {
   if (!STATE.torneo) return;
   document.getElementById('header-title').textContent = STATE.torneo.nome || 'Soccer Pro Experience';
   document.getElementById('header-date').textContent = STATE.torneo.data || '';
-  const logo = document.getElementById('header-logo');
-  const loadingImg = document.getElementById('loading-img');
   if (STATE.torneo.logo) {
-    logo.src = STATE.torneo.logo;
-    loadingImg.src = STATE.torneo.logo;
+    document.getElementById('header-logo').src = STATE.torneo.logo;
+    document.getElementById('loading-img').src = STATE.torneo.logo;
   }
 }
 
+// ===== NAVIGATION =====
 function showSection(name, btn) {
   STATE.currentSection = name;
   document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.getElementById('cat-bar').style.display = name === 'a-setup' ? 'none' : '';
+  document.getElementById('cat-bar').style.display = ['a-torneo','a-categorie'].includes(name) ? 'none' : '';
+  renderCurrentSection();
+}
+
+function showAdminSection(name) {
+  STATE.adminSection = name;
+  STATE.currentSection = name;
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + name).classList.add('active');
+  document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+  const tab = document.querySelector(`.admin-tab[data-section="${name}"]`);
+  if (tab) tab.classList.add('active');
+  document.getElementById('cat-bar').style.display = ['a-torneo','a-categorie'].includes(name) ? 'none' : '';
   renderCurrentSection();
 }
 
 async function renderCurrentSection() {
   updateHeader();
   const s = STATE.currentSection;
-  if (s === 'classifiche') await renderClassifiche();
-  else if (s === 'risultati') await renderRisultati();
-  else if (s === 'tabellone') await renderTabellone();
-  else if (s === 'a-setup') await renderAdminSetup();
-  else if (s === 'a-loghi') await renderAdminLoghi();
+  if (s === 'classifiche')  await renderClassifiche();
+  else if (s === 'risultati')   await renderRisultati();
+  else if (s === 'tabellone')   await renderTabellone();
+  else if (s === 'a-torneo')    await renderAdminTorneo();
+  else if (s === 'a-categorie') await renderAdminCategorie();
+  else if (s === 'a-loghi')     await renderAdminLoghi();
   else if (s === 'a-risultati') await renderAdminRisultati();
-  else if (s === 'a-knockout') await renderAdminKnockout();
+  else if (s === 'a-knockout')  await renderAdminKnockout();
 }
 
 function renderCatBar() {
@@ -104,7 +117,7 @@ function calcGironeClassifica(girone) {
   return Object.values(map).sort((a,b)=>b.pts-a.pts||(b.gf-b.gs)-(a.gf-a.gs)||b.gf-a.gf);
 }
 
-// ===== CLASSIFICHE =====
+// ===== PUBLIC: CLASSIFICHE =====
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria configurata.</div>'; return; }
@@ -132,7 +145,7 @@ async function renderClassifiche() {
   el.innerHTML=html;
 }
 
-// ===== RISULTATI =====
+// ===== PUBLIC: RISULTATI =====
 async function renderRisultati() {
   const el=document.getElementById('sec-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
@@ -176,7 +189,7 @@ async function renderRisultati() {
   el.innerHTML=html||'<div class="empty-state">Nessun risultato.</div>';
 }
 
-// ===== TABELLONE =====
+// ===== PUBLIC: TABELLONE =====
 async function renderTabellone() {
   const el=document.getElementById('sec-tabellone');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
@@ -186,11 +199,8 @@ async function renderTabellone() {
   if (!ko.length) { el.innerHTML='<div class="empty-state">Tabellone non ancora generato.</div>'; return; }
   const rounds={};
   ko.forEach(m=>{if(!rounds[m.round_name])rounds[m.round_name]=[];rounds[m.round_name].push(m);});
-  const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','PLATINO','GOLD','SILVER','BRONZO','WHITE'];
-  const sorted=Object.keys(rounds).sort((a,b)=>{
-    const ia=order.indexOf(a),ib=order.indexOf(b);
-    return (ia===-1?99:ia)-(ib===-1?99:ib);
-  });
+  const order=['Quarti di finale','Semifinali','Finale 3° posto','3° posto','Finale','5° posto','7° posto'];
+  const sorted=Object.keys(rounds).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return(ia===-1?99:ia)-(ib===-1?99:ib);});
   let html='<div class="ko-grid">';
   for (const rname of sorted) {
     html+=`<div class="ko-col"><div class="ko-col-title">${rname}</div>`;
@@ -209,66 +219,126 @@ async function renderTabellone() {
   el.innerHTML=html;
 }
 
-// ===== ADMIN SETUP =====
-async function renderAdminSetup() {
-  const el=document.getElementById('sec-a-setup');
+// ===== ADMIN: TORNEO =====
+async function renderAdminTorneo() {
+  const el=document.getElementById('sec-a-torneo');
   const t=STATE.torneo||{};
-  let html=`<div class="section-label">Info torneo</div>
-  <div class="card">
-    <div class="form-grid-2">
-      <div class="form-group"><label class="form-label">Nome torneo</label>
-        <input class="form-input" id="t-nome" value="${t.nome||''}" placeholder="Torneo 2026"></div>
-      <div class="form-group"><label class="form-label">Data</label>
-        <input class="form-input" id="t-data" value="${t.data||''}" placeholder="4-6 Aprile 2026"></div>
+  el.innerHTML=`
+    <div class="admin-page-title">⚙️ Impostazioni Torneo</div>
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Nome torneo *</label>
+        <input class="form-input" id="t-nome" value="${t.nome||''}" placeholder="es. Trofeo Città di Massa 2026">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data</label>
+        <input class="form-input" id="t-data" value="${t.data||''}" placeholder="es. 4-6 Aprile 2026">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Luogo</label>
+        <input class="form-input" id="t-luogo" value="${t.luogo||''}" placeholder="es. Massa (MS)">
+      </div>
+      <button class="btn btn-p" style="width:100%;padding:13px;font-size:15px;margin-top:8px;" onclick="saveTorneo()">
+        💾 Salva torneo
+      </button>
     </div>
-    <button class="btn btn-p" onclick="saveTorneo()">Salva</button>
-  </div>
-  <div class="section-label">Categorie</div>`;
-
-  for (const cat of STATE.categorie) {
-    const gironi=await dbGetGironi(cat.id);
-    html+=`<div class="card"><div class="card-title">${cat.nome}
-      <button class="btn btn-danger btn-sm" onclick="deleteCat(${cat.id})">Elimina</button></div>`;
-    for(const g of gironi){
-      const members=await dbGetGironeSquadre(g.id);
-      html+=`<div style="font-size:13px;color:#555;margin-bottom:4px;"><strong>${g.nome}:</strong> ${members.map(m=>m.squadre.nome).join(', ')||'—'}</div>`;
-    }
-    html+=`</div>`;
-  }
-
-  html+=`<div class="section-label">📂 Importa da Excel</div>
-  <div class="card">
-    <div style="font-size:13px;color:#555;margin-bottom:14px;">Carica il file Excel nel formato SPE v3 — importa automaticamente categorie, gironi, squadre e partite.</div>
-    <label style="display:inline-flex;align-items:center;gap:8px;background:#185FA5;color:white;padding:11px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
-      📂 Seleziona file Excel
-      <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)">
-    </label>
-    <div id="import-preview"></div>
-  </div>
-
-  <div class="section-label">Aggiungi categoria manualmente</div>
-  <div class="card">
-    <div class="form-grid-2">
-      <div class="form-group"><label class="form-label">Nome categoria</label>
-        <input class="form-input" id="new-cat-nome" placeholder="Under 10"></div>
-      <div class="form-group"><label class="form-label">Si qualificano (prime N)</label>
-        <select class="form-input" id="new-cat-qual"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
-    </div>
-    <div class="form-group"><label class="form-label">Squadre — una riga per girone, separate da virgola</label>
-      <textarea class="form-input" id="new-cat-teams" rows="4" placeholder="Girone A: Milan, Inter, Juve&#10;Girone B: Napoli, Roma, Lazio"></textarea></div>
-    <button class="btn btn-p" onclick="addCategoria()">+ Aggiungi categoria</button>
-  </div>`;
-
-  el.innerHTML=html;
+    ${STATE.categorie.length ? `
+    <div class="card" style="margin-top:12px;background:#e8f8ee;border:1px solid #a8dfc0;">
+      <div style="font-size:13px;color:#1a7a4a;font-weight:600;margin-bottom:6px;">✅ Torneo configurato</div>
+      <div style="font-size:13px;color:#555;">${STATE.categorie.length} categorie caricate</div>
+      <button class="btn btn-p btn-sm" style="margin-top:8px;" onclick="showAdminSection('a-categorie')">Gestisci categorie →</button>
+    </div>` : `
+    <div class="card" style="margin-top:12px;background:#fff8e1;border:1px solid #ffe082;">
+      <div style="font-size:13px;color:#e67e22;font-weight:600;margin-bottom:6px;">⚠️ Nessuna categoria caricata</div>
+      <div style="font-size:13px;color:#555;margin-bottom:10px;">Dopo aver salvato il torneo, vai su Categorie per importare il file Excel.</div>
+      <button class="btn btn-p btn-sm" onclick="showAdminSection('a-categorie')">Vai a Categorie →</button>
+    </div>`}`;
 }
 
 async function saveTorneo() {
   const nome=document.getElementById('t-nome').value.trim();
   const data=document.getElementById('t-data').value.trim();
-  await dbSaveTorneo({nome,data});
-  STATE.torneo={...STATE.torneo,nome,data};
+  const luogo=document.getElementById('t-luogo')?.value.trim()||'';
+  if(!nome){alert('Inserisci il nome del torneo');return;}
+  await dbSaveTorneo({nome,data,luogo});
+  STATE.torneo={...STATE.torneo,nome,data,luogo};
   updateHeader();
-  toast('Salvato!');
+  toast('✅ Torneo salvato!');
+  await renderAdminTorneo();
+}
+
+// ===== ADMIN: CATEGORIE =====
+async function renderAdminCategorie() {
+  const el=document.getElementById('sec-a-categorie');
+
+  let html=`<div class="admin-page-title">📁 Categorie</div>`;
+
+  // Categorie già caricate
+  if (STATE.categorie.length) {
+    html+=`<div class="section-label">Categorie caricate</div>`;
+    for (const cat of STATE.categorie) {
+      const gironi=await dbGetGironi(cat.id);
+      let totSquadre=0, totPartite=0;
+      for(const g of gironi){
+        const m=await dbGetGironeSquadre(g.id);
+        const p=await dbGetPartite(g.id);
+        totSquadre+=m.length;
+        totPartite+=p.length;
+      }
+      html+=`<div class="card" style="margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:#185FA5;">${cat.nome}</div>
+            <div style="font-size:12px;color:#888;margin-top:2px;">${gironi.length} gironi · ${totSquadre} squadre · ${totPartite} partite</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteCat(${cat.id})">🗑 Elimina</button>
+        </div>
+      </div>`;
+    }
+    html+=`<div style="margin-bottom:20px;"></div>`;
+  }
+
+  // Box importa Excel
+  html+=`
+    <div class="section-label">📂 Importa da file Excel</div>
+    <div class="card" style="border:2px dashed #185FA5;background:#f0f6ff;">
+      <div style="text-align:center;padding:10px 0 16px;">
+        <div style="font-size:32px;margin-bottom:8px;">📊</div>
+        <div style="font-weight:700;font-size:15px;color:#185FA5;margin-bottom:6px;">Carica il file Excel del torneo</div>
+        <div style="font-size:13px;color:#666;margin-bottom:16px;">Il file deve avere i fogli <strong>SQUADRE</strong> e <strong>PARTITE</strong></div>
+        <label style="display:inline-flex;align-items:center;gap:10px;background:#185FA5;color:white;padding:12px 24px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(24,95,165,0.3);">
+          📂 Seleziona file Excel (.xlsx)
+          <input type="file" accept=".xlsx,.xls" style="display:none;" id="excel-input" onchange="importaExcel(event)">
+        </label>
+        <div style="margin-top:12px;font-size:12px;color:#888;">
+          Non hai il modello? 
+          <a href="#" onclick="scaricaModello()" style="color:#185FA5;font-weight:600;">📥 Scarica il modello</a>
+        </div>
+      </div>
+      <div id="import-preview"></div>
+    </div>
+
+    <div class="section-label" style="margin-top:20px;">✏️ Aggiungi categoria manualmente</div>
+    <div class="card">
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Nome categoria</label>
+          <input class="form-input" id="new-cat-nome" placeholder="es. Under 10"></div>
+        <div class="form-group"><label class="form-label">Si qualificano (prime N)</label>
+          <select class="form-input" id="new-cat-qual">
+            <option>1</option><option selected>2</option><option>3</option><option>4</option>
+          </select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Squadre per girone (una riga per girone, squadre separate da virgola)</label>
+        <textarea class="form-input" id="new-cat-teams" rows="3" placeholder="Girone A: Milan, Inter, Juve&#10;Girone B: Napoli, Roma, Lazio"></textarea></div>
+      <button class="btn btn-p" onclick="addCategoria()">+ Aggiungi</button>
+    </div>`;
+
+  el.innerHTML=html;
+}
+
+function scaricaModello() {
+  // Genera link al modello
+  alert('Scarica il modello dalla sezione Download del sito, oppure chiedi all\'admin il file modello_SPE_semplice.xlsx');
 }
 
 async function addCategoria() {
@@ -296,24 +366,24 @@ async function addCategoria() {
   }
   renderCatBar();
   toast('Categoria aggiunta!');
-  await renderAdminSetup();
+  await renderAdminCategorie();
 }
 
 async function deleteCat(id){
-  if(!confirm('Eliminare?')) return;
+  if(!confirm('Eliminare questa categoria e tutti i suoi dati?')) return;
   await dbDeleteCategoria(id);
   STATE.categorie=await dbGetCategorie();
   STATE.activeCat=STATE.categorie[0]?.id||null;
   renderCatBar();
-  await renderAdminSetup();
+  await renderAdminCategorie();
 }
 
-// ===== ADMIN LOGHI =====
+// ===== ADMIN: LOGHI =====
 async function renderAdminLoghi(){
   const el=document.getElementById('sec-a-loghi');
   const squadre=await dbGetSquadre();
-  if(!squadre.length){el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>';return;}
-  let html='<div class="section-label">Loghi squadre</div><div class="card">';
+  if(!squadre.length){el.innerHTML='<div class="admin-page-title">🖼 Loghi</div><div class="empty-state">Aggiungi prima le squadre.</div>';return;}
+  let html='<div class="admin-page-title">🖼 Loghi squadre</div><div class="card">';
   for(const sq of squadre){
     html+=`<div class="logo-team-row">
       <div class="logo-upload-btn">
@@ -322,7 +392,7 @@ async function renderAdminLoghi(){
         <input type="file" accept="image/*" onchange="uploadLogo(event,${sq.id})">
       </div>
       <div style="flex:1;"><div style="font-weight:600;">${sq.nome}</div>
-        <div style="font-size:12px;color:#aaa;">${sq.logo?'Logo caricato':'Nessun logo'}</div></div>
+        <div style="font-size:12px;color:#aaa;">${sq.logo?'✅ Logo caricato':'Nessun logo'}</div></div>
       ${sq.logo?`<button class="btn btn-danger btn-sm" onclick="removeLogo(${sq.id})">Rimuovi</button>`:''}
     </div>`;
   }
@@ -338,14 +408,14 @@ async function uploadLogo(event,squadra_id){
 }
 async function removeLogo(squadra_id){await dbUpdateLogo(squadra_id,null);toast('Logo rimosso');await renderAdminLoghi();}
 
-// ===== ADMIN RISULTATI =====
+// ===== ADMIN: RISULTATI =====
 let openScorers={}, tempMarcatori={};
 
 async function renderAdminRisultati(){
   const el=document.getElementById('sec-a-risultati');
-  if(!STATE.activeCat){el.innerHTML='<div class="empty-state">Nessuna categoria.</div>';return;}
+  if(!STATE.activeCat){el.innerHTML='<div class="admin-page-title">⚽ Risultati</div><div class="empty-state">Nessuna categoria.</div>';return;}
   const gironi=await getGironiWithData(STATE.activeCat);
-  let html='';
+  let html='<div class="admin-page-title">⚽ Inserisci Risultati</div>';
   for(const g of gironi){
     const played=g.partite.filter(p=>p.giocata).length;
     html+=`<div class="section-label">${g.nome} <span class="badge badge-gray">${played}/${g.partite.length}</span></div>`;
@@ -357,18 +427,22 @@ async function renderAdminRisultati(){
         else if(p.gol_home<p.gol_away) badge=`<span class="badge badge-green">${p.away?.nome} vince</span>`;
         else badge=`<span class="badge badge-blue">Pareggio</span>`;
       }
-      html+=`<div class="admin-match"><div class="admin-match-header">
-        <div class="admin-team-name">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
-        <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_home:''}" placeholder="—" id="sh_${p.id}">
-        <span class="score-dash">—</span>
-        <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_away:''}" placeholder="—" id="sa_${p.id}">
-        <div class="admin-team-name right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
-        <div class="match-actions">
-          <button class="btn btn-p btn-sm" onclick="saveRisultato(${p.id},${g.id})">✓ Conferma</button>
-          ${badge}
-          ${p.giocata?`<button class="btn btn-accent btn-sm" onclick="toggleScorers('${key}')">${open?'Chiudi':'+ Marcatori'}</button>`:''}
-        </div>
-      </div>`;
+      const orario = p.orario ? `<span style="font-size:11px;color:#aaa;margin-right:4px;">🕐 ${p.orario}</span>` : '';
+      const campo = p.campo ? `<span style="font-size:11px;color:#aaa;">📍 ${p.campo}</span>` : '';
+      html+=`<div class="admin-match">
+        ${orario||campo ? `<div style="padding:4px 12px 0;font-size:11px;">${orario}${campo}</div>` : ''}
+        <div class="admin-match-header">
+          <div class="admin-team-name">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
+          <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_home:''}" placeholder="—" id="sh_${p.id}">
+          <span class="score-dash">—</span>
+          <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_away:''}" placeholder="—" id="sa_${p.id}">
+          <div class="admin-team-name right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
+          <div class="match-actions">
+            <button class="btn btn-p btn-sm" onclick="saveRisultato(${p.id},${g.id})">✓</button>
+            ${badge}
+            ${p.giocata?`<button class="btn btn-accent btn-sm" onclick="toggleScorers('${key}')">${open?'✕':'⚽'}</button>`:''}
+          </div>
+        </div>`;
       if(open&&p.giocata){
         const marc=p.marcatori||[];
         html+=`<div class="scorers-section">`;
@@ -428,17 +502,18 @@ async function saveMarcatori(partita_id,girone_id){
   await renderAdminRisultati();
 }
 
-// ===== ADMIN KNOCKOUT =====
+// ===== ADMIN: KNOCKOUT =====
 async function renderAdminKnockout(){
   const el=document.getElementById('sec-a-knockout');
-  if(!STATE.activeCat){el.innerHTML='<div class="empty-state">Nessuna categoria.</div>';return;}
+  if(!STATE.activeCat){el.innerHTML='<div class="admin-page-title">🏆 Fase Finale</div><div class="empty-state">Nessuna categoria.</div>';return;}
   const cat=STATE.categorie.find(c=>c.id===STATE.activeCat);
   const gironi=await getGironiWithData(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre();
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
 
-  let html=`<div class="section-label">Qualificate</div><div class="card">`;
+  let html=`<div class="admin-page-title">🏆 Fase Finale</div>
+  <div class="section-label">Qualificate</div><div class="card">`;
   for(const g of gironi){
     const cl=calcGironeClassifica(g);
     for(let i=0;i<(cat.qualificate||2)&&i<cl.length;i++){
@@ -459,9 +534,8 @@ async function renderAdminKnockout(){
       <div><label class="form-label">Round</label>
         <select class="form-input" id="new-round">
           <option>Quarti di finale</option><option>Semifinali</option>
-          <option>3° posto</option><option>Finale</option>
+          <option>Finale 3° posto</option><option>Finale</option>
           <option>5° posto</option><option>7° posto</option>
-          <option>PLATINO</option><option>GOLD</option><option>SILVER</option><option>BRONZO</option><option>WHITE</option>
         </select></div>
       <div><label class="form-label">Tipo</label>
         <select class="form-input" id="new-round-type">
@@ -472,13 +546,13 @@ async function renderAdminKnockout(){
       <div><label class="form-label">Squadra 1</label><select class="form-input" id="new-ko-home">${sqOptions}</select></div>
       <div><label class="form-label">Squadra 2</label><select class="form-input" id="new-ko-away">${sqOptions}</select></div>
     </div>
-    <button class="btn btn-p" onclick="addKOMatch()">+ Aggiungi partita</button>
+    <button class="btn btn-p" onclick="addKOMatch()">+ Aggiungi</button>
   </div>`;
 
   if(ko.length){
     const rounds={};
     ko.forEach(m=>{if(!rounds[m.round_name])rounds[m.round_name]=[];rounds[m.round_name].push(m);});
-    const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','PLATINO','GOLD','SILVER','BRONZO','WHITE'];
+    const order=['Quarti di finale','Semifinali','Finale 3° posto','3° posto','Finale','5° posto','7° posto'];
     const sorted=Object.keys(rounds).sort((a,b)=>(order.indexOf(a)||99)-(order.indexOf(b)||99));
     html+=`<div class="section-label">Tabellone <button class="btn btn-danger btn-sm" style="margin-left:8px;" onclick="resetKO()">Cancella tutto</button></div>`;
     for(const rname of sorted){
@@ -498,7 +572,7 @@ async function renderAdminKnockout(){
           <input class="score-input" type="number" min="0" value="${m.giocata?m.gol_away:''}" placeholder="—" id="ksa_${m.id}">
           <div class="admin-team-name right"><span>${a?a.nome:(m.note_away||'TBD')}</span>${logoHTML(a,'sm')}</div>
           <div class="match-actions">
-            <button class="btn btn-p btn-sm" onclick="saveKO(${m.id})">✓ Conferma</button>
+            <button class="btn btn-p btn-sm" onclick="saveKO(${m.id})">✓</button>
             ${badge}
             <button class="btn btn-danger btn-sm" onclick="deleteKOMatch(${m.id})">✕</button>
           </div>
@@ -517,7 +591,7 @@ async function addKOMatch(){
   if(hi===ai){toast('Seleziona due squadre diverse');return;}
   const ko=await dbGetKnockout(STATE.activeCat);
   const mc=ko.filter(m=>m.round_name===rn).length;
-  const order=['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','PLATINO','GOLD','SILVER','BRONZO','WHITE'];
+  const order=['Quarti di finale','Semifinali','Finale 3° posto','3° posto','Finale','5° posto','7° posto'];
   await dbSaveKnockoutMatch({categoria_id:STATE.activeCat,round_name:rn,round_order:order.indexOf(rn),match_order:mc,home_id:hi,away_id:ai,gol_home:0,gol_away:0,giocata:false,is_consolazione:isC});
   toast('Aggiunta!');
   await renderAdminKnockout();
@@ -567,13 +641,7 @@ function enterAdmin(){
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
   document.getElementById('admin-btn').textContent='Esci';
-  STATE.currentSection='a-setup';
-  document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
-  document.querySelector('[data-section="a-setup"]').classList.add('active');
-  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-  document.getElementById('sec-a-setup').classList.add('active');
-  document.getElementById('cat-bar').style.display='none';
-  renderAdminSetup();
+  showAdminSection('a-torneo');
 }
 function exitAdmin(){
   STATE.isAdmin=false;
