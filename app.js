@@ -49,8 +49,18 @@ function mostraWelcome(torneiAttivi) {
   const screen = document.getElementById('welcome-screen');
   if (!screen) return;
 
+  // Logo: prendi dal loading-img già caricato o dalla variabile SPE_LOGO
+  let logoSrc = '';
+  try {
+    const existingLogo = document.getElementById('loading-img');
+    if (existingLogo && existingLogo.src && existingLogo.src !== window.location.href) {
+      logoSrc = existingLogo.src;
+    } else if (typeof SPE_LOGO !== 'undefined' && SPE_LOGO) {
+      logoSrc = SPE_LOGO;
+    }
+  } catch(e) {}
   let html = `<div class="welcome-inner">
-    <img id="welcome-logo" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.3);margin-bottom:18px;" alt="SPE">
+    <img id="welcome-logo" src="${logoSrc}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.3);margin-bottom:18px;" alt="SPE">
     <div style="font-size:22px;font-weight:700;color:white;margin-bottom:4px;text-align:center;">Soccer Pro Experience</div>
     <div style="font-size:14px;color:rgba(255,255,255,0.7);margin-bottom:32px;text-align:center;">Classifiche e risultati in tempo reale</div>
     <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:14px;text-align:center;text-transform:uppercase;letter-spacing:.08em;">Tornei in corso</div>
