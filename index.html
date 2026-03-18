@@ -31,7 +31,6 @@
         </div>
       </div>
     </header>
-
     <div id="admin-modal" class="modal-overlay" style="display:none;">
       <div class="modal-box">
         <div class="modal-title">Accesso admin</div>
@@ -43,7 +42,6 @@
         </div>
       </div>
     </div>
-
     <nav>
       <div class="nav-inner" id="pub-nav">
         <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">Classifiche</button>
@@ -59,10 +57,8 @@
         <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
       </div>
     </nav>
-
     <div id="torneo-bar" class="torneo-bar"></div>
     <div class="cat-bar" id="cat-bar"></div>
-
     <main id="main-content">
       <div id="sec-classifiche" class="sec active"></div>
       <div id="sec-risultati" class="sec"></div>
@@ -78,6 +74,8 @@
 <script src="config.js"></script>
 <script src="db.js"></script>
 <script src="logo.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="import.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
