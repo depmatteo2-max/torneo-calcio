@@ -13,22 +13,77 @@ async function init() {
   try {
     STATE.tornei = await dbGetTornei();
     const attivi = STATE.tornei.filter(t => t.attivo);
-    // Prova a ripristinare il torneo salvato
+
+    // Controlla se c'è un torneo salvato nel browser
     let savedId = null;
     try { savedId = parseInt(localStorage.getItem('spe_torneo_id')); } catch(e) {}
     const savedTorneo = savedId && attivi.find(t => t.id === savedId);
+
     if (savedTorneo) {
+      // Torneo già scelto — vai diretto
       STATE.activeTorneo = savedTorneo.id;
-    } else if (attivi.length) {
-      STATE.activeTorneo = attivi[0].id;
-    } else if (STATE.tornei.length) {
-      STATE.activeTorneo = STATE.tornei[0].id;
+      await loadTorneo();
+      subscribeRealtime(() => renderCurrentSection());
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('main-app').style.display = 'block';
+    } else if (attivi.length === 0) {
+      // Nessun torneo attivo
+      STATE.activeTorneo = STATE.tornei[0]?.id || null;
+      await loadTorneo();
+      subscribeRealtime(() => renderCurrentSection());
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('main-app').style.display = 'block';
+    } else {
+      // Mostra schermata di benvenuto
+      document.getElementById('loading-screen').style.display = 'none';
+      mostraWelcome(attivi);
     }
-    await loadTorneo();
-    subscribeRealtime(() => renderCurrentSection());
-  } catch(e) { console.error(e); }
-  document.getElementById('loading-screen').style.display = 'none';
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+  }
+}
+
+function mostraWelcome(torneiAttivi) {
+  const screen = document.getElementById('welcome-screen');
+  if (!screen) return;
+
+  let html = `<div class="welcome-inner">
+    <img id="welcome-logo" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.3);margin-bottom:18px;" alt="SPE">
+    <div style="font-size:22px;font-weight:700;color:white;margin-bottom:4px;text-align:center;">Soccer Pro Experience</div>
+    <div style="font-size:14px;color:rgba(255,255,255,0.7);margin-bottom:32px;text-align:center;">Classifiche e risultati in tempo reale</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:14px;text-align:center;text-transform:uppercase;letter-spacing:.08em;">Tornei in corso</div>
+    <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px;">`;
+
+  torneiAttivi.forEach(t => {
+    html += `<button class="welcome-torneo-btn" onclick="sceliTorneoWelcome(${t.id})">
+      <div style="font-size:16px;font-weight:600;">${t.nome}</div>
+      ${t.data ? `<div style="font-size:12px;opacity:.7;margin-top:2px;">${t.data}</div>` : ''}
+      <svg style="position:absolute;right:16px;top:50%;transform:translateY(-50%);" width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M7 4l5 5-5 5" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>`;
+  });
+
+  html += `</div></div>`;
+  screen.innerHTML = html;
+  screen.style.display = 'flex';
+
+  // Carica logo
+  try {
+    const logoImg = document.getElementById('welcome-logo');
+    if (logoImg && window._SPE_LOGO) logoImg.src = window._SPE_LOGO;
+  } catch(e) {}
+}
+
+async function sceliTorneoWelcome(torneoId) {
+  try { localStorage.setItem('spe_torneo_id', torneoId); } catch(e) {}
+  STATE.activeTorneo = torneoId;
+  document.getElementById('welcome-screen').style.display = 'none';
   document.getElementById('main-app').style.display = 'block';
+  await loadTorneo();
+  subscribeRealtime(() => renderCurrentSection());
 }
 
 async function loadTorneo() {
@@ -68,6 +123,7 @@ function showSection(name, btn) {
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.getElementById('cat-bar').style.display = ['a-setup','a-tornei'].includes(name) ? 'none' : '';
+  if(name==='a-regolamento') document.getElementById('cat-bar').style.display='';
   renderCurrentSection();
 }
 
@@ -82,6 +138,7 @@ async function renderCurrentSection() {
   else if (s === 'a-loghi') await renderAdminLoghi();
   else if (s === 'a-risultati') await renderAdminRisultati();
   else if (s === 'a-knockout') await renderAdminKnockout();
+  else if (s === 'a-regolamento') await renderAdminRegolamento();
 }
 
 function renderCatBar() {
@@ -183,9 +240,15 @@ async function renderClassifiche() {
         <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
         <td class="pts-col">${row.pts}</td></tr>`;
     });
+    // Leggi spareggio dal regolamento
+    let sparTxt = 'Spareggio: punti → scontro diretto → diff. reti → gol fatti → gol subiti → sorteggio/rigori';
+    try {
+      const reg = await getRegolamento(STATE.activeCat);
+      if(reg?.spareggio_fase1) sparTxt = 'Spareggio: ' + reg.spareggio_fase1;
+    } catch(e){}
     html+=`</tbody></table>
     <div style="font-size:11px;color:#aaa;margin-top:8px;padding-top:8px;border-top:1px solid #f5f5f5;">
-      Spareggio: punti → scontro diretto → diff. reti → gol fatti → gol subiti → sorteggio/rigori
+      ${sparTxt}
     </div></div>`;
 
     // Classifica finale con coppa se tutte le partite sono giocate
@@ -221,6 +284,22 @@ async function renderClassifiche() {
       </div>`;
     }
   }
+  // Pulsante condividi WhatsApp
+  const torneo = STATE.tornei.find(t => t.id === STATE.activeTorneo);
+  const url = encodeURIComponent(window.location.href);
+  const testo = encodeURIComponent(`🏆 ${torneo?.nome || 'Torneo'} — Segui classifiche e risultati in tempo reale!`);
+  html += `<div style="text-align:center;margin:16px 0 8px;">
+    <a href="https://wa.me/?text=${testo}%20${url}" target="_blank"
+       style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:white;
+              padding:10px 20px;border-radius:99px;text-decoration:none;font-size:14px;font-weight:600;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.855L0 24l6.335-1.658A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.848 0-3.57-.487-5.063-1.342l-.363-.215-3.761.985.999-3.662-.236-.374A9.94 9.94 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+      </svg>
+      Condividi su WhatsApp
+    </a>
+  </div>`;
+
   el.innerHTML = html;
 }
 
@@ -915,7 +994,27 @@ function loadScript(src){
   });
 }
 
-window.addEventListener('DOMContentLoaded',init);
+window.addEventListener('DOMContentLoaded', () => {
+  // Carica logo SPE nella welcome screen
+  try {
+    const logoImg = document.getElementById('welcome-logo');
+    if (logoImg && typeof SPE_LOGO_BASE64 !== 'undefined') {
+      logoImg.src = SPE_LOGO_BASE64;
+      window._SPE_LOGO = SPE_LOGO_BASE64;
+    }
+    // Anche loading screen
+    const loadImg = document.getElementById('loading-img');
+    if (loadImg && typeof SPE_LOGO_BASE64 !== 'undefined') {
+      loadImg.src = SPE_LOGO_BASE64;
+    }
+    // Header
+    const headerLogo = document.getElementById('header-logo');
+    if (headerLogo && typeof SPE_LOGO_BASE64 !== 'undefined') {
+      headerLogo.src = SPE_LOGO_BASE64;
+    }
+  } catch(e) {}
+  init();
+});
 
 // ===== GENERA FASE 2 AUTOMATICA =====
 async function generaFase2() {
@@ -986,4 +1085,182 @@ async function generaFase2() {
 
   toast('✅ Fase 2 generata! ' + prime.length + ' gironi per gruppo');
   await renderAdminKnockout();
+}
+
+// ============================================================
+//  ADMIN: REGOLAMENTO
+// ============================================================
+async function renderAdminRegolamento() {
+  const el = document.getElementById('sec-a-regolamento');
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Seleziona una categoria dalla barra in alto.</div>'; return; }
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const gironi = await getGironiWithData(STATE.activeCat);
+
+  // Carica regolamento esistente
+  const { data: reg } = await db.from('regolamento').select('*').eq('categoria_id', STATE.activeCat).single().catch(() => ({data:null}));
+  const r = reg || {
+    spareggio_fase1: 'Punti → Scontro diretto → Differenza reti → Gol fatti → Gol subiti → Sorteggio/Rigori',
+    spareggio_fase2: 'Punti → Scontro diretto → Differenza reti → Gol fatti → Rigori',
+    testo_libero: '',
+    accoppiamenti: []
+  };
+  const accoppiamenti = typeof r.accoppiamenti === 'string' ? JSON.parse(r.accoppiamenti) : (r.accoppiamenti || []);
+
+  // Calcola classifiche attuali
+  const classifiche = {};
+  for (const g of gironi) classifiche[g.id] = calcGironeClassifica(g);
+
+  let html = `<div style="background:#e3f0fb;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#0c447c;">
+    Categoria: <strong>${cat?.nome||'?'}</strong></div>`;
+
+  // ===== SPAREGGIO FASE 1 =====
+  html += `<div class="section-label">Criteri spareggio Fase 1 (gironi)</div>
+  <div class="card">
+    <div style="font-size:12px;color:#888;margin-bottom:8px;">Separati da →</div>
+    <textarea class="form-input" id="reg-spar1" rows="2" style="font-size:13px;">${r.spareggio_fase1}</textarea>
+  </div>`;
+
+  // ===== SPAREGGIO FASE 2 =====
+  html += `<div class="section-label">Criteri spareggio Fase 2 (triangolari/finale)</div>
+  <div class="card">
+    <div style="font-size:12px;color:#888;margin-bottom:8px;">Separati da →</div>
+    <textarea class="form-input" id="reg-spar2" rows="2" style="font-size:13px;">${r.spareggio_fase2}</textarea>
+  </div>`;
+
+  // ===== ACCOPPIAMENTI FASE 2 =====
+  html += `<div class="section-label">Accoppiamenti Fase 2</div>
+  <div class="card">
+    <div style="font-size:12px;color:#555;margin-bottom:12px;">
+      Definisci chi si qualifica e dove. Es: "1° Girone A" va nel gruppo PLATINO.<br>
+      Il sistema userà le classifiche reali per assegnare le squadre.
+    </div>`;
+
+  // Classifiche attuali per riferimento
+  html += `<div style="margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:6px;">Classifiche attuali:</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">`;
+  for (const g of gironi) {
+    const cl = classifiche[g.id];
+    html += `<div style="background:#f5f5f5;border-radius:8px;padding:8px 12px;font-size:12px;">
+      <div style="font-weight:600;color:#333;margin-bottom:4px;">${g.nome}</div>`;
+    cl.slice(0,5).forEach((row,idx) => {
+      html += `<div style="color:#555;">${idx+1}° ${row.sq.nome} <span style="color:#aaa;">${row.pts}pt</span></div>`;
+    });
+    html += `</div>`;
+  }
+  html += `</div></div>`;
+
+  // Lista accoppiamenti
+  html += `<div id="accoppiamenti-list">`;
+  accoppiamenti.forEach((acc, idx) => {
+    html += `<div class="scorer-row" style="margin-bottom:6px;">
+      <input placeholder="Nome gruppo (es. PLATINO)" value="${acc.gruppo||''}" id="acc-gruppo-${idx}" style="flex:1;min-width:100px;">
+      <input placeholder="Posizione (es. 1° Girone A)" value="${acc.posizione||''}" id="acc-pos-${idx}" style="flex:2;min-width:150px;">
+      <select id="acc-tipo-${idx}" style="min-width:120px;">
+        <option value="principale" ${acc.tipo==='principale'?'selected':''}>Principale</option>
+        <option value="consolazione" ${acc.tipo==='consolazione'?'selected':''}>Consolazione</option>
+      </select>
+      <button class="btn btn-danger btn-sm" onclick="rimuoviAccoppiamento(${idx})">✕</button>
+    </div>`;
+  });
+  html += `</div>
+  <button class="btn" style="margin-top:8px;width:100%;" onclick="aggiungiAccoppiamento()">+ Aggiungi accoppiamento</button>
+  </div>`;
+
+  // ===== TESTO LIBERO =====
+  html += `<div class="section-label">Testo libero regolamento</div>
+  <div class="card">
+    <textarea class="form-input" id="reg-testo" rows="5" placeholder="Inserisci qui il regolamento completo del torneo...">${r.testo_libero||''}</textarea>
+  </div>`;
+
+  // ===== SALVA =====
+  html += `<button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;" onclick="salvaRegolamento()">
+    💾 Salva regolamento
+  </button>`;
+
+  // ===== ANTEPRIMA PUBBLICA =====
+  html += `<div class="section-label" style="margin-top:20px;">Anteprima pubblica</div>
+  <div class="card" style="background:#f9f9f9;">
+    <div style="font-size:11px;color:#aaa;margin-bottom:6px;">Così apparirà in classifica:</div>
+    <div style="font-size:12px;color:#666;padding:8px;background:white;border-radius:6px;border:1px solid #eee;">
+      Spareggio fase 1: <em>${r.spareggio_fase1}</em>
+    </div>
+    ${r.testo_libero ? `<div style="font-size:12px;color:#555;margin-top:10px;white-space:pre-wrap;">${r.testo_libero}</div>` : ''}
+  </div>`;
+
+  el.innerHTML = html;
+
+  // Store accoppiamenti count for add/remove
+  window._accCount = accoppiamenti.length;
+}
+
+function aggiungiAccoppiamento() {
+  window._accCount = (window._accCount || 0) + 1;
+  const list = document.getElementById('accoppiamenti-list');
+  if (!list) return;
+  const idx = window._accCount - 1;
+  const div = document.createElement('div');
+  div.className = 'scorer-row';
+  div.style.marginBottom = '6px';
+  div.id = `acc-row-${idx}`;
+  div.innerHTML = `
+    <input placeholder="Nome gruppo (es. PLATINO)" id="acc-gruppo-${idx}" style="flex:1;min-width:100px;">
+    <input placeholder="Posizione (es. 1° Girone A)" id="acc-pos-${idx}" style="flex:2;min-width:150px;">
+    <select id="acc-tipo-${idx}" style="min-width:120px;">
+      <option value="principale">Principale</option>
+      <option value="consolazione">Consolazione</option>
+    </select>
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+  list.appendChild(div);
+}
+
+function rimuoviAccoppiamento(idx) {
+  const row = document.getElementById(`acc-row-${idx}`);
+  if (row) row.remove();
+  // Fallback: cerca per contenuto
+  const list = document.getElementById('accoppiamenti-list');
+  if (list) {
+    const rows = list.querySelectorAll('.scorer-row');
+    rows.forEach((r,i) => { if(i === idx) r.remove(); });
+  }
+}
+
+async function salvaRegolamento() {
+  const spareggio_fase1 = document.getElementById('reg-spar1')?.value?.trim() || '';
+  const spareggio_fase2 = document.getElementById('reg-spar2')?.value?.trim() || '';
+  const testo_libero = document.getElementById('reg-testo')?.value?.trim() || '';
+
+  // Raccoglie accoppiamenti
+  const accoppiamenti = [];
+  let i = 0;
+  while (true) {
+    const g = document.getElementById(`acc-gruppo-${i}`);
+    const p = document.getElementById(`acc-pos-${i}`);
+    const t = document.getElementById(`acc-tipo-${i}`);
+    if (!g && !p) break;
+    if (g?.value?.trim() && p?.value?.trim()) {
+      accoppiamenti.push({ gruppo: g.value.trim(), posizione: p.value.trim(), tipo: t?.value || 'principale' });
+    }
+    i++;
+    if (i > 50) break;
+  }
+
+  const payload = {
+    categoria_id: STATE.activeCat,
+    spareggio_fase1, spareggio_fase2, testo_libero,
+    accoppiamenti: JSON.stringify(accoppiamenti)
+  };
+
+  const { error } = await db.from('regolamento').upsert(payload, { onConflict: 'categoria_id' });
+  if (error) { toast('❌ Errore: ' + error.message); return; }
+  toast('✅ Regolamento salvato!');
+  await renderAdminRegolamento();
+}
+
+// Funzione per leggere il regolamento nella classifica pubblica
+async function getRegolamento(categoria_id) {
+  try {
+    const { data } = await db.from('regolamento').select('*').eq('categoria_id', categoria_id).single();
+    return data;
+  } catch(e) { return null; }
 }
