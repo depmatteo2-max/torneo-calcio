@@ -1,20 +1,10 @@
-// ============================================================
-//  CONFIGURAZIONE - Soccer Pro Experience
-// ============================================================
 const CONFIG = {
   SUPABASE_URL: 'https://hvakazxnvooffskvoyyl.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_JRJmEOL1ne439tC3vzaqyw_H9CZwlIZ',
-  // ============================================================
-  //  UTENTI ADMIN
-  //  ruolo: 'admin' = accesso completo
-  //  ruolo: 'arbitro' = solo inserimento risultati
-  // ============================================================
   USERS: [
-    // ADMIN COMPLETI (3)
     { username: 'admin1',    password: 'Spe_2026@',   ruolo: 'admin',   nome: 'Admin 1'    },
     { username: 'admin2',    password: 'Spe_2026@',   ruolo: 'admin',   nome: 'Admin 2'    },
     { username: 'admin3',    password: 'Spe_2026@',   ruolo: 'admin',   nome: 'Admin 3'    },
-    // ARBITRI / OPERATORI (10)
     { username: 'arbitro1',  password: 'Arbitro1!',   ruolo: 'arbitro', nome: 'Arbitro 1'  },
     { username: 'arbitro2',  password: 'Arbitro2!',   ruolo: 'arbitro', nome: 'Arbitro 2'  },
     { username: 'arbitro3',  password: 'Arbitro3!',   ruolo: 'arbitro', nome: 'Arbitro 3'  },
