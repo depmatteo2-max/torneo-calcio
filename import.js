@@ -3,13 +3,10 @@
 //  Legge il modello SPE e importa tutto nel database
 // ============================================================
 
-let _importInProgress = false;
-
 async function importaExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
   if (!STATE.activeTorneo) { toast('Crea prima un torneo!'); return; }
-  if (_importInProgress) { toast('Importazione già in corso, aspetta...'); return; }
 
   toast('Lettura file Excel...');
 
@@ -32,55 +29,18 @@ async function importaExcel(event) {
       return;
     }
 
-    // Funzione per trovare la riga header (quella con CATEGORIA *)
-    function findHeaderRow(sheet) {
-      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:Z100');
-      for (let r = range.s.r; r <= Math.min(range.e.r, 8); r++) {
-        let foundCat = false, foundGirone = false;
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const cell = sheet[XLSX.utils.encode_cell({r,c})];
-          if (!cell || !cell.v) continue;
-          const v = cell.v.toString();
-          if (v.includes('CATEGORIA')) foundCat = true;
-          if (v.includes('GIRONE') || v.includes('SQUADRA') || v.includes('ROUND') || v.includes('ORE') || v.includes('ORARIO')) foundGirone = true;
-        }
-        if (foundCat && foundGirone) return r;
-      }
-      // Fallback: find any row with CATEGORIA *
-      for (let r = range.s.r; r <= Math.min(range.e.r, 8); r++) {
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const cell = sheet[XLSX.utils.encode_cell({r,c})];
-          if (cell && cell.v && cell.v.toString().trim() === 'CATEGORIA *') return r;
-        }
-      }
-      return 0;
-    }
-
-    function sheetToJsonFromRow(sheet, headerRow) {
-      if (!sheet || !sheet['!ref']) return [];
-      const range = XLSX.utils.decode_range(sheet['!ref']);
-      const newRange = { s: { r: headerRow, c: range.s.c }, e: range.e };
-      const newSheet = Object.assign({}, sheet, { '!ref': XLSX.utils.encode_range(newRange) });
-      return XLSX.utils.sheet_to_json(newSheet, { defval: '' });
-    }
-
-    const catHeader  = findHeaderRow(sheetCat);
-    const girHeader  = findHeaderRow(sheetGir);
-    const p1Header   = findHeaderRow(sheetP1);
-    const ffHeader   = sheetFF ? findHeaderRow(sheetFF) : 0;
-
-    const cats  = sheetToJsonFromRow(sheetCat, catHeader);
-    const girs  = sheetToJsonFromRow(sheetGir, girHeader);
-    const parts = sheetToJsonFromRow(sheetP1,  p1Header);
-    const finals= sheetFF ? sheetToJsonFromRow(sheetFF, ffHeader) : [];
+    const cats  = XLSX.utils.sheet_to_json(sheetCat,  { defval: '' });
+    const girs  = XLSX.utils.sheet_to_json(sheetGir,  { defval: '' });
+    const parts = XLSX.utils.sheet_to_json(sheetP1,   { defval: '' });
+    const finals= sheetFF ? XLSX.utils.sheet_to_json(sheetFF, { defval: '' }) : [];
 
     // Filtra righe vuote o di esempio
-    const catRows  = cats.filter(r  => r['CATEGORIA *'] && r['CATEGORIA *'].toString().trim() && r['CATEGORIA *'] !== 'CATEGORIA *');
-    const girRows  = girs.filter(r  => r['CATEGORIA *'] && r['GIRONE *'] && r['CATEGORIA *'] !== 'CATEGORIA *');
-    const partRows = parts.filter(r => r['CATEGORIA *'] && r['SQUADRA CASA *'] && r['SQUADRA OSPITE *'] && r['CATEGORIA *'] !== 'CATEGORIA *');
-    const finalRows= finals.filter(r => r['CATEGORIA *'] && r['ROUND *'] && r['SQUADRA 1 *'] && r['SQUADRA 2 *'] && r['CATEGORIA *'] !== 'CATEGORIA *');
+    const catRows  = cats.filter(r  => r['CATEGORIA *'] && r['CATEGORIA *'].toString().trim());
+    const girRows  = girs.filter(r  => r['CATEGORIA *'] && r['GIRONE *']);
+    const partRows = parts.filter(r => r['CATEGORIA *'] && r['SQUADRA CASA *'] && r['SQUADRA OSPITE *']);
+    const finalRows= finals.filter(r => r['CATEGORIA *'] && r['ROUND *'] && r['SQUADRA 1 *'] && r['SQUADRA 2 *']);
 
-    if (!catRows.length) { toast('❌ Nessuna categoria trovata — controlla che il file sia il modello SPE'); return; }
+    if (!catRows.length) { toast('❌ Nessuna categoria trovata nel foglio CATEGORIE'); return; }
 
     // Mostra preview
     const preview = document.getElementById('import-preview');
@@ -108,13 +68,11 @@ async function importaExcel(event) {
 }
 
 async function confermaImportazione() {
-  if (_importInProgress) { toast('Importazione già in corso...'); return; }
   const { catRows, girRows, partRows, finalRows } = window._importData || {};
   if (!catRows) { toast('Nessun dato da importare'); return; }
 
-  _importInProgress = true;
   const preview = document.getElementById('import-preview');
-  if (preview) preview.innerHTML = '<div style="padding:12px;color:#185FA5;font-size:13px;">⏳ Importazione in corso... non chiudere la pagina!</div>';
+  if (preview) preview.innerHTML = '<div style="padding:12px;color:#185FA5;font-size:13px;">⏳ Importazione in corso...</div>';
 
   try {
     const formatoMap = { 'final':'final', 'semi':'semi', 'quarter':'quarter', 'quarti':'quarter', 'semifinali':'semi', 'solo finale':'final' };
@@ -136,33 +94,19 @@ async function confermaImportazione() {
       // Gironi di questa categoria
       const myGironi = girRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
       
-      // Carica squadre UNA VOLTA SOLA per tutto il torneo (ottimizzazione)
-      let cacheSquadre = await dbGetSquadre(STATE.activeTorneo);
-
       for (const girRow of myGironi) {
         const girNome = girRow['GIRONE *'].toString().trim();
         const girone = await dbSaveGirone({ categoria_id: cat.id, nome: girNome });
 
-        // Legge tutte le colonne SQUADRA dinamicamente (senza limite)
-        const squadreNomi = [];
-        for (const key of Object.keys(girRow)) {
-          if (key.toString().toUpperCase().startsWith('SQUADRA')) {
-            const v = girRow[key]?.toString().trim();
-            if (v && v.length > 0 && !v.toUpperCase().startsWith('SQUADRA')) squadreNomi.push(v);
-          }
-        }
+        // Squadre del girone
+        const squadreNomi = ['SQUADRA 1 *','SQUADRA 2 *','SQUADRA 3 *','SQUADRA 4 *','SQUADRA 5','SQUADRA 6']
+          .map(k => girRow[k]?.toString().trim()).filter(s => s && s.length > 0);
 
         const squadra_ids = [];
         for (const nome of squadreNomi) {
-          // Cerca nella cache locale (nessuna chiamata DB extra!)
-          let sq = cacheSquadre.find(s => s.nome.toLowerCase() === nome.toLowerCase());
-          if (!sq) {
-            // Crea squadra nuova e aggiorna la cache
-            const { data } = await db.from('squadre').insert({ nome, torneo_id: STATE.activeTorneo }).select().single();
-            sq = data;
-            if (sq) cacheSquadre.push(sq);
-          }
-          if (sq) squadra_ids.push(sq.id);
+          let sq = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === nome.toLowerCase());
+          if (!sq) sq = await dbSaveSquadra({ nome, torneo_id: STATE.activeTorneo });
+          squadra_ids.push(sq.id);
         }
         await dbSetGironeSquadre(girone.id, squadra_ids);
 
@@ -178,9 +122,8 @@ async function confermaImportazione() {
           for (const p of myParts) {
             const sq1Nome = p['SQUADRA CASA *'].toString().trim();
             const sq2Nome = p['SQUADRA OSPITE *'].toString().trim();
-            // Usa la cache locale invece di chiamare DB ogni volta!
-            const sq1 = cacheSquadre.find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase());
-            const sq2 = cacheSquadre.find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase());
+            const sq1 = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase());
+            const sq2 = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase());
             if (sq1 && sq2) {
               await db.from('partite').insert({
                 girone_id: girone.id,
@@ -204,8 +147,6 @@ async function confermaImportazione() {
       const myFinals = finalRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
       if (myFinals.length > 0) {
         await dbDeleteKnockout(cat.id);
-        // Aggiorna cache squadre prima della fase finale
-        cacheSquadre = await dbGetSquadre(STATE.activeTorneo);
         const roundOrder = ['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto',
                            'Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
         const matchCount = {};
@@ -214,9 +155,8 @@ async function confermaImportazione() {
           if (!matchCount[round_name]) matchCount[round_name] = 0;
           const sq1Nome = f['SQUADRA 1 *'].toString().trim();
           const sq2Nome = f['SQUADRA 2 *'].toString().trim();
-          // Usa cache locale!
-          const sq1 = sq1Nome !== 'TBD' ? cacheSquadre.find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase()) : null;
-          const sq2 = sq2Nome !== 'TBD' ? cacheSquadre.find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase()) : null;
+          const sq1 = sq1Nome !== 'TBD' ? (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq1Nome.toLowerCase()) : null;
+          const sq2 = sq2Nome !== 'TBD' ? (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === sq2Nome.toLowerCase()) : null;
           const is_consolazione = (f['TIPO']?.toString().toLowerCase() || '').includes('consol');
           await dbSaveKnockoutMatch({
             categoria_id: cat.id,
@@ -240,13 +180,11 @@ async function confermaImportazione() {
     STATE.activeCat = STATE.categorie[0]?.id || null;
     renderCatBar();
     delete window._importData;
-    _importInProgress = false;
     toast('✅ Importazione completata!');
     await renderAdminSetup();
 
   } catch(e) {
     console.error(e);
-    _importInProgress = false;
     toast('❌ Errore importazione: ' + e.message);
   }
 }

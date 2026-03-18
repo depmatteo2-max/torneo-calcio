@@ -347,35 +347,47 @@ async function renderAdminSetup() {
   const el = document.getElementById('sec-a-setup');
   if (!STATE.activeTorneo) { el.innerHTML='<div class="empty-state">Crea prima un torneo.</div>'; return; }
   const t = STATE.tornei.find(x=>x.id===STATE.activeTorneo);
-  let html = `<div style="background:#e3f0fb;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#0c447c;">
-    Torneo attivo: <strong>${t?.nome||'?'}</strong></div>
-  <div class="section-label">Categorie</div>`;
+  const tutteSquadre = await dbGetSquadre(STATE.activeTorneo);
+
+  let html = `<div style="background:#e3f0fb;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-size:13px;color:#0c447c;">Torneo attivo: <strong>${t?.nome||'?'}</strong></div>
+    <button class="btn" style="background:#27ae60;color:white;border-color:#27ae60;font-weight:500;" onclick="esportaExcel()">↓ Scarica Excel</button>
+  </div>`;
+
+  if (tutteSquadre.length) {
+    html += '<div class="section-label">Squadre caricate (' + tutteSquadre.length + ' totali)</div><div class="card" style="margin-bottom:14px;"><div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    tutteSquadre.forEach(sq => {
+      html += '<span style="display:inline-flex;align-items:center;gap:5px;background:#f0f6ff;border:1px solid #c5ddf5;border-radius:99px;padding:3px 10px;font-size:12px;color:#185FA5;">' + logoHTML(sq,'sm') + ' ' + sq.nome + '</span>';
+    });
+    html += '</div></div>';
+  }
+
+  html += '<div class="section-label">Categorie configurate</div>';
+  if (!STATE.categorie.length) html += '<div style="color:#aaa;font-size:13px;padding:8px 0 16px;">Nessuna categoria. Aggiungine una qui sotto.</div>';
+
   for (const cat of STATE.categorie) {
     const gironi = await dbGetGironi(cat.id);
-    html+=`<div class="card"><div class="card-title">${cat.nome}
-      <div style="display:flex;gap:6px;">
-        <span class="badge badge-blue">Top ${cat.qualificate||2} si qualificano</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteCat(${cat.id})">Elimina</button>
-      </div></div>`;
-    for(const g of gironi){
-      const members=await dbGetGironeSquadre(g.id);
-      html+=`<div style="font-size:13px;color:#555;margin-bottom:4px;"><strong>${g.nome}:</strong> ${members.map(m=>m.squadre.nome).join(', ')||'—'}</div>`;
+    let totP = 0, totG = 0;
+    for (const g of gironi) {
+      const pp = await dbGetPartite(g.id);
+      totP += pp.length; totG += pp.filter(p=>p.giocata).length;
     }
-    html+=`</div>`;
+    html += '<div class="card" style="margin-bottom:10px;"><div class="card-title" style="margin-bottom:10px;"><div style="font-size:15px;font-weight:600;">' + cat.nome + '</div><div style="display:flex;gap:6px;align-items:center;"><span class="badge badge-blue">Top ' + (cat.qualificate||2) + ' si qualificano</span><span class="badge badge-gray">' + totG + '/' + totP + ' partite</span><button class="btn btn-danger btn-sm" onclick="deleteCat(' + cat.id + ')">Elimina</button></div></div>';
+    for (const g of gironi) {
+      const members = await dbGetGironeSquadre(g.id);
+      html += '<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">' + g.nome + '</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      members.forEach(m => {
+        html += '<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">' + logoHTML(m.squadre,'sm') + ' ' + m.squadre.nome + '</span>';
+      });
+      html += '</div></div>';
+    }
+    html += '</div>';
   }
-  html+=`<div class="section-label">Aggiungi categoria</div>
-  <div class="card">
-    <div class="form-grid-2">
-      <div class="form-group"><label class="form-label">Nome (es. Under 12)</label>
-        <input class="form-input" id="cname" placeholder="Under 10"></div>
-      <div class="form-group"><label class="form-label">Si qualificano (prime N)</label>
-        <select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
-    </div>
-    <div class="form-group"><label class="form-label">Squadre — una riga per girone, separate da virgola</label>
-      <textarea class="form-input" id="cteams" rows="4" placeholder="Girone A: Milan, Inter, Juve, Roma
-Girone B: Napoli, Fiorentina, Lazio, Torino"></textarea></div>
-    <button class="btn btn-p" onclick="addCategoria()">Aggiungi categoria</button>
-  </div>`;
+
+  html += '<div class="section-label">Aggiungi categoria manualmente</div><div class="card"><div class="form-grid-2"><div class="form-group"><label class="form-label">Nome (es. Under 12)</label><input class="form-input" id="cname" placeholder="Under 10"></div><div class="form-group"><label class="form-label">Si qualificano (prime N)</label><select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div></div><div class="form-group"><label class="form-label">Squadre — una riga per girone, separate da virgola</label><textarea class="form-input" id="cteams" rows="5" placeholder="Girone A: Milan, Inter, Juve, Roma&#10;Girone B: Napoli, Fiorentina, Lazio, Torino"></textarea></div><button class="btn btn-p" style="width:100%;" onclick="addCategoria()">+ Aggiungi categoria</button></div>';
+
+  html += '<div class="section-label">Importa da Excel</div><div class="card"><div style="font-size:13px;color:#555;margin-bottom:12px;">Carica il file Excel compilato con il modello SPE — importa automaticamente categorie, gironi, squadre, partite con orari e fase finale.</div><label style="display:inline-flex;align-items:center;gap:8px;background:#185FA5;color:white;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;">📂 Seleziona file Excel<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)"></label><div id="import-preview"></div></div>';
+
   el.innerHTML = html;
 }
 
