@@ -20,6 +20,8 @@ async function init() {
   } catch(e) { console.error(e); }
   document.getElementById('loading-screen').style.display = 'none';
   document.getElementById('main-app').style.display = 'block';
+  // Auto-login se accesso salvato
+  tryAutoLogin();
 }
 
 async function loadTorneo() {
@@ -1016,46 +1018,149 @@ async function risolviManuale() {
 }
 
 // ============================================================
-//  AUTH
+//  AUTH — multi-utente con salva accesso
 // ============================================================
+
+/** Apre il modal login, pre-compila se c'è accesso salvato */
 function toggleAdmin() {
   if (STATE.isAdmin) { exitAdmin(); return; }
-  document.getElementById('admin-modal').style.display='flex';
-  setTimeout(()=>document.getElementById('admin-pw').focus(),100);
+
+  const modal = document.getElementById('admin-modal');
+  modal.style.display = 'flex';
+
+  // Pre-compila da localStorage se salvato
+  const saved = _loadSavedLogin();
+  if (saved) {
+    document.getElementById('admin-username').value = saved.username;
+    document.getElementById('admin-pw').value       = saved.password;
+    document.getElementById('admin-remember').checked = true;
+  }
+  setTimeout(() => {
+    const u = document.getElementById('admin-username');
+    if (u.value) document.getElementById('admin-pw').focus();
+    else u.focus();
+  }, 100);
 }
+
 function checkPw() {
-  const pw = document.getElementById('admin-pw').value;
-  if (pw===CONFIG.ADMIN_PASSWORD) {
-    document.getElementById('admin-modal').style.display='none';
-    document.getElementById('admin-pw').value='';
-    document.getElementById('pw-error').textContent='';
-    enterAdmin();
-  } else document.getElementById('pw-error').textContent='Password errata';
+  const username = document.getElementById('admin-username').value.trim().toLowerCase();
+  const password = document.getElementById('admin-pw').value;
+  const remember = document.getElementById('admin-remember').checked;
+  const errEl    = document.getElementById('pw-error');
+
+  // Trova utente
+  const user = (CONFIG.USERS||[]).find(
+    u => u.username.toLowerCase() === username && u.password === password
+  );
+
+  if (!user) {
+    errEl.textContent = 'Username o password errati';
+    document.getElementById('admin-pw').select();
+    return;
+  }
+
+  // Salva o cancella accesso
+  if (remember) {
+    _saveLogin(username, password);
+  } else {
+    _clearLogin();
+  }
+
+  // Chiudi modal
+  document.getElementById('admin-modal').style.display = 'none';
+  document.getElementById('admin-pw').value       = '';
+  document.getElementById('admin-username').value = '';
+  errEl.textContent = '';
+
+  enterAdmin(user);
 }
-function enterAdmin() {
-  STATE.isAdmin=true;
-  document.getElementById('pub-nav').style.display='none';
-  document.getElementById('admin-nav').style.display='flex';
-  document.getElementById('admin-btn').textContent='Esci';
-  STATE.currentSection='a-tornei';
-  document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
-  document.querySelector('[data-section="a-tornei"]').classList.add('active');
-  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-  document.getElementById('sec-a-tornei').classList.add('active');
-  document.getElementById('cat-bar').style.display='none';
-  renderAdminTornei();
+
+function enterAdmin(user) {
+  STATE.isAdmin  = true;
+  STATE.userRole = user.ruolo;   // 'admin' o 'arbitro'
+  STATE.userName = user.nome;
+
+  document.getElementById('pub-nav').style.display   = 'none';
+  document.getElementById('admin-nav').style.display = 'flex';
+  document.getElementById('admin-btn').textContent   = `Esci (${user.nome})`;
+
+  // Arbitri vedono solo la sezione risultati
+  if (user.ruolo === 'arbitro') {
+    _mostraNavArbitro();
+    STATE.currentSection = 'a-risultati';
+    document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-a-risultati').classList.add('active');
+    document.getElementById('cat-bar').style.display = '';
+    renderCatBar();
+    renderAdminRisultati();
+  } else {
+    // Admin completo
+    document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector('[data-section="a-tornei"]');
+    if (btn) btn.classList.add('active');
+    document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-a-tornei').classList.add('active');
+    document.getElementById('cat-bar').style.display = 'none';
+    STATE.currentSection = 'a-tornei';
+    renderAdminTornei();
+  }
 }
+
+/** Nasconde le voci di menu non accessibili agli arbitri */
+function _mostraNavArbitro() {
+  const nav = document.getElementById('admin-nav');
+  if (!nav) return;
+  nav.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(btn => {
+    const sec = btn.getAttribute('data-section');
+    // Arbitri vedono solo risultati e knockout
+    const visibili = ['a-risultati', 'a-knockout'];
+    btn.style.display = visibili.includes(sec) ? '' : 'none';
+  });
+  // Attiva risultati
+  nav.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
+  const btnRis = nav.querySelector('[data-section="a-risultati"]');
+  if (btnRis) { btnRis.style.display=''; btnRis.classList.add('active'); }
+}
+
 function exitAdmin() {
-  STATE.isAdmin=false;
-  document.getElementById('pub-nav').style.display='flex';
-  document.getElementById('admin-nav').style.display='none';
-  document.getElementById('admin-btn').textContent='Admin';
-  STATE.currentSection='classifiche';
-  document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
-  document.querySelector('[data-section="classifiche"]').classList.add('active');
-  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  STATE.isAdmin  = false;
+  STATE.userRole = null;
+  STATE.userName = null;
+
+  // Ripristina tutti i bottoni nav
+  document.getElementById('admin-nav').querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
+
+  document.getElementById('pub-nav').style.display   = 'flex';
+  document.getElementById('admin-nav').style.display = 'none';
+  document.getElementById('admin-btn').textContent   = 'Admin';
+  STATE.currentSection = 'classifiche';
+  document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('[data-section="classifiche"]');
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-classifiche').classList.add('active');
   renderClassifiche();
+}
+
+// ---- Salvataggio credenziali in localStorage ----
+function _saveLogin(username, password) {
+  try { localStorage.setItem('spe_login', JSON.stringify({username, password})); } catch(e) {}
+}
+function _loadSavedLogin() {
+  try { const v=localStorage.getItem('spe_login'); return v?JSON.parse(v):null; } catch(e) { return null; }
+}
+function _clearLogin() {
+  try { localStorage.removeItem('spe_login'); } catch(e) {}
+}
+
+/** Auto-login all'avvio se accesso salvato */
+function tryAutoLogin() {
+  const saved = _loadSavedLogin();
+  if (!saved) return;
+  const user = (CONFIG.USERS||[]).find(
+    u => u.username.toLowerCase()===saved.username.toLowerCase() && u.password===saved.password
+  );
+  if (user) enterAdmin(user);
 }
 
 // ============================================================

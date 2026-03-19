@@ -11,10 +11,11 @@
 <div id="app">
   <div id="loading-screen">
     <div class="loading-logo">
-      <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="SPE">
+      <img id="loading-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;" alt="Soccer Pro Experience">
       <div class="loading-text">Caricamento in corso...</div>
     </div>
   </div>
+
   <div id="main-app" style="display:none;">
     <header>
       <div class="header-inner">
@@ -32,17 +33,65 @@
       </div>
     </header>
 
+    <!-- MODAL LOGIN -->
     <div id="admin-modal" class="modal-overlay" style="display:none;">
-      <div class="modal-box">
-        <div class="modal-title">Accesso admin</div>
-        <input type="password" id="admin-pw" placeholder="Password" class="modal-input" onkeydown="if(event.key==='Enter')checkPw()">
-        <div id="pw-error" style="color:#A32D2D;font-size:12px;margin-top:6px;min-height:16px;"></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">Annulla</button>
-          <button class="btn btn-p" onclick="checkPw()">Entra</button>
+      <div class="modal-box" style="width:320px;">
+        <div class="modal-title" style="margin-bottom:18px;">
+          🔐 Accesso staff
         </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">Username</label>
+          <input type="text" id="admin-username" placeholder="es. admin1 oppure arbitro3"
+            class="form-input" autocomplete="username"
+            onkeydown="if(event.key==='Enter')document.getElementById('admin-pw').focus()">
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">Password</label>
+          <div style="position:relative;">
+            <input type="password" id="admin-pw" placeholder="Password"
+              class="form-input" autocomplete="current-password"
+              onkeydown="if(event.key==='Enter')checkPw()"
+              style="padding-right:40px;">
+            <button onclick="togglePwVisibility()"
+              style="position:absolute;right:10px;top:50%;transform:translateY(-50%);
+                     background:none;border:none;cursor:pointer;color:#888;font-size:16px;"
+              id="pw-eye">👁</button>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;
+                      cursor:pointer;margin-bottom:16px;">
+          <input type="checkbox" id="admin-remember" style="width:16px;height:16px;cursor:pointer;">
+          Ricorda accesso su questo dispositivo
+        </label>
+
+        <div id="pw-error" style="color:#c0392b;font-size:12px;margin-bottom:10px;min-height:16px;"></div>
+
+        <div class="modal-actions">
+          <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">
+            Annulla
+          </button>
+          <button class="btn btn-p" onclick="checkPw()">
+            Entra →
+          </button>
+        </div>
+
+        <!-- Riepilogo accessi -->
+        <details style="margin-top:16px;">
+          <summary style="font-size:11px;color:#aaa;cursor:pointer;">Mostra credenziali</summary>
+          <div style="margin-top:10px;font-size:11px;color:#666;background:#f8f9fa;
+                      border-radius:6px;padding:10px;line-height:1.8;">
+            <strong>ADMIN (accesso completo):</strong><br>
+            admin1 / Spe_Admin1! &nbsp;·&nbsp; admin2 / Spe_Admin2! &nbsp;·&nbsp; admin3 / Spe_Admin3!<br><br>
+            <strong>ARBITRI (solo risultati):</strong><br>
+            arbitro1→10 / Arb2026_1! … Arb2026_10!
+          </div>
+        </details>
       </div>
     </div>
+    <!-- FINE MODAL LOGIN -->
 
     <nav>
       <div class="nav-inner" id="pub-nav">
@@ -51,11 +100,11 @@
         <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">Tabellone</button>
       </div>
       <div class="nav-inner" id="admin-nav" style="display:none;">
-        <button class="nav-btn active" data-section="a-tornei" onclick="showSection('a-tornei',this)">Tornei</button>
-        <button class="nav-btn" data-section="a-setup" onclick="showSection('a-setup',this)">Categorie</button>
-        <button class="nav-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">Loghi</button>
-        <button class="nav-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
-        <button class="nav-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">Fase finale</button>
+        <button class="nav-btn active" data-section="a-tornei"    onclick="showSection('a-tornei',this)">Tornei</button>
+        <button class="nav-btn"        data-section="a-setup"     onclick="showSection('a-setup',this)">Categorie</button>
+        <button class="nav-btn"        data-section="a-loghi"     onclick="showSection('a-loghi',this)">Loghi</button>
+        <button class="nav-btn"        data-section="a-risultati" onclick="showSection('a-risultati',this)">Risultati</button>
+        <button class="nav-btn"        data-section="a-knockout"  onclick="showSection('a-knockout',this)">Fase finale</button>
         <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
       </div>
     </nav>
@@ -64,22 +113,31 @@
     <div class="cat-bar" id="cat-bar"></div>
 
     <main id="main-content">
-      <div id="sec-classifiche" class="sec active"></div>
-      <div id="sec-risultati" class="sec"></div>
-      <div id="sec-tabellone" class="sec"></div>
-      <div id="sec-a-tornei" class="sec"></div>
-      <div id="sec-a-setup" class="sec"></div>
-      <div id="sec-a-loghi" class="sec"></div>
-      <div id="sec-a-risultati" class="sec"></div>
-      <div id="sec-a-knockout" class="sec"></div>
+      <div id="sec-classifiche"  class="sec active"></div>
+      <div id="sec-risultati"    class="sec"></div>
+      <div id="sec-tabellone"    class="sec"></div>
+      <div id="sec-a-tornei"     class="sec"></div>
+      <div id="sec-a-setup"      class="sec"></div>
+      <div id="sec-a-loghi"      class="sec"></div>
+      <div id="sec-a-risultati"  class="sec"></div>
+      <div id="sec-a-knockout"   class="sec"></div>
     </main>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script>
+function togglePwVisibility() {
+  const inp = document.getElementById('admin-pw');
+  const eye = document.getElementById('pw-eye');
+  if (inp.type === 'password') { inp.type='text';  eye.textContent='🙈'; }
+  else                         { inp.type='password'; eye.textContent='👁'; }
+}
+</script>
+
 <script src="config.js"></script>
 <script src="db.js"></script>
 <script src="logo.js"></script>
-<script src="export.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="import.js"></script>
 <script src="app.js"></script>
 </body>
