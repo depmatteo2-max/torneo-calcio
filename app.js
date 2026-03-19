@@ -6,26 +6,127 @@
 let STATE = {
   tornei: [], activeTorneo: null, categorie: [],
   activeCat: null, isAdmin: false, currentSection: 'classifiche',
+  userRole: null, userName: null,
 };
 
+// ============================================================
+//  INIT
+// ============================================================
 async function init() {
   initDB();
   try {
     STATE.tornei = await dbGetTornei();
-    const attivi = STATE.tornei.filter(t => t.attivo);
-    if (attivi.length) STATE.activeTorneo = attivi[0].id;
-    else if (STATE.tornei.length) STATE.activeTorneo = STATE.tornei[0].id;
-    await loadTorneo();
-    subscribeRealtime(() => renderCurrentSection());
+    // Prova a ripristinare torneo salvato
+    const savedId = _loadSavedTorneo();
+    const attivi  = STATE.tornei.filter(t => t.attivo);
+    if (savedId && attivi.find(t => t.id === savedId)) {
+      STATE.activeTorneo = savedId;
+    } else if (attivi.length) {
+      STATE.activeTorneo = attivi[0].id;
+    } else if (STATE.tornei.length) {
+      STATE.activeTorneo = STATE.tornei[0].id;
+    }
+    subscribeRealtime(() => { if (!STATE.isAdmin) renderCurrentSection(); });
   } catch(e) { console.error(e); }
+
   document.getElementById('loading-screen').style.display = 'none';
-  document.getElementById('main-app').style.display = 'block';
-  // Auto-login se accesso salvato
+
+  // Se ci sono più tornei attivi → mostra schermata selezione
+  const attivi = STATE.tornei.filter(t => t.attivo);
+  if (attivi.length > 1 && !STATE.activeTorneo) {
+    mostraSelezioneTeorneo();
+  } else {
+    await loadTorneo();
+    document.getElementById('main-app').style.display = 'block';
+  }
   tryAutoLogin();
+}
+
+// ============================================================
+//  SCHERMATA SELEZIONE TORNEO (vista pubblica iniziale)
+// ============================================================
+function mostraSelezioneTeorneo() {
+  const attivi = STATE.tornei.filter(t => t.attivo);
+  const app = document.getElementById('main-app');
+  app.style.display = 'block';
+
+  // Nascondi tutto tranne una schermata dedicata
+  document.getElementById('pub-nav').style.display    = 'none';
+  document.getElementById('admin-nav').style.display  = 'none';
+  document.getElementById('cat-bar').style.display    = 'none';
+  document.getElementById('torneo-bar').style.display = 'none';
+
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div style="min-height:80vh;display:flex;flex-direction:column;align-items:center;
+                justify-content:center;padding:24px 16px;">
+      <img id="sel-logo" style="width:90px;height:90px;border-radius:50%;object-fit:cover;
+           box-shadow:0 4px 20px rgba(0,0,0,0.15);margin-bottom:20px;" alt="SPE">
+      <div style="font-size:22px;font-weight:800;color:#1a2a3a;margin-bottom:4px;">
+        Soccer Pro Experience
+      </div>
+      <div style="font-size:14px;color:#888;margin-bottom:32px;">
+        Seleziona il torneo da seguire
+      </div>
+      <div style="width:100%;max-width:400px;display:flex;flex-direction:column;gap:12px;">
+        ${attivi.map(t => `
+          <button onclick="selezionaTorneoPublic(${t.id})"
+            style="background:white;border:2px solid #e8edf2;border-radius:14px;
+                   padding:16px 20px;text-align:left;cursor:pointer;
+                   box-shadow:0 2px 8px rgba(0,0,0,0.06);
+                   transition:all 0.15s ease;font-family:inherit;"
+            onmouseover="this.style.borderColor='#2e86c1';this.style.transform='translateY(-1px)'"
+            onmouseout="this.style.borderColor='#e8edf2';this.style.transform='translateY(0)'">
+            <div style="font-size:16px;font-weight:700;color:#1a2a3a;">${t.nome}</div>
+            <div style="font-size:13px;color:#888;margin-top:3px;">
+              📅 ${t.data||'Data da definire'} &nbsp;•&nbsp; 🔴 Live
+            </div>
+          </button>`).join('')}
+      </div>
+    </div>`;
+
+  // Carica logo
+  if (typeof getLogo === 'function') {
+    const logoData = getLogo();
+    if (logoData) {
+      const img = document.getElementById('sel-logo');
+      if (img) img.src = logoData;
+    }
+  }
+}
+
+async function selezionaTorneoPublic(id) {
+  STATE.activeTorneo = id;
+  _saveSavedTorneo(id);
+  await loadTorneo();
+  // Ripristina nav
+  document.getElementById('pub-nav').style.display = 'flex';
+  document.getElementById('main-content').innerHTML =
+    '<div id="sec-classifiche" class="sec active"></div>' +
+    '<div id="sec-risultati" class="sec"></div>' +
+    '<div id="sec-tabellone" class="sec"></div>' +
+    '<div id="sec-a-tornei" class="sec"></div>' +
+    '<div id="sec-a-setup" class="sec"></div>' +
+    '<div id="sec-a-loghi" class="sec"></div>' +
+    '<div id="sec-a-risultati" class="sec"></div>' +
+    '<div id="sec-a-knockout" class="sec"></div>';
+  STATE.currentSection = 'classifiche';
+  await renderCurrentSection();
+}
+
+// ============================================================
+//  SALVATAGGIO TORNEO SCELTO
+// ============================================================
+function _saveSavedTorneo(id) {
+  try { localStorage.setItem('spe_torneo', String(id)); } catch(e) {}
+}
+function _loadSavedTorneo() {
+  try { const v=localStorage.getItem('spe_torneo'); return v?parseInt(v):null; } catch(e) { return null; }
 }
 
 async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
+  _saveSavedTorneo(STATE.activeTorneo);
   STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
   STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   renderTorneoBar(); renderCatBar();
@@ -33,21 +134,51 @@ async function loadTorneo() {
 }
 
 function renderTorneoBar() {
-  const bar = document.getElementById('torneo-bar');
+  const bar    = document.getElementById('torneo-bar');
+  if (!bar) return;
   const attivi = STATE.tornei.filter(t => t.attivo);
   if (attivi.length <= 1) { bar.style.display = 'none'; return; }
   bar.style.display = '';
-  bar.innerHTML = `<div class="torneo-bar-inner">${attivi.map(t =>
-    `<button class="torneo-pill ${t.id===STATE.activeTorneo?'active':''}" onclick="selectTorneo(${t.id})">${t.nome}</button>`
-  ).join('')}</div>`;
+  const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
+  bar.innerHTML = `<div class="torneo-bar-inner">
+    <span style="font-size:13px;font-weight:600;color:#1a2a3a;flex:1;">${t?.nome||''}</span>
+    <button onclick="cambiaTorneo()"
+      style="background:#f0f4f8;border:1px solid #dde3ea;border-radius:8px;
+             padding:5px 12px;font-size:12px;font-weight:600;color:#2e86c1;cursor:pointer;">
+      🔄 Cambia torneo
+    </button>
+  </div>`;
 }
 
-async function selectTorneo(id) { STATE.activeTorneo = id; await loadTorneo(); }
+async function cambiaTorneo() {
+  // Torna alla schermata selezione
+  STATE.activeTorneo = null;
+  try { localStorage.removeItem('spe_torneo'); } catch(e) {}
+  // Ripristina sezioni HTML
+  document.getElementById('main-content').innerHTML =
+    '<div id="sec-classifiche" class="sec active"></div>' +
+    '<div id="sec-risultati" class="sec"></div>' +
+    '<div id="sec-tabellone" class="sec"></div>' +
+    '<div id="sec-a-tornei" class="sec"></div>' +
+    '<div id="sec-a-setup" class="sec"></div>' +
+    '<div id="sec-a-loghi" class="sec"></div>' +
+    '<div id="sec-a-risultati" class="sec"></div>' +
+    '<div id="sec-a-knockout" class="sec"></div>';
+  mostraSelezioneTeorneo();
+}
+
+async function selectTorneo(id) {
+  STATE.activeTorneo = id;
+  _saveSavedTorneo(id);
+  await loadTorneo();
+}
 
 function updateHeader() {
   const t = STATE.tornei.find(t => t.id === STATE.activeTorneo);
-  document.getElementById('header-title').textContent = t ? t.nome : 'Soccer Pro Experience';
-  document.getElementById('header-date').textContent = t ? t.data || '' : '';
+  const titleEl = document.getElementById('header-title');
+  const dateEl  = document.getElementById('header-date');
+  if (titleEl) titleEl.textContent = t ? t.nome : 'Soccer Pro Experience';
+  if (dateEl)  dateEl.textContent  = t ? t.data || '' : '';
 }
 
 function showSection(name, btn) {
