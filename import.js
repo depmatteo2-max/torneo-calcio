@@ -126,43 +126,47 @@ function leggiPartiteFase1(wb) {
   const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
   const hdrs = rows[hi].map(h => String(h||'').trim());
 
+  // Rileva indice colonne dalla riga header
+  const iCat      = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA'));
+  const iGir      = hdrs.findIndex(h => h.toUpperCase().includes('GIRONE'));
+  const iGiornata = hdrs.findIndex(h => h.toUpperCase().includes('GIORNATA') || h.toUpperCase().includes('NOME PARTITA'));
+  const iGiorno   = hdrs.findIndex(h => h.toUpperCase().includes('GIORNO') || h.toUpperCase().includes('DATA'));
+  const iOra      = hdrs.findIndex(h => h.toUpperCase().includes('ORARIO') || h.toUpperCase() === 'ORA');
+  const iCampo    = hdrs.findIndex(h => h.toUpperCase().includes('CAMPO'));
+
+  // Prima riga dati per rilevare separatore "vs"
+  const primaRiga = rows.slice(hi + 1).find(r => String(r[iCat>=0?iCat:0]||'').trim());
+  // Se colonna 6 (0-based) contiene "vs" → home=5, away=7
+  let iHome, iAway;
+  if (primaRiga && String(primaRiga[6]||'').toLowerCase().trim() === 'vs') {
+    iHome = 5; iAway = 7;
+  } else {
+    // Cerca per nome colonna
+    iHome = hdrs.findIndex(h => h.toUpperCase().includes('CASA') || h.toUpperCase().includes('HOME'));
+    iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY'));
+    if (iHome < 0) iHome = 5;
+    if (iAway < 0) iAway = 7;
+  }
+
   return rows.slice(hi + 1)
-    .map(r => {
-      const obj = {};
-      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
-      return obj;
-    })
     .filter(r => {
-      const cat = col(r, 'CATEGORIA');
-      // Salta righe separatore tipo "— Girone 1 —"
+      const cat  = String(r[iCat >= 0 ? iCat : 0]||'').trim();
+      const home = String(r[iHome]||'').trim();
+      const away = String(r[iAway]||'').trim();
       if (!cat || cat.startsWith('—') || cat.startsWith('-')) return false;
-      return col(r, 'CASA', 'SQUADRA CASA') && col(r, 'OSPITE', 'SQUADRA OSPITE');
+      return home && away && home.toLowerCase() !== 'vs' && away.toLowerCase() !== 'vs';
     })
     .map(r => ({
-      categoria: col(r, 'CATEGORIA'),
-      girone   : col(r, 'GIRONE'),
-      giornata : col(r, 'GIORNATA', 'GARA', 'NOME PARTITA'),
-      giorno   : col(r, 'GIORNO', 'DATA'),
-      orario   : col(r, 'ORARIO', 'ORA'),
-      home     : col(r, 'SQUADRA CASA', 'CASA', 'HOME'),
-      away     : col(r, 'SQUADRA OSPITE', 'OSPITE', 'AWAY'),
-      campo    : col(r, 'CAMPO')
+      categoria: String(r[iCat      >= 0 ? iCat      : 0]||'').trim(),
+      girone   : String(r[iGir      >= 0 ? iGir      : 1]||'').trim(),
+      giornata : String(r[iGiornata >= 0 ? iGiornata : 2]||'').trim(),
+      giorno   : String(r[iGiorno   >= 0 ? iGiorno   : 3]||'').trim(),
+      orario   : String(r[iOra      >= 0 ? iOra      : 4]||'').trim(),
+      home     : String(r[iHome]||'').trim(),
+      away     : String(r[iAway]||'').trim(),
+      campo    : String(r[iCampo    >= 0 ? iCampo    : 8]||'').trim()
     }));
 }
-
-// Mappa round → metadati
-const ROUND_META = {
-  'PLATINO': { order: 0, consolazione: false, emoji: '🥇', desc: '1° classificate' },
-  'GOLD'   : { order: 1, consolazione: false, emoji: '🥈', desc: '2° classificate' },
-  'SILVER' : { order: 2, consolazione: true,  emoji: '🥉', desc: '3° classificate' },
-  'BRONZO' : { order: 3, consolazione: true,  emoji: '🏅', desc: '4° classificate' },
-  'WHITE'  : { order: 4, consolazione: true,  emoji: '⬜', desc: '5° classificate' }
-};
-const ROUND_COLORS = {
-  'PLATINO': '#FFD700', 'GOLD': '#FFA500',
-  'SILVER': '#C0C0C0', 'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5'
-};
-
 function leggiPartiteFase2(wb) {
   const ws = wb.Sheets['FASE_FINALE'];
   if (!ws) return [];
