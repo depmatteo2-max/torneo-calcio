@@ -1,6 +1,8 @@
 // ============================================================
-//  IMPORTA EXCEL - Soccer Pro Experience
-//  Modello: CATEGORIE / GIRONI / PARTITE_FASE1 / FASE_FINALE
+//  IMPORTA EXCEL — Soccer Pro Experience
+//  Legge: CATEGORIE, GIRONI, PARTITE_FASE1, FASE_FINALE
+//  Triangolari PLATINO / GOLD / SILVER / BRONZO / WHITE
+//  Le squadre "1° Girone X" vengono risolte a fine gironi
 // ============================================================
 
 async function importaExcel(event) {
@@ -8,12 +10,8 @@ async function importaExcel(event) {
   if (!file) return;
   event.target.value = '';
 
-  if (!STATE.activeTorneo) {
-    alert('⚠️ Crea prima un torneo nella sezione Tornei!');
-    return;
-  }
-
-  toast('⏳ Lettura file Excel...');
+  const preview = document.getElementById('import-preview');
+  preview.innerHTML = '<div style="padding:16px;color:#888;font-size:13px;">⏳ Lettura file in corso...</div>';
 
   try {
     if (typeof XLSX === 'undefined') {
@@ -25,281 +23,433 @@ async function importaExcel(event) {
       });
     }
 
-    const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array' });
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
 
-    if (!wb.Sheets['CATEGORIE'] || !wb.Sheets['GIRONI']) {
-      alert('❌ File non valido!\nIl file deve avere i fogli CATEGORIE e GIRONI.');
+    const dati = {
+      categorie : leggiCategorie(wb),
+      gironi    : leggiGironi(wb),
+      partite   : leggiPartiteFase1(wb),
+      fase2     : leggiPartiteFase2(wb)
+    };
+
+    if (!dati.categorie.length) {
+      preview.innerHTML = '<div style="padding:16px;color:#c00;">❌ Nessuna categoria trovata. Controlla il foglio CATEGORIE.</div>';
       return;
     }
 
-    // Leggi ogni foglio come array di array
-    function sheetToRows(sheet) {
-      if (!sheet) return [];
-      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    }
+    mostraAnteprima(dati, preview);
 
-    // Converti array di array in array di oggetti
-    // Cerca la riga che contiene "CATEGORIA *" come intestazione
-    function parseSheet(rows) {
-      // Trova la riga header (quella che contiene "CATEGORIA *")
-      let headerIdx = -1;
-      for (let i = 0; i < rows.length; i++) {
-        if (rows[i].some(v => String(v).trim() === 'CATEGORIA *')) {
-          headerIdx = i;
-          break;
-        }
-      }
-      if (headerIdx === -1) return [];
-      
-      const headers = rows[headerIdx].map(h => String(h).trim());
-      const result = [];
-      for (let i = headerIdx + 1; i < rows.length; i++) {
-        const row = rows[i];
-        // Salta righe completamente vuote
-        if (row.every(v => !v || String(v).trim() === '')) continue;
-        const obj = {};
-        headers.forEach((h, idx) => {
-          obj[h] = row[idx] !== undefined ? String(row[idx]).trim() : '';
-        });
-        result.push(obj);
-      }
-      return result;
-    }
-
-    const catObjs = parseSheet(sheetToRows(wb.Sheets['CATEGORIE']));
-    const girObjs = parseSheet(sheetToRows(wb.Sheets['GIRONI']));
-    const p1Objs  = parseSheet(sheetToRows(wb.Sheets['PARTITE_FASE1']));
-    const ffObjs  = parseSheet(sheetToRows(wb.Sheets['FASE_FINALE']));
-
-    // Filtra righe valide
-    const catRows = catObjs.filter(r => {
-      const v = (r['CATEGORIA *'] || '').toString().trim();
-      return v && v !== 'CATEGORIA *' && !v.includes('FOGLIO') && !v.includes('===');
-    });
-    const girRows = girObjs.filter(r => r['CATEGORIA *'] && r['GIRONE *'] && r['SQUADRA 1 *']);
-    const p1Rows  = p1Objs.filter(r  => r['CATEGORIA *'] && r['SQUADRA CASA *'] && r['SQUADRA OSPITE *']);
-    const ffRows  = ffObjs.filter(r  => r['CATEGORIA *'] && r['ROUND *'] && r['SQUADRA 1 *'] && r['SQUADRA 2 *']);
-
-    if (!catRows.length) {
-      alert('❌ Nessuna categoria trovata!\nControlla il foglio CATEGORIE.');
-      return;
-    }
-
-    // Costruisci anteprima
-    let previewHTML = `
-      <div style="margin-top:16px;border-top:2px solid #185FA5;padding-top:14px;">
-        <div style="font-weight:700;font-size:15px;color:#0c447c;margin-bottom:12px;">
-          📋 Anteprima — verifica prima di importare
-        </div>`;
-
-    for (const cat of catRows) {
-      const catNome = cat['CATEGORIA *'].toString().trim();
-      const nomeCompleto = cat['NOME COMPLETO'] || catNome;
-      const qualificate = cat['QUALIFICATE PER GIRONE *'] || 2;
-
-      const myGironi = girRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
-      const myP1 = p1Rows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
-      const myFF = ffRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
-
-      let totSquadre = 0;
-      const gironiInfo = [];
-      for (const g of myGironi) {
-        const squadreKeys = Object.keys(g).filter(k => k.startsWith('SQUADRA'));
-        const squadre = squadreKeys.map(k => g[k]?.toString().trim()).filter(s => s);
-        totSquadre += squadre.length;
-        gironiInfo.push({ nome: g['GIRONE *'], squadre });
-      }
-
-      previewHTML += `
-        <div style="background:white;border:1px solid #c5ddf5;border-radius:10px;padding:12px;margin-bottom:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <div style="font-weight:700;font-size:14px;color:#185FA5;">📁 ${nomeCompleto}</div>
-            <span style="font-size:11px;background:#e3f0fb;color:#0c447c;padding:2px 8px;border-radius:99px;font-weight:600;">
-              Top ${qualificate} si qualificano
-            </span>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
-            <div style="background:#f0f6ff;border-radius:6px;padding:6px 8px;text-align:center;">
-              <div style="font-size:18px;font-weight:700;color:#185FA5;">${myGironi.length}</div>
-              <div style="font-size:10px;color:#888;">Gironi</div>
-            </div>
-            <div style="background:#f0f6ff;border-radius:6px;padding:6px 8px;text-align:center;">
-              <div style="font-size:18px;font-weight:700;color:#185FA5;">${totSquadre}</div>
-              <div style="font-size:10px;color:#888;">Squadre</div>
-            </div>
-            <div style="background:#f0f6ff;border-radius:6px;padding:6px 8px;text-align:center;">
-              <div style="font-size:18px;font-weight:700;color:#185FA5;">${myP1.length || 'auto'}</div>
-              <div style="font-size:10px;color:#888;">Partite</div>
-            </div>
-          </div>`;
-
-      for (const g of gironiInfo) {
-        previewHTML += `<div style="font-size:12px;color:#555;margin-bottom:4px;"><strong>${g.nome}:</strong> ${g.squadre.join(', ')}</div>`;
-      }
-
-      if (myFF.length) {
-        previewHTML += `<div style="font-size:12px;color:#888;margin-top:6px;">🏆 ${myFF.length} partite fase finale</div>`;
-      }
-
-      if (myP1.length > 0) {
-        const p = myP1[0];
-        previewHTML += `<div style="font-size:11px;color:#aaa;margin-top:6px;border-top:1px solid #f0f0f0;padding-top:6px;">
-          Prima partita: ${p['GIORNO *']||''} ${p['ORARIO *']||''} — ${p['SQUADRA CASA *']} vs ${p['SQUADRA OSPITE *']} (${p['CAMPO']||'?'})
-        </div>`;
-      }
-
-      previewHTML += `</div>`;
-    }
-
-    previewHTML += `
-      <div style="margin-top:4px;padding:10px;background:#f5f5f5;border-radius:8px;font-size:12px;color:#666;margin-bottom:12px;">
-        Totale: <strong>${catRows.length} categorie</strong> · 
-        <strong>${girRows.length} gironi</strong> · 
-        <strong>${p1Rows.length} partite fase 1</strong>
-        ${ffRows.length ? ` · <strong>${ffRows.length} partite finale</strong>` : ''}
-      </div>
-      <button onclick="confermaImportazione()" style="width:100%;padding:13px;background:#27ae60;color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">
-        ✓ Conferma e importa tutto
-      </button>
-      <button onclick="annullaImportazione()" style="width:100%;padding:10px;background:transparent;color:#666;border:1px solid #ddd;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit;margin-top:8px;">
-        ✕ Annulla
-      </button>
-    </div>`;
-
-    const preview = document.getElementById('import-preview');
-    if (preview) {
-      preview.innerHTML = previewHTML;
-      preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-
-    window._importData = { catRows, girRows, p1Rows, ffRows };
-
-  } catch(e) {
-    console.error('Errore importaExcel:', e);
-    alert('❌ Errore nella lettura del file:\n' + e.message);
+  } catch (e) {
+    console.error('Errore import:', e);
+    preview.innerHTML = `<div style="padding:16px;color:#c00;">❌ Errore lettura: ${e.message}</div>`;
   }
 }
 
-function annullaImportazione() {
-  const preview = document.getElementById('import-preview');
-  if (preview) preview.innerHTML = '';
-  delete window._importData;
+// ============================================================
+//  LETTURA FOGLI
+// ============================================================
+
+function trovaRigaHeader(rows, keywords) {
+  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+    const joined = rows[i].map(c => String(c||'').toUpperCase()).join('|');
+    if (keywords.every(kw => joined.includes(kw.toUpperCase()))) return i;
+  }
+  return 0;
 }
 
-async function confermaImportazione() {
-  const { catRows, girRows, p1Rows, ffRows } = window._importData || {};
-  if (!catRows) { toast('Nessun dato da importare'); return; }
+function col(obj, ...keywords) {
+  for (const kw of keywords) {
+    const k = Object.keys(obj).find(k => k.toUpperCase().includes(kw.toUpperCase()));
+    if (k !== undefined && String(obj[k]||'').trim() !== '') return String(obj[k]).trim();
+  }
+  return '';
+}
 
-  const preview = document.getElementById('import-preview');
-  if (preview) preview.innerHTML = `
-    <div style="padding:20px;text-align:center;color:#185FA5;">
-      <div style="font-size:24px;margin-bottom:8px;">⏳</div>
-      <div style="font-weight:600;">Importazione in corso...</div>
-      <div style="font-size:12px;color:#888;margin-top:4px;">Non chiudere la pagina</div>
-    </div>`;
+function leggiCategorie(wb) {
+  const ws = wb.Sheets['CATEGORIE'];
+  if (!ws) return [];
 
-  try {
-    const formatoMap = { 'final':'final','semi':'semi','quarter':'quarter','quarti':'quarter','semifinali':'semi','solo finale':'final' };
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const hi   = trovaRigaHeader(rows, ['CATEGORIA']);
+  const hdrs = rows[hi].map(h => String(h||'').trim());
 
-    for (const catRow of catRows) {
-      const catNome      = catRow['CATEGORIA *'].toString().trim();
-      const nomeCompleto = (catRow['NOME COMPLETO'] || catNome).toString().trim();
-      const qualificate  = parseInt(catRow['QUALIFICATE PER GIRONE *']) || 2;
-      const formatoRaw   = (catRow['FORMATO FINALE *'] || 'semi').toString().toLowerCase().trim();
-      const formato      = formatoMap[formatoRaw] || 'semi';
+  return rows.slice(hi + 1)
+    .map(r => {
+      const obj = {};
+      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
+      return obj;
+    })
+    .filter(r => col(r, 'CATEGORIA') && !col(r, 'CATEGORIA').toUpperCase().includes('SPAREGGIO'))
+    .map(r => ({
+      codice     : col(r, 'CATEGORIA'),
+      nome       : col(r, 'NOME COMPLETO', 'NOME') || col(r, 'CATEGORIA'),
+      qualificate: parseInt(col(r, 'QUALIFICATE')) || 2,
+      formato    : col(r, 'FORMATO') || 'triangolare'
+    }));
+}
 
-      const cat = await dbSaveCategoria({
-        nome: nomeCompleto, qualificate, formato,
-        ordine: catRows.indexOf(catRow),
-        torneo_id: STATE.activeTorneo
+function leggiGironi(wb) {
+  const ws = wb.Sheets['GIRONI'];
+  if (!ws) return [];
+
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
+  const hdrs = rows[hi].map(h => String(h||'').trim());
+
+  return rows.slice(hi + 1)
+    .map(r => {
+      const obj = {};
+      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
+      return obj;
+    })
+    .filter(r => col(r, 'CATEGORIA') && col(r, 'GIRONE'))
+    .map(r => {
+      const squadre = Object.keys(r)
+        .filter(k => k.toUpperCase().startsWith('SQUADRA'))
+        .sort((a, b) => (parseInt(a.replace(/\D/g,''))||0) - (parseInt(b.replace(/\D/g,''))||0))
+        .map(k => r[k])
+        .filter(s => s);
+      return {
+        categoria: col(r, 'CATEGORIA'),
+        nome     : col(r, 'GIRONE'),
+        squadre
+      };
+    });
+}
+
+function leggiPartiteFase1(wb) {
+  const ws = wb.Sheets['PARTITE_FASE1'];
+  if (!ws) return [];
+
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
+  const hdrs = rows[hi].map(h => String(h||'').trim());
+
+  return rows.slice(hi + 1)
+    .map(r => {
+      const obj = {};
+      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
+      return obj;
+    })
+    .filter(r => {
+      const cat = col(r, 'CATEGORIA');
+      // Salta righe separatore tipo "— Girone 1 —"
+      if (!cat || cat.startsWith('—') || cat.startsWith('-')) return false;
+      return col(r, 'CASA', 'SQUADRA CASA') && col(r, 'OSPITE', 'SQUADRA OSPITE');
+    })
+    .map(r => ({
+      categoria: col(r, 'CATEGORIA'),
+      girone   : col(r, 'GIRONE'),
+      giornata : col(r, 'GIORNATA', 'GARA', 'NOME PARTITA'),
+      giorno   : col(r, 'GIORNO', 'DATA'),
+      orario   : col(r, 'ORARIO', 'ORA'),
+      home     : col(r, 'SQUADRA CASA', 'CASA', 'HOME'),
+      away     : col(r, 'SQUADRA OSPITE', 'OSPITE', 'AWAY'),
+      campo    : col(r, 'CAMPO')
+    }));
+}
+
+// Mappa round → metadati
+const ROUND_META = {
+  'PLATINO': { order: 0, consolazione: false, emoji: '🥇', desc: '1° classificate' },
+  'GOLD'   : { order: 1, consolazione: false, emoji: '🥈', desc: '2° classificate' },
+  'SILVER' : { order: 2, consolazione: true,  emoji: '🥉', desc: '3° classificate' },
+  'BRONZO' : { order: 3, consolazione: true,  emoji: '🏅', desc: '4° classificate' },
+  'WHITE'  : { order: 4, consolazione: true,  emoji: '⬜', desc: '5° classificate' }
+};
+const ROUND_COLORS = {
+  'PLATINO': '#FFD700', 'GOLD': '#FFA500',
+  'SILVER': '#C0C0C0', 'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5'
+};
+
+function leggiPartiteFase2(wb) {
+  const ws = wb.Sheets['FASE_FINALE'];
+  if (!ws) return [];
+
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'ROUND']);
+  const hdrs = rows[hi].map(h => String(h||'').trim());
+
+  return rows.slice(hi + 1)
+    .map((r, idx) => {
+      const obj = {};
+      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
+      return { obj, idx };
+    })
+    .filter(({ obj }) => {
+      const cat   = col(obj, 'CATEGORIA');
+      const round = col(obj, 'ROUND').toUpperCase();
+      if (!cat || cat.toUpperCase().includes('LEGENDA')) return false;
+      return ROUND_META[round] !== undefined;
+    })
+    .map(({ obj, idx }) => {
+      const round  = col(obj, 'ROUND').toUpperCase();
+      const meta   = ROUND_META[round];
+      const sq1raw = col(obj, 'SQUADRA 1');
+      const sq2raw = col(obj, 'SQUADRA 2');
+      return {
+        categoria   : col(obj, 'CATEGORIA'),
+        round,
+        roundLabel  : `${meta.emoji} ${round} — ${meta.desc}`,
+        roundOrder  : meta.order,
+        matchOrder  : idx,
+        consolazione: meta.consolazione,
+        giorno      : col(obj, 'GIORNO', 'DATA'),
+        orario      : col(obj, 'ORARIO', 'ORA'),
+        campo       : col(obj, 'CAMPO'),
+        sq1raw,
+        sq2raw
+      };
+    });
+}
+
+// ============================================================
+//  ANTEPRIMA
+// ============================================================
+
+function mostraAnteprima(dati, container) {
+  window._importDati = dati;
+
+  const girCat = {};
+  const p1Cat  = {};
+  const p2Cat  = {};
+  dati.gironi.forEach(g  => { (girCat[g.categoria] = girCat[g.categoria]||[]).push(g); });
+  dati.partite.forEach(p => { (p1Cat[p.categoria]  = p1Cat[p.categoria] ||[]).push(p); });
+  dati.fase2.forEach(p   => { (p2Cat[p.categoria]  = p2Cat[p.categoria] ||[]).push(p); });
+
+  let html = `
+    <div style="margin-top:20px;border:1px solid #ddd;border-radius:10px;overflow:hidden;font-family:Arial,sans-serif;">
+      <div style="background:#1a5276;color:white;padding:14px 18px;font-size:15px;font-weight:700;">
+        📋 Anteprima importazione — controlla e conferma
+      </div>
+      <div style="padding:16px;">`;
+
+  dati.categorie.forEach(cat => {
+    const gironi  = girCat[cat.codice] || girCat[cat.nome] || [];
+    const partite = p1Cat[cat.codice]  || p1Cat[cat.nome]  || [];
+    const fase2   = p2Cat[cat.codice]  || p2Cat[cat.nome]  || [];
+    const totSq   = gironi.reduce((s, g) => s + g.squadre.length, 0);
+
+    // Round presenti
+    const roundsPresenti = [...new Set(fase2.map(p => p.round))]
+      .sort((a, b) => (ROUND_META[a]?.order||99) - (ROUND_META[b]?.order||99));
+
+    html += `
+      <div style="margin-bottom:18px;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
+        <div style="background:#2e86c1;color:white;padding:10px 14px;font-weight:700;font-size:14px;">
+          📁 ${cat.nome}
+        </div>
+        <div style="padding:12px 14px;font-size:13px;">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+            <span style="background:#eaf4fb;padding:4px 10px;border-radius:20px;">🏟 <strong>${gironi.length}</strong> gironi</span>
+            <span style="background:#eaf4fb;padding:4px 10px;border-radius:20px;">👥 <strong>${totSq}</strong> squadre</span>
+            <span style="background:#eaf4fb;padding:4px 10px;border-radius:20px;">⚽ <strong>${partite.length}</strong> partite girone</span>
+            <span style="background:#fef9e7;padding:4px 10px;border-radius:20px;">🏆 <strong>${fase2.length}</strong> partite triangolari</span>
+          </div>`;
+
+    // Gironi
+    const BG_GIRONI = ['#eaf4fb','#e9f7ef','#fef9e7','#fdf2f8','#f4ecf7'];
+    gironi.forEach((g, gi) => {
+      html += `<div style="display:inline-block;background:${BG_GIRONI[gi%BG_GIRONI.length]};border-radius:6px;padding:5px 10px;margin:3px 3px 3px 0;font-size:12px;">
+        <strong>${g.nome}</strong>: ${g.squadre.join(' · ')}
+      </div>`;
+    });
+
+    // Triangolari
+    if (roundsPresenti.length) {
+      html += `<div style="border-top:1px solid #eee;margin-top:10px;padding-top:10px;">
+        <div style="font-weight:700;color:#1a5276;margin-bottom:8px;">🔁 Triangolari:</div>`;
+
+      roundsPresenti.forEach(rnd => {
+        const meta  = ROUND_META[rnd] || {};
+        const colr  = ROUND_COLORS[rnd] || '#999';
+        const pRnd  = fase2.filter(p => p.round === rnd);
+        html += `<div style="margin-bottom:6px;padding:7px 12px;border-radius:6px;border-left:4px solid ${colr};background:#fafafa;font-size:12px;">
+          <strong>${meta.emoji||''} ${rnd}</strong> <span style="color:#666;">— ${meta.desc||''}</span>
+          &nbsp;(${pRnd.length} partite):<br>
+          <span style="color:#555;line-height:1.8;">
+            ${pRnd.map(p => `${p.sq1raw} vs ${p.sq2raw}${p.orario?' <em>('+p.orario+')</em>':''}`).join(' &nbsp;·&nbsp; ')}
+          </span>
+        </div>`;
       });
 
-      const myGironi = girRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
+      html += `<div style="font-size:11px;color:#999;font-style:italic;margin-top:4px;">
+        ℹ️ "1° Girone X" viene sostituito con la squadra reale al termine dei gironi
+      </div></div>`;
+    }
 
-      for (const girRow of myGironi) {
-        const girNome = girRow['GIRONE *'].toString().trim();
-        const girone  = await dbSaveGirone({ categoria_id: cat.id, nome: girNome });
+    html += `</div></div>`;
+  });
 
-        const squadreKeys = Object.keys(girRow).filter(k => k.startsWith('SQUADRA'));
-        const squadreNomi = squadreKeys.map(k => girRow[k]?.toString().trim()).filter(s => s);
+  const totP2 = dati.fase2.length;
+  html += `
+    <div style="background:#f0f4f8;border-radius:8px;padding:12px 14px;font-size:13px;">
+      <strong>Totale:</strong> ${dati.categorie.length} categorie · ${dati.gironi.length} gironi · ${dati.partite.length} partite girone · ${totP2} partite triangolari
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button onclick="confermaImportazione()"
+        style="background:#27ae60;color:white;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">
+        ✓ Conferma e importa tutto
+      </button>
+      <button onclick="document.getElementById('import-preview').innerHTML=''"
+        style="background:#e0e0e0;color:#333;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer;">
+        Annulla
+      </button>
+    </div>
+  </div></div>`;
 
-        const squadra_ids = [];
-        for (const nome of squadreNomi) {
-          let sq = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === nome.toLowerCase());
-          if (!sq) sq = await dbSaveSquadra({ nome, torneo_id: STATE.activeTorneo });
-          squadra_ids.push(sq.id);
-        }
-        await dbSetGironeSquadre(girone.id, squadra_ids);
+  container.innerHTML = html;
+}
 
-        const myP1 = p1Rows.filter(r =>
-          r['CATEGORIA *'].toString().trim() === catNome &&
-          r['GIRONE *'].toString().trim() === girNome
-        );
+// ============================================================
+//  CONFERMA IMPORTAZIONE
+// ============================================================
 
-        if (myP1.length > 0) {
-          await db.from('partite').delete().eq('girone_id', girone.id);
-          for (const p of myP1) {
-            const s1 = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === p['SQUADRA CASA *'].toString().trim().toLowerCase());
-            const s2 = (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === p['SQUADRA OSPITE *'].toString().trim().toLowerCase());
-            if (s1 && s2) {
-              await db.from('partite').insert({
-                girone_id: girone.id, home_id: s1.id, away_id: s2.id, giocata: false,
-                orario:   p['ORARIO *']?.toString()  || null,
-                giorno:   p['GIORNO *']?.toString()  || null,
-                campo:    p['CAMPO']?.toString()     || null,
-                giornata: p['GIORNATA']?.toString()  || null,
-              });
-            }
+async function confermaImportazione() {
+  const dati = window._importDati;
+  if (!dati) return;
+
+  const btn = document.querySelector('button[onclick="confermaImportazione()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Importazione in corso...'; }
+
+  try {
+    // Torneo attivo
+    const { data: tornei, error: tErr } = await db.from('tornei').select('id').eq('attivo', true).limit(1);
+    if (tErr) throw new Error('Errore lettura tornei: ' + tErr.message);
+    const torneoId = tornei?.[0]?.id;
+    if (!torneoId) throw new Error('Nessun torneo attivo. Vai su Tornei e crea/attiva un torneo prima di importare.');
+
+    // Pulizia
+    await pulisciTorneo(torneoId);
+
+    const squadreMap = {}; // `torneoId||nomeSq` → sqId
+
+    // Importa per categoria
+    for (let ci = 0; ci < dati.categorie.length; ci++) {
+      const cat = dati.categorie[ci];
+
+      const { data: catR, error: cErr } = await db.from('categorie').insert({
+        torneo_id  : torneoId,
+        nome       : cat.nome,
+        qualificate: cat.qualificate || 2,
+        formato    : cat.formato || 'triangolare',
+        ordine     : ci
+      }).select('id').single();
+      if (cErr) throw new Error('Errore cat ' + cat.nome + ': ' + cErr.message);
+      const catId = catR.id;
+
+      // Gironi (match per codice o nome)
+      const gironiCat = dati.gironi.filter(g => g.categoria === cat.codice || g.categoria === cat.nome);
+      const gironiMap = {}; // 'Girone 1' → girId
+
+      for (const girone of gironiCat) {
+        const { data: girR, error: gErr } = await db.from('gironi').insert({
+          categoria_id: catId, nome: girone.nome
+        }).select('id').single();
+        if (gErr) throw new Error('Errore girone ' + girone.nome + ': ' + gErr.message);
+        const girId = girR.id;
+        gironiMap[girone.nome] = girId;
+
+        // Squadre
+        for (let si = 0; si < girone.squadre.length; si++) {
+          const nomeSq = girone.squadre[si];
+          if (!nomeSq) continue;
+          const key = `${torneoId}||${nomeSq}`;
+          if (!squadreMap[key]) {
+            const { data: sqR, error: sqErr } = await db.from('squadre').insert({
+              torneo_id: torneoId, nome: nomeSq
+            }).select('id').single();
+            if (sqErr) throw new Error('Errore squadra ' + nomeSq + ': ' + sqErr.message);
+            squadreMap[key] = sqR.id;
           }
-        } else {
-          await dbGeneraPartite(girone.id, squadra_ids);
+          await db.from('girone_squadre').insert({
+            girone_id: girId, squadra_id: squadreMap[key], posizione: si
+          });
         }
-      }
 
-      // Fase finale
-      const myFF = ffRows.filter(r => r['CATEGORIA *'].toString().trim() === catNome);
-      if (myFF.length > 0) {
-        await dbDeleteKnockout(cat.id);
-        const roundOrder = ['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
-        const mc = {};
-        for (const f of myFF) {
-          const rn = f['ROUND *'].toString().trim();
-          if (!mc[rn]) mc[rn] = 0;
-          const s1Nome = f['SQUADRA 1 *'].toString().trim();
-          const s2Nome = f['SQUADRA 2 *'].toString().trim();
-          const s1 = s1Nome !== 'TBD' ? (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === s1Nome.toLowerCase()) : null;
-          const s2 = s2Nome !== 'TBD' ? (await dbGetSquadre(STATE.activeTorneo)).find(s => s.nome.toLowerCase() === s2Nome.toLowerCase()) : null;
-          await dbSaveKnockoutMatch({
-            categoria_id: cat.id, round_name: rn,
-            round_order: roundOrder.indexOf(rn) !== -1 ? roundOrder.indexOf(rn) : 99,
-            match_order: mc[rn]++,
-            home_id: s1?.id || null, away_id: s2?.id || null,
-            gol_home: 0, gol_away: 0, giocata: false,
-            is_consolazione: (f['TIPO']?.toString().toLowerCase() || '').includes('consol'),
-            note_home: s1 ? '' : s1Nome, note_away: s2 ? '' : s2Nome,
+        // Partite fase1
+        const pGir = dati.partite.filter(p =>
+          (p.categoria === cat.codice || p.categoria === cat.nome) && p.girone === girone.nome
+        );
+        for (const p of pGir) {
+          const hId = squadreMap[`${torneoId}||${p.home}`];
+          const aId = squadreMap[`${torneoId}||${p.away}`];
+          if (!hId || !aId) { console.warn('Squadra mancante fase1:', p.home, '/', p.away); continue; }
+          await db.from('partite').insert({
+            girone_id: girId, home_id: hId, away_id: aId,
+            orario: p.orario||null, giorno: p.giorno||null,
+            campo: p.campo||null, giornata: p.giornata||null, giocata: false
           });
         }
       }
+
+      // Partite fase2 (triangolari) — salva con note_home/note_away come placeholder
+      const fase2Cat = dati.fase2.filter(p => p.categoria === cat.codice || p.categoria === cat.nome);
+      for (let mi = 0; mi < fase2Cat.length; mi++) {
+        const p   = fase2Cat[mi];
+        // Prova lookup diretto (se le note sono nomi reali di squadre)
+        const hId = squadreMap[`${torneoId}||${p.sq1raw}`] || null;
+        const aId = squadreMap[`${torneoId}||${p.sq2raw}`] || null;
+
+        await db.from('knockout').insert({
+          categoria_id   : catId,
+          round_name     : p.roundLabel,
+          round_order    : p.roundOrder,
+          match_order    : p.matchOrder,
+          home_id        : hId,
+          away_id        : aId,
+          giocata        : false,
+          is_consolazione: p.consolazione,
+          note_home      : p.sq1raw,   // es. "1° Girone 1" — usato da app.js per risolvere
+          note_away      : p.sq2raw
+        });
+      }
     }
 
-    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
-    STATE.activeCat = STATE.categorie[0]?.id || null;
-    renderCatBar();
-    delete window._importData;
-
-    if (preview) preview.innerHTML = `
-      <div style="padding:16px;text-align:center;background:#e8f8ee;border-radius:10px;margin-top:12px;">
-        <div style="font-size:28px;margin-bottom:6px;">✅</div>
-        <div style="font-weight:700;color:#1a7335;font-size:15px;">Importazione completata!</div>
-        <div style="font-size:13px;color:#555;margin-top:4px;">${STATE.categorie.length} categorie caricate</div>
+    document.getElementById('import-preview').innerHTML = `
+      <div style="margin-top:16px;padding:16px 20px;background:#d5f5e3;border-radius:8px;border:1px solid #27ae60;font-family:Arial,sans-serif;">
+        <div style="font-size:16px;font-weight:700;color:#1e8449;">✅ Importazione completata!</div>
+        <div style="font-size:13px;color:#333;margin-top:6px;">
+          ${dati.categorie.length} categorie · ${dati.gironi.length} gironi ·
+          ${dati.partite.length} partite girone ·
+          ${dati.fase2.length} partite triangolari (🥇PLATINO 🥈GOLD 🥉SILVER 🏅BRONZO ⬜WHITE)
+        </div>
+        <div style="font-size:12px;color:#666;margin-top:6px;font-style:italic;">
+          Quando finiscono i gironi, vai su <strong>Fase Finale</strong> → clicca "Risolvi squadre" per assegnare le qualificate ai triangolari.
+        </div>
+        <button onclick="location.reload()"
+          style="margin-top:12px;background:#27ae60;color:white;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">
+          🔄 Ricarica il sito
+        </button>
       </div>`;
+    window._importDati = null;
 
-    setTimeout(async () => { await renderAdminSetup(); }, 1500);
-
-  } catch(e) {
-    console.error('Errore confermaImportazione:', e);
-    if (preview) preview.innerHTML = '';
-    alert('❌ Errore durante importazione:\n' + e.message);
+  } catch (e) {
+    console.error('Errore importazione:', e);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Conferma e importa tutto'; }
+    alert('❌ Errore:\n' + e.message);
   }
+}
+
+// ============================================================
+//  PULIZIA TORNEO
+// ============================================================
+
+async function pulisciTorneo(torneoId) {
+  const { data: cats } = await db.from('categorie').select('id').eq('torneo_id', torneoId);
+  const catIds = (cats||[]).map(c => c.id);
+  if (!catIds.length) { await db.from('squadre').delete().eq('torneo_id', torneoId); return; }
+
+  const { data: girs } = await db.from('gironi').select('id').in('categoria_id', catIds);
+  const girIds = (girs||[]).map(g => g.id);
+
+  if (girIds.length) {
+    await db.from('partite').delete().in('girone_id', girIds);
+    await db.from('girone_squadre').delete().in('girone_id', girIds);
+    await db.from('gironi').delete().in('id', girIds);
+  }
+  await db.from('knockout').delete().in('categoria_id', catIds);
+  await db.from('categorie').delete().in('id', catIds);
+  await db.from('squadre').delete().eq('torneo_id', torneoId);
 }
