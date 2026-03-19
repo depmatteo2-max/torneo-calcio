@@ -14,7 +14,9 @@ async function importaExcel(event) {
   preview.innerHTML = '<div style="padding:16px;color:#888;font-size:13px;">⏳ Lettura file in corso...</div>';
 
   try {
+    console.log('importaExcel: start');
     if (typeof XLSX === 'undefined') {
+      console.log('importaExcel: carico XLSX...');
       await new Promise((res, rej) => {
         const s = document.createElement('script');
         s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
@@ -22,9 +24,11 @@ async function importaExcel(event) {
         document.head.appendChild(s);
       });
     }
+    console.log('importaExcel: XLSX ok, leggo file...');
 
     const buf = await file.arrayBuffer();
     const wb  = XLSX.read(buf, { type: 'array' });
+    console.log('importaExcel: fogli trovati:', wb.SheetNames);
 
     const dati = {
       categorie : leggiCategorie(wb),
@@ -32,6 +36,12 @@ async function importaExcel(event) {
       partite   : leggiPartiteFase1(wb),
       fase2     : leggiPartiteFase2(wb)
     };
+    console.log('importaExcel: dati letti →',
+      'cat:', dati.categorie.length,
+      'gironi:', dati.gironi.length,
+      'partite:', dati.partite.length,
+      'fase2:', dati.fase2.length
+    );
 
     if (!dati.categorie.length) {
       preview.innerHTML = '<div style="padding:16px;color:#c00;">❌ Nessuna categoria trovata. Controlla il foglio CATEGORIE.</div>';
