@@ -344,12 +344,76 @@ async function confermaImportazione() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Importazione in corso...'; }
 
   try {
-    // Torneo attivo
-    const { data: tornei, error: tErr } = await db.from('tornei').select('id').eq('attivo', true).limit(1);
+    // Carica TUTTI i tornei attivi e chiede conferma
+    const { data: tornei, error: tErr } = await db.from('tornei').select('id, nome').eq('attivo', true).order('created_at', { ascending: false });
     if (tErr) throw new Error('Errore lettura tornei: ' + tErr.message);
-    const torneoId = tornei?.[0]?.id;
-    if (!torneoId) throw new Error('Nessun torneo attivo. Vai su Tornei e crea/attiva un torneo prima di importare.');
+    if (!tornei?.length) throw new Error('Nessun torneo attivo. Vai su Tornei e crea/attiva un torneo prima di importare.');
 
+    let torneoId = null;
+
+    if (tornei.length === 1) {
+      // Solo un torneo attivo — usa quello
+      torneoId = tornei[0].id;
+    } else {
+      // Più tornei attivi — mostra selezione
+      const preview = document.getElementById('import-preview');
+      const optionsHtml = tornei.map(t =>
+        `<button onclick="window._selectedTorneoId=${t.id};document.getElementById('torneo-select-box').style.display='none';eseguiImportazione();"
+          style="display:block;width:100%;text-align:left;padding:12px 16px;margin-bottom:8px;
+                 background:white;border:2px solid #e0e0e0;border-radius:8px;cursor:pointer;
+                 font-size:14px;font-weight:600;font-family:inherit;"
+          onmouseover="this.style.borderColor='#2e86c1'"
+          onmouseout="this.style.borderColor='#e0e0e0'">
+          📁 ${t.nome}
+        </button>`
+      ).join('');
+
+      preview.innerHTML = `
+        <div id="torneo-select-box" style="margin-top:16px;padding:16px;background:#fff8e6;
+             border:1px solid #f39c12;border-radius:8px;font-family:Arial,sans-serif;">
+          <div style="font-size:14px;font-weight:700;color:#e67e22;margin-bottom:12px;">
+            ⚠️ Hai ${tornei.length} tornei attivi — in quale vuoi importare?
+          </div>
+          ${optionsHtml}
+          <button onclick="document.getElementById('import-preview').innerHTML=''"
+            style="background:#e0e0e0;border:none;padding:8px 16px;border-radius:6px;
+                   cursor:pointer;font-size:13px;font-family:inherit;margin-top:4px;">
+            Annulla
+          </button>
+        </div>`;
+
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Conferma e importa tutto'; }
+      return; // Aspetta la selezione
+    }
+
+    await eseguiImportazioneConTorneo(torneoId, dati, btn);
+
+  } catch(e) {
+    console.error('Errore importazione:', e);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Conferma e importa tutto'; }
+    alert('❌ Errore:\n' + e.message);
+  }
+}
+
+async function eseguiImportazione() {
+  const torneoId = window._selectedTorneoId;
+  const dati     = window._importDati;
+  if (!torneoId || !dati) return;
+
+  const btn = document.querySelector('button[onclick="confermaImportazione()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Importazione in corso...'; }
+
+  try {
+    await eseguiImportazioneConTorneo(torneoId, dati, btn);
+  } catch(e) {
+    console.error(e);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Conferma e importa tutto'; }
+    alert('❌ Errore:\n' + e.message);
+  }
+}
+
+async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
+  try {
     // Pulizia
     await pulisciTorneo(torneoId);
 
