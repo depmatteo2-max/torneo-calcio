@@ -2,8 +2,8 @@
 //  CONFIGURAZIONE — Soccer Pro Experience
 // ============================================================
 const CONFIG = {
-  SUPABASE_URL     : 'https://hvakazxnvooffskvoyyl.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_JRJmEOL1ne439tC3vzaqyw_H9CZwlIZ',
+  SUPABASE_URL     : 'https://cvqljezpnplasjvhvxuj.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2cWxqZXpwbnBsYXNqdmh2eHVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDQ1MzksImV4cCI6MjA4OTQyMDUzOX0.pPruSKIwMowgeDHHiK4jfXXMxyCw3nbMNoNYquwy8ag',
 
   // ============================================================
   //  UTENTI
