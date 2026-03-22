@@ -84,21 +84,29 @@ function leggiCategorie(wb) {
   const hi   = trovaRigaHeader(rows, ['CATEGORIA']);
   const hdrs = rows[hi].map(h => String(h||'').trim());
 
-  return rows.slice(hi + 1)
-    .map(r => {
-      const obj = {};
-      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
-      return obj;
-    })
-    .filter(r => col(r, 'CATEGORIA') && !col(r, 'CATEGORIA').toUpperCase().includes('SPAREGGIO'))
-    .map(r => ({
-      codice     : col(r, 'CATEGORIA'),
-      nome       : col(r, 'NOME COMPLETO', 'NOME') || col(r, 'CATEGORIA'),
-      qualificate: parseInt(col(r, 'QUALIFICATE')) || 2,
-      formato    : col(r, 'FORMATO') || 'triangolare'
-    }));
-}
+  console.log('CATEGORIE header:', hdrs);
 
+  const iCat  = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA'));
+  const iNome = hdrs.findIndex(h => h.toUpperCase().includes('NOME'));
+  const iQual = hdrs.findIndex(h => h.toUpperCase().includes('QUALIFICATE') || h.toUpperCase().includes('QUAL'));
+  const iForm = hdrs.findIndex(h => h.toUpperCase().includes('FORMATO'));
+
+  return rows.slice(hi + 1)
+    .filter(r => {
+      const cat = String(r[iCat >= 0 ? iCat : 0]||'').trim();
+      return cat && !cat.toUpperCase().includes('SPAREGGIO') && !cat.startsWith('ℹ');
+    })
+    .map(r => {
+      const codice = String(r[iCat  >= 0 ? iCat  : 0]||'').trim();
+      const nome   = iNome >= 0 ? String(r[iNome]||'').trim() : '';
+      return {
+        codice,
+        nome       : nome || codice,
+        qualificate: parseInt(String(r[iQual >= 0 ? iQual : 1]||'')) || 2,
+        formato    : String(r[iForm >= 0 ? iForm : 2]||'').trim() || 'triangolare'
+      };
+    });
+}
 function leggiGironi(wb) {
   const ws = wb.Sheets['GIRONI'];
   if (!ws) return [];
@@ -107,27 +115,30 @@ function leggiGironi(wb) {
   const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
   const hdrs = rows[hi].map(h => String(h||'').trim());
 
+  console.log('GIRONI header:', hdrs);
+
   return rows.slice(hi + 1)
-    .map(r => {
-      const obj = {};
-      hdrs.forEach((h, i) => { if (h) obj[h] = String(r[i]||'').trim(); });
-      return obj;
+    .filter(r => {
+      const cat = String(r[0]||'').trim();
+      const gir = String(r[1]||'').trim();
+      if (!cat || !gir) return false;
+      if (cat.startsWith('ℹ') || cat.startsWith('—')) return false;
+      return true;
     })
-    .filter(r => col(r, 'CATEGORIA') && col(r, 'GIRONE'))
     .map(r => {
-      const squadre = Object.keys(r)
-        .filter(k => k.toUpperCase().startsWith('SQUADRA'))
-        .sort((a, b) => (parseInt(a.replace(/\D/g,''))||0) - (parseInt(b.replace(/\D/g,''))||0))
-        .map(k => r[k])
-        .filter(s => s);
+      const squadre = [];
+      for (let i = 2; i < r.length; i++) {
+        const s = String(r[i]||'').trim();
+        if (s && !s.startsWith('ℹ')) squadre.push(s);
+      }
       return {
-        categoria: col(r, 'CATEGORIA'),
-        nome     : col(r, 'GIRONE'),
+        categoria: String(r[0]||'').trim(),
+        nome     : String(r[1]||'').trim(),
         squadre
       };
-    });
+    })
+    .filter(g => g.nome && g.squadre.length > 0);
 }
-
 function leggiPartiteFase1(wb) {
   const ws = wb.Sheets['PARTITE_FASE1'];
   if (!ws) return [];
@@ -136,45 +147,50 @@ function leggiPartiteFase1(wb) {
   const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
   const hdrs = rows[hi].map(h => String(h||'').trim());
 
-  // Rileva indice colonne dalla riga header
-  const iCat      = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA'));
-  const iGir      = hdrs.findIndex(h => h.toUpperCase().includes('GIRONE'));
-  const iGiornata = hdrs.findIndex(h => h.toUpperCase().includes('GIORNATA') || h.toUpperCase().includes('NOME PARTITA'));
-  const iGiorno   = hdrs.findIndex(h => h.toUpperCase().includes('GIORNO') || h.toUpperCase().includes('DATA'));
-  const iOra      = hdrs.findIndex(h => h.toUpperCase().includes('ORARIO') || h.toUpperCase() === 'ORA');
-  const iCampo    = hdrs.findIndex(h => h.toUpperCase().includes('CAMPO'));
+  console.log('PARTITE_FASE1 header:', hdrs);
 
-  // Prima riga dati per rilevare separatore "vs"
-  const primaRiga = rows.slice(hi + 1).find(r => String(r[iCat>=0?iCat:0]||'').trim());
-  // Se colonna 6 (0-based) contiene "vs" → home=5, away=7
-  let iHome, iAway;
-  if (primaRiga && String(primaRiga[6]||'').toLowerCase().trim() === 'vs') {
-    iHome = 5; iAway = 7;
-  } else {
-    // Cerca per nome colonna
-    iHome = hdrs.findIndex(h => h.toUpperCase().includes('CASA') || h.toUpperCase().includes('HOME'));
-    iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY'));
-    if (iHome < 0) iHome = 5;
-    if (iAway < 0) iAway = 7;
+  // Trova indici colonne
+  const iCat   = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA'));
+  const iGir   = hdrs.findIndex(h => h.toUpperCase().includes('GIRONE'));
+  const iOra   = hdrs.findIndex(h => h.toUpperCase().includes('ORARIO') || h.toUpperCase() === 'ORA');
+  const iGior  = hdrs.findIndex(h => h.toUpperCase().includes('GIORNO') || h.toUpperCase().includes('DATA'));
+  const iCampo = hdrs.findIndex(h => h.toUpperCase().includes('CAMPO'));
+  const iGiornata = hdrs.findIndex(h => h.toUpperCase().includes('GIORNATA') || h.toUpperCase().includes('NOME PARTITA'));
+
+  // Cerca colonne home/away — vari formati possibili
+  let iHome = hdrs.findIndex(h => h.toUpperCase().includes('CASA') || h.toUpperCase().includes('HOME'));
+  let iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY'));
+
+  // Fallback: se non trovate per nome, cerca colonna vs
+  if (iHome < 0 || iAway < 0) {
+    const primaRiga = rows.slice(hi+1).find(r => String(r[iCat>=0?iCat:0]||'').trim());
+    if (primaRiga && String(primaRiga[6]||'').toLowerCase().trim() === 'vs') {
+      iHome = 5; iAway = 7;
+    } else {
+      if (iHome < 0) iHome = 2;
+      if (iAway < 0) iAway = 3;
+    }
   }
+
+  console.log('Indici colonne — cat:', iCat, 'gir:', iGir, 'home:', iHome, 'away:', iAway, 'ora:', iOra);
 
   return rows.slice(hi + 1)
     .filter(r => {
       const cat  = String(r[iCat >= 0 ? iCat : 0]||'').trim();
       const home = String(r[iHome]||'').trim();
       const away = String(r[iAway]||'').trim();
-      if (!cat || cat.startsWith('—') || cat.startsWith('-')) return false;
+      if (!cat || cat.startsWith('—') || cat.startsWith('-') || cat.startsWith('ℹ')) return false;
       return home && away && home.toLowerCase() !== 'vs' && away.toLowerCase() !== 'vs';
     })
     .map(r => ({
       categoria: String(r[iCat      >= 0 ? iCat      : 0]||'').trim(),
       girone   : String(r[iGir      >= 0 ? iGir      : 1]||'').trim(),
-      giornata : String(r[iGiornata >= 0 ? iGiornata : 2]||'').trim(),
-      giorno   : String(r[iGiorno   >= 0 ? iGiorno   : 3]||'').trim(),
-      orario   : String(r[iOra      >= 0 ? iOra      : 4]||'').trim(),
+      giornata : String(r[iGiornata >= 0 ? iGiornata : -1] !== undefined ? r[iGiornata] : ''||'').trim(),
+      giorno   : String(r[iGior     >= 0 ? iGior     : 4]||'').trim(),
+      orario   : String(r[iOra      >= 0 ? iOra      : 5]||'').trim(),
       home     : String(r[iHome]||'').trim(),
       away     : String(r[iAway]||'').trim(),
-      campo    : String(r[iCampo    >= 0 ? iCampo    : 8]||'').trim()
+      campo    : String(r[iCampo    >= 0 ? iCampo    : 6]||'').trim()
     }));
 }
 function leggiPartiteFase2(wb) {
@@ -421,6 +437,15 @@ async function confermaImportazione() {
       }
     }
 
+    window._importDati = null;
+
+    // Aggiorna STATE senza ricaricare la pagina
+    if (typeof STATE !== 'undefined' && typeof dbGetCategorie === 'function') {
+      STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+      STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
+      if (typeof renderCatBar === 'function') renderCatBar();
+    }
+
     document.getElementById('import-preview').innerHTML = `
       <div style="margin-top:16px;padding:16px 20px;background:#d5f5e3;border-radius:8px;border:1px solid #27ae60;font-family:Arial,sans-serif;">
         <div style="font-size:16px;font-weight:700;color:#1e8449;">✅ Importazione completata!</div>
@@ -432,12 +457,17 @@ async function confermaImportazione() {
         <div style="font-size:12px;color:#666;margin-top:6px;font-style:italic;">
           Quando finiscono i gironi, vai su <strong>Fase Finale</strong> → clicca "Risolvi squadre" per assegnare le qualificate ai triangolari.
         </div>
-        <button onclick="location.reload()"
-          style="margin-top:12px;background:#27ae60;color:white;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">
-          🔄 Ricarica il sito
-        </button>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+          <button onclick="aggiornaDopoImport()"
+            style="background:#27ae60;color:white;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;">
+            ✅ Vai ai Risultati
+          </button>
+          <button onclick="location.reload()"
+            style="background:#f0f4f8;color:#333;border:1px solid #ddd;padding:10px 22px;border-radius:6px;cursor:pointer;font-size:14px;">
+            🔄 Ricarica pagina
+          </button>
+        </div>
       </div>`;
-    window._importDati = null;
 
   } catch (e) {
     console.error('Errore importazione:', e);
@@ -466,4 +496,20 @@ async function pulisciTorneo(torneoId) {
   await db.from('knockout').delete().in('categoria_id', catIds);
   await db.from('categorie').delete().in('id', catIds);
   await db.from('squadre').delete().eq('torneo_id', torneoId);
+}
+
+// Aggiorna vista dopo importazione senza ricaricare
+async function aggiornaDopoImport() {
+  try {
+    if (typeof STATE !== 'undefined' && typeof dbGetCategorie === 'function') {
+      STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+      STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
+      if (typeof renderCatBar === 'function') renderCatBar();
+      if (typeof showSection === 'function') {
+        // Vai direttamente ai risultati
+        const btn = document.querySelector('[data-section="a-risultati"]');
+        showSection('a-risultati', btn);
+      }
+    }
+  } catch(e) { location.reload(); }
 }
