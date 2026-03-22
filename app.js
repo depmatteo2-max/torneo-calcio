@@ -30,15 +30,26 @@ async function init() {
   } catch(e) { console.error(e); }
 
   document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
 
-  // Se ci sono più tornei attivi → mostra schermata selezione
   const attivi = STATE.tornei.filter(t => t.attivo);
+
+  // Nessun torneo → mostra schermata vuota
+  if (!attivi.length) {
+    await loadTorneo();
+    tryAutoLogin();
+    return;
+  }
+
+  // Più tornei attivi e nessuno salvato → mostra selezione
   if (attivi.length > 1 && !STATE.activeTorneo) {
     mostraSelezioneTeorneo();
-  } else {
-    await loadTorneo();
-    document.getElementById('main-app').style.display = 'block';
+    tryAutoLogin();
+    return;
   }
+
+  // Un solo torneo attivo O torneo già salvato → carica direttamente
+  await loadTorneo();
   tryAutoLogin();
 }
 
