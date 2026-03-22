@@ -1,6 +1,5 @@
 // ============================================================
 //  DB.JS — Soccer Pro Experience
-//  Tutte le query Supabase + logica classifica + risoluzione triangolari
 // ============================================================
 
 let db = null;
@@ -20,25 +19,18 @@ async function dbGetTornei() {
   if (error) throw error;
   return data || [];
 }
-async function dbGetTorneoAttivo() {
-  const { data } = await db.from('tornei').select('*').eq('attivo', true).limit(1);
-  return data?.[0] || null;
-}
+
 async function dbSaveTorneo(obj) {
-  // Accetta sia oggetto {nome,data,attivo} che parametri separati per retrocompatibilità
-  const payload = (typeof obj === 'object') ? obj : { nome: obj, data: arguments[1], attivo: true };
-  const { data, error } = await db.from('tornei').insert(payload).select('id').single();
+  const { data, error } = await db.from('tornei').insert(obj).select('id, nome, data, attivo').single();
   if (error) throw error;
   return data;
 }
+
 async function dbUpdateTorneo(id, obj) {
   const { error } = await db.from('tornei').update(obj).eq('id', id);
   if (error) throw error;
 }
-async function dbSetTorneoAttivo(id) {
-  await db.from('tornei').update({ attivo: false }).neq('id', id);
-  await db.from('tornei').update({ attivo: true }).eq('id', id);
-}
+
 async function dbDeleteTorneo(id) {
   const { error } = await db.from('tornei').delete().eq('id', id);
   if (error) throw error;
@@ -53,12 +45,13 @@ async function dbGetCategorie(torneoId) {
   if (error) throw error;
   return data || [];
 }
+
 async function dbSaveCategoria(obj) {
-  // Accetta oggetto {nome, qualificate, formato, ordine, torneo_id}
-  const { data, error } = await db.from('categorie').insert(obj).select('id').single();
+  const { data, error } = await db.from('categorie').insert(obj).select('*').single();
   if (error) throw error;
   return data;
 }
+
 async function dbDeleteCategoria(id) {
   const { error } = await db.from('categorie').delete().eq('id', id);
   if (error) throw error;
@@ -73,34 +66,43 @@ async function dbGetSquadre(torneoId) {
   if (error) throw error;
   return data || [];
 }
+
 async function dbSaveSquadra(obj) {
-  // Accetta oggetto {nome, torneo_id} o (torneoId, nome) per retrocompatibilità
-  const payload = (typeof obj === 'object') ? obj : { torneo_id: obj, nome: arguments[1] };
-  const { data, error } = await db.from('squadre').insert(payload).select('*').single();
+  const { data, error } = await db.from('squadre').insert(obj).select('*').single();
   if (error) throw error;
   return data;
 }
-async function dbSaveLogo(squadraId, logoBase64) {
+
+async function dbUpdateLogo(squadraId, logoBase64) {
   const { error } = await db.from('squadre').update({ logo: logoBase64 }).eq('id', squadraId);
   if (error) throw error;
-}
-async function dbUpdateLogo(squadraId, logoBase64) {
-  return dbSaveLogo(squadraId, logoBase64);
 }
 
 // ============================================================
 //  GIRONI
 // ============================================================
 async function dbGetGironi(categoriaId) {
-  const { data, error } = await db.from('gironi').select('*').eq('categoria_id', categoriaId).order('nome');
+  const { data, error } = await db.from('gironi').select('*')
+    .eq('categoria_id', categoriaId).order('nome');
   if (error) throw error;
   return data || [];
 }
+
 async function dbSaveGirone(obj) {
-  const { data, error } = await db.from('gironi').insert(obj).select('id').single();
+  const { data, error } = await db.from('gironi').insert(obj).select('*').single();
   if (error) throw error;
   return data;
 }
+
+async function dbGetGironeSquadre(gironeId) {
+  const { data, error } = await db.from('girone_squadre')
+    .select('*, squadre(id, nome, logo)')
+    .eq('girone_id', gironeId)
+    .order('posizione');
+  if (error) throw error;
+  return data || [];
+}
+
 async function dbSetGironeSquadre(gironeId, squadraIds) {
   await db.from('girone_squadre').delete().eq('girone_id', gironeId);
   if (!squadraIds.length) return;
@@ -108,6 +110,7 @@ async function dbSetGironeSquadre(gironeId, squadraIds) {
   const { error } = await db.from('girone_squadre').insert(rows);
   if (error) throw error;
 }
+
 async function dbGeneraPartite(gironeId, squadraIds) {
   await db.from('partite').delete().eq('girone_id', gironeId);
   const matches = [];
@@ -118,14 +121,6 @@ async function dbGeneraPartite(gironeId, squadraIds) {
     const { error } = await db.from('partite').insert(matches);
     if (error) throw error;
   }
-}
-async function dbGetGironeSquadre(gironeId) {
-  const { data, error } = await db.from('girone_squadre')
-    .select('*, squadre(id, nome, logo)')
-    .eq('girone_id', gironeId)
-    .order('posizione');
-  if (error) throw error;
-  return data || [];
 }
 
 // ============================================================
@@ -140,24 +135,10 @@ async function dbGetPartite(gironeId) {
   return data || [];
 }
 
-async function dbGetTuttePartiteCategoria(categoriaId) {
-  // Recupera tutti i gironi della categoria, poi tutte le partite
-  const { data: gironi } = await db.from('gironi').select('id').eq('categoria_id', categoriaId);
-  if (!gironi?.length) return [];
-  const girIds = gironi.map(g => g.id);
-  const { data, error } = await db.from('partite')
-    .select('*, home:squadre!home_id(id,nome,logo), away:squadre!away_id(id,nome,logo)')
-    .in('girone_id', girIds);
-  if (error) throw error;
-  return data || [];
-}
-
 async function dbSavePartita(obj) {
-  // Accetta oggetto {id, girone_id, gol_home, gol_away, giocata}
-  const { id, girone_id, ...rest } = obj;
   const { data, error } = await db.from('partite')
-    .update({ gol_home: rest.gol_home, gol_away: rest.gol_away, giocata: rest.giocata ?? true })
-    .eq('id', id)
+    .update({ gol_home: obj.gol_home, gol_away: obj.gol_away, giocata: true })
+    .eq('id', obj.id)
     .select().single();
   if (error) throw error;
   return data;
@@ -171,11 +152,17 @@ async function dbGetMarcatori(partitaId) {
   if (error) throw error;
   return data || [];
 }
+
 async function dbSaveMarcatori(partitaId, marcatori) {
   await db.from('marcatori').delete().eq('partita_id', partitaId);
   if (!marcatori.length) return;
   const { error } = await db.from('marcatori').insert(
-    marcatori.map(m => ({ partita_id: partitaId, squadra_id: m.squadra_id, nome: m.nome, minuto: m.minuto }))
+    marcatori.map(m => ({
+      partita_id: partitaId,
+      squadra_id: m.squadra_id,
+      nome: m.nome,
+      minuto: m.minuto || null
+    }))
   );
   if (error) throw error;
 }
@@ -185,235 +172,176 @@ async function dbSaveMarcatori(partitaId, marcatori) {
 // ============================================================
 async function dbGetKnockout(categoriaId) {
   const { data, error } = await db.from('knockout')
-    .select('*, home:squadre!home_id(id,nome,logo), away:squadre!away_id(id,nome,logo)')
+    .select('*')
     .eq('categoria_id', categoriaId)
     .order('round_order').order('match_order');
   if (error) throw error;
   return data || [];
 }
-async function dbSaveKnockoutMatch(obj) {
-  const { id, ...rest } = obj;
-  if (id) {
-    const { data, error } = await db.from('knockout').update(rest).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
-  } else {
-    const { data, error } = await db.from('knockout').insert(rest).select().single();
-    if (error) throw error;
-    return data;
-  }
-}
+
 async function dbSaveKnockout(id, golHome, golAway) {
   const { error } = await db.from('knockout')
     .update({ gol_home: golHome, gol_away: golAway, giocata: true })
     .eq('id', id);
   if (error) throw error;
 }
-async function dbAddKnockout(categoriaId, roundName, roundOrder, matchOrder, homeId, awayId, isConsolazione) {
-  const { error } = await db.from('knockout').insert({
-    categoria_id: categoriaId, round_name: roundName, round_order: roundOrder,
-    match_order: matchOrder, home_id: homeId, away_id: awayId,
-    giocata: false, is_consolazione: isConsolazione || false
-  });
-  if (error) throw error;
+
+async function dbSaveKnockoutMatch(obj) {
+  if (obj.id) {
+    const { id, ...rest } = obj;
+    const { error } = await db.from('knockout').update(rest).eq('id', id);
+    if (error) throw error;
+  } else {
+    const { error } = await db.from('knockout').insert(obj);
+    if (error) throw error;
+  }
 }
+
 async function dbDeleteKnockout(id) {
   const { error } = await db.from('knockout').delete().eq('id', id);
   if (error) throw error;
 }
 
 // ============================================================
-//  CLASSIFICA GIRONE
-//  Criteri spareggio: punti → scontro diretto → diff reti SD → gol fatti SD → diff reti gen → gol fatti gen → rigori
+//  CLASSIFICA con spareggio completo
 // ============================================================
 function calcolaClassifica(squadre, partite) {
-  const sqIds = squadre.map(s => s.squadre?.id || s.id);
-
-  // Stats generali
   const stats = {};
-  sqIds.forEach(id => {
-    stats[id] = { id, pt: 0, g: 0, v: 0, n: 0, p: 0, gf: 0, gs: 0, dr: 0 };
+  squadre.forEach(sq => {
+    const id   = sq.squadre?.id || sq.id;
+    const nome = sq.squadre?.nome || sq.nome || '';
+    const logo = sq.squadre?.logo || sq.logo || null;
+    stats[id]  = { id, nome, logo, pt:0, g:0, v:0, n:0, p:0, gf:0, gs:0, dr:0 };
   });
 
-  partite.filter(p => p.giocata).forEach(p => {
+  const giocate = partite.filter(p => p.giocata);
+  giocate.forEach(p => {
     const hId = p.home?.id || p.home_id;
     const aId = p.away?.id || p.away_id;
     if (!stats[hId] || !stats[aId]) return;
     const gh = p.gol_home, ga = p.gol_away;
     stats[hId].g++; stats[aId].g++;
-    stats[hId].gf += gh; stats[hId].gs += ga; stats[hId].dr += (gh - ga);
-    stats[aId].gf += ga; stats[aId].gs += gh; stats[aId].dr += (ga - gh);
-    if (gh > ga)      { stats[hId].pt += 3; stats[hId].v++; stats[aId].p++; }
-    else if (gh < ga) { stats[aId].pt += 3; stats[aId].v++; stats[hId].p++; }
-    else              { stats[hId].pt += 1; stats[hId].n++; stats[aId].pt += 1; stats[aId].n++; }
+    stats[hId].gf += gh; stats[hId].gs += ga; stats[hId].dr += gh - ga;
+    stats[aId].gf += ga; stats[aId].gs += gh; stats[aId].dr += ga - gh;
+    if (gh > ga)      { stats[hId].pt+=3; stats[hId].v++; stats[aId].p++; }
+    else if (gh < ga) { stats[aId].pt+=3; stats[aId].v++; stats[hId].p++; }
+    else              { stats[hId].pt++; stats[hId].n++; stats[aId].pt++; stats[aId].n++; }
   });
 
-  const arr = Object.values(stats);
+  const lista = Object.values(stats);
 
-  // Sort con spareggio completo
-  arr.sort((a, b) => {
+  lista.sort((a, b) => {
     if (b.pt !== a.pt) return b.pt - a.pt;
-    // Scontro diretto
-    const sd = scontroDisetto([a.id, b.id], partite);
-    const ptA = sd[a.id]?.pt || 0, ptB = sd[b.id]?.pt || 0;
-    if (ptB !== ptA) return ptB - ptA;
-    const drA = sd[a.id]?.dr || 0, drB = sd[b.id]?.dr || 0;
-    if (drB !== drA) return drB - drA;
-    const gfA = sd[a.id]?.gf || 0, gfB = sd[b.id]?.gf || 0;
-    if (gfB !== gfA) return gfB - gfA;
-    // Differenza reti generale
+    const sd = _sdStats([a.id, b.id], giocate);
+    if (sd[b.id].pt !== sd[a.id].pt) return sd[b.id].pt - sd[a.id].pt;
+    if (sd[b.id].dr !== sd[a.id].dr) return sd[b.id].dr - sd[a.id].dr;
+    if (sd[b.id].gf !== sd[a.id].gf) return sd[b.id].gf - sd[a.id].gf;
     if (b.dr !== a.dr) return b.dr - a.dr;
-    // Gol fatti generale
     if (b.gf !== a.gf) return b.gf - a.gf;
-    return 0; // rigori → manuale
+    return 0;
   });
 
-  return arr.map((s, i) => ({
-    ...s,
-    pos: i + 1,
-    nome: (squadre.find(sq => (sq.squadre?.id || sq.id) === s.id)?.squadre?.nome ||
-           squadre.find(sq => (sq.squadre?.id || sq.id) === s.id)?.nome || ''),
-    logo: (squadre.find(sq => (sq.squadre?.id || sq.id) === s.id)?.squadre?.logo ||
-           squadre.find(sq => (sq.squadre?.id || sq.id) === s.id)?.logo || null)
-  }));
+  return lista.map((s, i) => ({ ...s, pos: i + 1 }));
 }
 
-function scontroDisetto(ids, partite) {
+function _sdStats(ids, giocate) {
   const sd = {};
-  ids.forEach(id => { sd[id] = { pt: 0, dr: 0, gf: 0 }; });
-  partite.filter(p => p.giocata).forEach(p => {
+  ids.forEach(id => { sd[id] = { pt:0, dr:0, gf:0 }; });
+  giocate.forEach(p => {
     const hId = p.home?.id || p.home_id;
     const aId = p.away?.id || p.away_id;
     if (!ids.includes(hId) || !ids.includes(aId)) return;
     const gh = p.gol_home, ga = p.gol_away;
-    sd[hId].gf += gh; sd[hId].dr += (gh - ga);
-    sd[aId].gf += ga; sd[aId].dr += (ga - gh);
-    if (gh > ga)      { sd[hId].pt += 3; }
-    else if (gh < ga) { sd[aId].pt += 3; }
-    else              { sd[hId].pt += 1; sd[aId].pt += 1; }
+    sd[hId].gf += gh; sd[hId].dr += gh - ga;
+    sd[aId].gf += ga; sd[aId].dr += ga - gh;
+    if (gh > ga)      { sd[hId].pt+=3; }
+    else if (gh < ga) { sd[aId].pt+=3; }
+    else              { sd[hId].pt++; sd[aId].pt++; }
   });
   return sd;
 }
 
+// Alias per compatibilità con app.js
+function scontroDisetto(ids, partite) { return _sdStats(ids, partite); }
+
 // ============================================================
-//  RISOLVI TRIANGOLARI — cuore del sistema automatico
-//
-//  Chiamata dopo ogni salvataggio risultato.
-//  1. Verifica se TUTTI i gironi della categoria hanno finito
-//  2. Calcola classifica per ogni girone
-//  3. Legge i knockout con note_home/note_away tipo "1° Girone 1"
-//  4. Risolve ogni placeholder con la squadra reale
-//  5. Aggiorna i record su Supabase
+//  RISOLVI TRIANGOLARI AUTOMATICI
 // ============================================================
 async function risolviTriangolariSeCompleti(categoriaId) {
   try {
-    // 1. Recupera tutti i gironi della categoria
     const { data: gironi } = await db.from('gironi').select('id, nome').eq('categoria_id', categoriaId);
     if (!gironi?.length) return false;
 
-    // 2. Per ogni girone verifica che tutte le partite siano giocate
-    let tuttiCompleti = true;
-    const classifichePerGirone = {}; // 'Girone 1' → [{ pos:1, id, nome }, ...]
+    const classifiche = {};
 
-    for (const girone of gironi) {
+    for (const g of gironi) {
       const { data: partite } = await db.from('partite')
-        .select('*, home:squadre!home_id(id,nome), away:squadre!away_id(id,nome)')
-        .eq('girone_id', girone.id);
+        .select('id, home_id, away_id, gol_home, gol_away, giocata')
+        .eq('girone_id', g.id);
+      if (!partite?.length || partite.some(p => !p.giocata)) return false;
 
-      const { data: gSquadre } = await db.from('girone_squadre')
-        .select('*, squadre(id,nome,logo)')
-        .eq('girone_id', girone.id);
+      const { data: gsRows } = await db.from('girone_squadre')
+        .select('squadra_id, squadre(id, nome, logo)')
+        .eq('girone_id', g.id);
 
-      if (!partite?.length) { tuttiCompleti = false; continue; }
+      const squadre = (gsRows||[]).map(r => ({
+        id: r.squadra_id, nome: r.squadre?.nome||'', logo: r.squadre?.logo||null
+      }));
 
-      const totPartite    = partite.length;
-      const partiteGiocate = partite.filter(p => p.giocata).length;
+      // Adatta formato per calcolaClassifica
+      const partiteAdattate = partite.map(p => ({
+        ...p,
+        home: { id: p.home_id },
+        away: { id: p.away_id }
+      }));
 
-      if (partiteGiocate < totPartite) {
-        tuttiCompleti = false;
-        continue;
-      }
-
-      // Girone completo → calcola classifica
-      const classifica = calcolaClassifica(gSquadre, partite);
-      classifichePerGirone[girone.nome] = classifica;
+      const cl = calcolaClassifica(
+        squadre.map(s => ({ id: s.id, nome: s.nome, logo: s.logo })),
+        partiteAdattate
+      );
+      classifiche[g.nome] = cl;
     }
 
-    if (!tuttiCompleti) return false; // ancora partite da giocare
-
-    // 3. Tutti i gironi completati → risolvi i placeholder nei knockout
     const { data: knockouts } = await db.from('knockout')
       .select('id, note_home, note_away, home_id, away_id')
       .eq('categoria_id', categoriaId);
 
-    if (!knockouts?.length) return true;
+    if (!knockouts?.length) return 0;
 
-    let aggiornamenti = 0;
-
+    let aggiornati = 0;
     for (const ko of knockouts) {
-      const newHomeId = risolviPlaceholder(ko.note_home, classifichePerGirone) || ko.home_id;
-      const newAwayId = risolviPlaceholder(ko.note_away, classifichePerGirone) || ko.away_id;
-
-      // Aggiorna solo se cambia qualcosa
-      if (newHomeId !== ko.home_id || newAwayId !== ko.away_id) {
-        await db.from('knockout').update({ home_id: newHomeId, away_id: newAwayId }).eq('id', ko.id);
-        aggiornamenti++;
+      const newH = _risolviNota(ko.note_home, classifiche);
+      const newA = _risolviNota(ko.note_away, classifiche);
+      if ((newH && newH !== ko.home_id) || (newA && newA !== ko.away_id)) {
+        const upd = {};
+        if (newH) upd.home_id = newH;
+        if (newA) upd.away_id = newA;
+        await db.from('knockout').update(upd).eq('id', ko.id);
+        aggiornati++;
       }
     }
-
-    return aggiornamenti; // restituisce numero di accoppiamenti risolti
-
-  } catch (e) {
-    console.error('Errore risolviTriangolari:', e);
+    return aggiornati;
+  } catch(e) {
+    console.error('risolviTriangolariSeCompleti:', e);
     return false;
   }
 }
 
-/**
- * Risolve un placeholder tipo "1° Girone 1" → id squadra reale
- * Formati supportati: "1° Girone 1", "2° Girone 2", "3° Girone A", ecc.
- */
-function risolviPlaceholder(nota, classifichePerGirone) {
+function _risolviNota(nota, classifiche) {
   if (!nota) return null;
-
-  // Pattern: numero° Girone nome
-  const m = nota.match(/(\d+)[°oa°]?\s+Girone\s+(\S+)/i);
+  const m = nota.match(/(\d+)[°º]?\s*Girone\s+(.+)/i);
   if (!m) return null;
-
-  const pos       = parseInt(m[1]);
-  const nomeGirone = `Girone ${m[2]}`;
-  const classifica = classifichePerGirone[nomeGirone];
-
-  if (!classifica) return null;
-
-  const squadra = classifica.find(s => s.pos === pos);
-  return squadra?.id || null;
+  const pos = parseInt(m[1]);
+  const cl  = classifiche[`Girone ${m[2].trim()}`];
+  if (!cl || cl.length < pos) return null;
+  return cl[pos-1]?.id || null;
 }
 
 // ============================================================
-//  REALTIME SUBSCRIPTIONS
-// ============================================================
-function subscribePartite(callback) {
-  return db.channel('partite-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'partite' }, callback)
-    .subscribe();
-}
-function subscribeKnockout(callback) {
-  return db.channel('knockout-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'knockout' }, callback)
-    .subscribe();
-}
-function subscribeTornei(callback) {
-  return db.channel('tornei-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tornei' }, callback)
-    .subscribe();
-}
-
-// ============================================================
-//  REALTIME — funzione generica usata da app.js
+//  REALTIME
 // ============================================================
 function subscribeRealtime(callback) {
-  db.channel('all-changes')
+  db.channel('spe-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'partite' }, callback)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'knockout' }, callback)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tornei' }, callback)
