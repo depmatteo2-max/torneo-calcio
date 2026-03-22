@@ -5,6 +5,22 @@
 //  Le squadre "1° Girone X" vengono risolte a fine gironi
 // ============================================================
 
+// ============================================================
+//  METADATI ROUND — PLATINO/GOLD/SILVER/BRONZO/WHITE
+// ============================================================
+const ROUND_META = {
+  'PLATINO': { order: 0, consolazione: false, emoji: '🥇', desc: '1° classificate' },
+  'GOLD'   : { order: 1, consolazione: false, emoji: '🥈', desc: '2° classificate' },
+  'SILVER' : { order: 2, consolazione: true,  emoji: '🥉', desc: '3° classificate' },
+  'BRONZO' : { order: 3, consolazione: true,  emoji: '🏅', desc: '4° classificate' },
+  'WHITE'  : { order: 4, consolazione: true,  emoji: '⬜', desc: '5° classificate' }
+};
+
+const ROUND_COLORS = {
+  'PLATINO': '#FFD700', 'GOLD': '#FFA500',
+  'SILVER': '#C0C0C0', 'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5'
+};
+
 async function importaExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
