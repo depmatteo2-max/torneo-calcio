@@ -465,3 +465,15 @@ nav { background: var(--bianco); border-bottom: 2px solid var(--bordo); position
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:var(--bordo);border-radius:3px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--testo-xlt); }
+
+/* ── CAT PILL (alias cat-btn) ────────────────────────────── */
+.cat-pill {
+  font-family: var(--font-display);
+  padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; cursor: pointer; white-space: nowrap;
+  background: var(--bianco); border: 1.5px solid var(--bordo); color: var(--testo-lt);
+  transition: all .18s; box-shadow: var(--shadow-sm);
+}
+.cat-pill:hover  { border-color: var(--blu-lt); color: var(--blu); }
+.cat-pill.active { background: var(--blu); border-color: var(--blu); color: #fff; box-shadow: var(--shadow-blu); }
+.cat-bar-inner   { display: flex; gap: 6px; }
