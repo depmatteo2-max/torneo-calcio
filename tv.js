@@ -1,6 +1,5 @@
 // ============================================================
-//  TV.JS — Modalità TV ottimizzata per Chromecast
-//  Font grandi, auto-scorrimento, niente admin
+//  TV.JS — Modalità TV + Chromecast integrato
 // ============================================================
 
 let TV_MODE = false;
@@ -8,17 +7,88 @@ let TV_INTERVAL = null;
 let TV_CAT_INDEX = 0;
 let TV_SECTION_INDEX = 0;
 const TV_SECTIONS = ['classifiche', 'risultati'];
-const TV_SECTION_DURATION = 12000; // 12 secondi per sezione
+const TV_DURATION = 15000; // 15 secondi per sezione
 
 // ============================================================
-//  ATTIVA / DISATTIVA TV MODE
+//  CHROMECAST
+// ============================================================
+let castSession = null;
+let castAvailable = false;
+
+function initChromecast() {
+  // Carica SDK Chromecast
+  const script = document.createElement('script');
+  script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+  document.head.appendChild(script);
+
+  window['__onGCastApiAvailable'] = function(isAvailable) {
+    if (isAvailable) {
+      castAvailable = true;
+      cast.framework.CastContext.getInstance().setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+      });
+      cast.framework.CastContext.getInstance().addEventListener(
+        cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+        (e) => {
+          if (e.sessionState === cast.framework.SessionState.SESSION_STARTED) {
+            castSession = cast.framework.CastContext.getInstance().getCurrentSession();
+            aggiornaBottoneCast();
+            toast('✅ Connesso al Chromecast!');
+          } else if (e.sessionState === cast.framework.SessionState.SESSION_ENDED) {
+            castSession = null;
+            aggiornaBottoneCast();
+          }
+        }
+      );
+      aggiornaBottoneCast();
+    }
+  };
+}
+
+function aggiornaBottoneCast() {
+  const btn = document.getElementById('cast-btn');
+  if (!btn) return;
+  if (castSession) {
+    btn.textContent = '📺 Chromecast ✓';
+    btn.style.background = 'rgba(39,174,96,0.3)';
+    btn.style.borderColor = 'rgba(39,174,96,0.6)';
+  } else {
+    btn.textContent = '📺 Chromecast';
+    btn.style.background = 'rgba(255,255,255,0.15)';
+    btn.style.borderColor = 'rgba(255,255,255,0.3)';
+  }
+}
+
+function avviaChomecast() {
+  if (!castAvailable) {
+    // Chromecast non disponibile — apri in finestra separata ottimizzata per TV
+    const url = window.location.href + '?tv=1';
+    const win = window.open(url, '_blank', 'width=1920,height=1080,menubar=no,toolbar=no,location=no');
+    if (win) {
+      toast('📺 Aperta finestra TV — trasmettila con Chromecast dal browser');
+    } else {
+      alert('📺 Per usare Chromecast:\n\n1. Apri il sito su Chrome\n2. Clicca i 3 puntini in alto a destra\n3. Clicca "Trasmetti"\n4. Seleziona il tuo dispositivo Chromecast\n\nOppure attiva la modalità TV con il pulsante 📺 TV e poi trasmetti.');
+    }
+    return;
+  }
+  if (castSession) {
+    // Disconnetti
+    cast.framework.CastContext.getInstance().endCurrentSession(true);
+    toast('Disconnesso dal Chromecast');
+  } else {
+    // Connetti
+    cast.framework.CastContext.getInstance().requestSession().catch(err => {
+      if (err !== 'cancel') toast('Errore Chromecast: ' + err);
+    });
+  }
+}
+
+// ============================================================
+//  TV MODE
 // ============================================================
 function toggleTVMode() {
-  if (TV_MODE) {
-    exitTVMode();
-  } else {
-    enterTVMode();
-  }
+  TV_MODE ? exitTVMode() : enterTVMode();
 }
 
 function enterTVMode() {
@@ -26,25 +96,14 @@ function enterTVMode() {
   TV_CAT_INDEX = 0;
   TV_SECTION_INDEX = 0;
 
-  // Richiedi fullscreen
   const el = document.documentElement;
-  if (el.requestFullscreen) el.requestFullscreen();
+  if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
   else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 
-  // Aggiungi classe al body
   document.body.classList.add('tv-active');
-
-  // Nascondi elementi non necessari
-  document.getElementById('admin-btn').style.display = 'none';
-  document.getElementById('cat-bar').style.display = 'none';
-
-  // Crea overlay TV
   creaOverlayTV();
-
-  // Avvia auto-scorrimento
   avviaAutoScorrimento();
 
-  // Aggiorna pulsante
   const btn = document.getElementById('tv-btn');
   if (btn) btn.textContent = '✕ Esci TV';
 }
@@ -52,35 +111,21 @@ function enterTVMode() {
 function exitTVMode() {
   TV_MODE = false;
 
-  // Esci dal fullscreen
-  if (document.exitFullscreen) document.exitFullscreen();
+  if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
   else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
 
-  // Rimuovi classe
   document.body.classList.remove('tv-active');
-
-  // Ripristina elementi
-  document.getElementById('admin-btn').style.display = '';
-  document.getElementById('cat-bar').style.display = '';
-
-  // Rimuovi overlay TV
   const overlay = document.getElementById('tv-overlay');
   if (overlay) overlay.remove();
 
-  // Ferma auto-scorrimento
-  if (TV_INTERVAL) clearInterval(TV_INTERVAL);
-  TV_INTERVAL = null;
+  if (TV_INTERVAL) { clearInterval(TV_INTERVAL); TV_INTERVAL = null; }
 
-  // Aggiorna pulsante
   const btn = document.getElementById('tv-btn');
   if (btn) btn.textContent = '📺 TV';
-
-  // Torna alla vista normale
-  renderCurrentSection();
 }
 
 // ============================================================
-//  CREA OVERLAY TV
+//  OVERLAY
 // ============================================================
 function creaOverlayTV() {
   const old = document.getElementById('tv-overlay');
@@ -91,48 +136,52 @@ function creaOverlayTV() {
   overlay.innerHTML = `
     <div id="tv-header">
       <div id="tv-logo-area">
-        <img id="tv-logo-img" src="" alt="SPE" style="display:none;">
+        <img id="tv-logo-img" style="display:none;width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.3);" alt="">
         <div id="tv-titolo">Soccer Pro Experience</div>
       </div>
       <div id="tv-info">
-        <div id="tv-orologio">--:--</div>
         <div id="tv-live-badge">● LIVE</div>
+        <div id="tv-orologio">--:--</div>
       </div>
     </div>
     <div id="tv-content"></div>
     <div id="tv-footer">
       <div id="tv-cat-nome"></div>
       <div id="tv-progress-bar"><div id="tv-progress-inner"></div></div>
-      <button onclick="exitTVMode()" id="tv-exit-btn">✕ Esci</button>
-    </div>
-  `;
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="saltaAvanti()" id="tv-skip-btn">⏭ Avanti</button>
+        <button onclick="exitTVMode()" id="tv-exit-btn">✕ Esci</button>
+      </div>
+    </div>`;
   document.body.appendChild(overlay);
 
-  // Aggiorna orologio ogni secondo
+  // Orologio
   aggiornaOrologioTV();
   setInterval(aggiornaOrologioTV, 1000);
 
-  // Aggiorna logo se disponibile
-  const logo = document.getElementById('header-logo');
-  if (logo && logo.src && !logo.src.includes('undefined')) {
+  // Logo
+  const headerLogo = document.getElementById('header-logo');
+  if (headerLogo && headerLogo.src && headerLogo.src.length > 80) {
     const tvLogo = document.getElementById('tv-logo-img');
-    tvLogo.src = logo.src;
+    tvLogo.src = headerLogo.src;
     tvLogo.style.display = 'block';
   }
 
-  // Aggiorna titolo torneo
+  // Titolo
   const titolo = document.getElementById('header-title');
   if (titolo) document.getElementById('tv-titolo').textContent = titolo.textContent;
 
-  // Renderizza prima schermata
   renderTV();
 }
 
 function aggiornaOrologioTV() {
   const el = document.getElementById('tv-orologio');
   if (!el) return;
-  const now = new Date();
-  el.textContent = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  el.textContent = new Date().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+}
+
+function saltaAvanti() {
+  prossimaSchermataTv();
 }
 
 // ============================================================
@@ -140,13 +189,8 @@ function aggiornaOrologioTV() {
 // ============================================================
 function avviaAutoScorrimento() {
   if (TV_INTERVAL) clearInterval(TV_INTERVAL);
-
-  // Avvia progress bar
   avviaProgressBar();
-
-  TV_INTERVAL = setInterval(() => {
-    prossimaSchermataTv();
-  }, TV_SECTION_DURATION);
+  TV_INTERVAL = setInterval(() => { prossimaSchermataTv(); }, TV_DURATION);
 }
 
 function avviaProgressBar() {
@@ -155,27 +199,25 @@ function avviaProgressBar() {
   bar.style.transition = 'none';
   bar.style.width = '0%';
   setTimeout(() => {
-    bar.style.transition = `width ${TV_SECTION_DURATION}ms linear`;
+    bar.style.transition = `width ${TV_DURATION}ms linear`;
     bar.style.width = '100%';
   }, 50);
 }
 
 function prossimaSchermataTv() {
   if (!STATE.categorie || !STATE.categorie.length) return;
-
   TV_SECTION_INDEX++;
   if (TV_SECTION_INDEX >= TV_SECTIONS.length) {
     TV_SECTION_INDEX = 0;
     TV_CAT_INDEX = (TV_CAT_INDEX + 1) % STATE.categorie.length;
   }
-
   STATE.activeCat = STATE.categorie[TV_CAT_INDEX].id;
   renderTV();
   avviaProgressBar();
 }
 
 // ============================================================
-//  RENDER TV
+//  RENDER
 // ============================================================
 async function renderTV() {
   if (!TV_MODE) return;
@@ -183,18 +225,16 @@ async function renderTV() {
   const cat = STATE.categorie[TV_CAT_INDEX];
   if (!cat) return;
 
-  // Aggiorna nome categoria nel footer
-  const catNome = document.getElementById('tv-cat-nome');
-  if (catNome) {
-    const sectionNome = section === 'classifiche' ? '📊 Classifica' : '⚽ Risultati';
-    catNome.textContent = `${sectionNome} — ${cat.nome}`;
+  const catNomeEl = document.getElementById('tv-cat-nome');
+  if (catNomeEl) {
+    const icon = section === 'classifiche' ? '📊' : '⚽';
+    catNomeEl.textContent = `${icon} ${section === 'classifiche' ? 'Classifica' : 'Risultati'} — ${cat.nome}`;
   }
 
   const content = document.getElementById('tv-content');
   if (!content) return;
 
   content.style.opacity = '0';
-  content.style.transform = 'translateY(10px)';
 
   if (section === 'classifiche') {
     await renderTVClassifiche(cat, content);
@@ -202,375 +242,280 @@ async function renderTV() {
     await renderTVRisultati(cat, content);
   }
 
-  // Animazione entrata
   setTimeout(() => {
-    content.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    content.style.transition = 'opacity 0.4s ease';
     content.style.opacity = '1';
-    content.style.transform = 'translateY(0)';
   }, 50);
 }
 
 async function renderTVClassifiche(cat, content) {
   const gironi = await getGironiWithData(cat.id);
-  let html = '';
+  let html = '<div class="tv-gironi-grid">';
 
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
     const played = g.partite.filter(p => p.giocata).length;
-
-    html += `<div class="tv-girone">
-      <div class="tv-girone-title">${g.nome} <span class="tv-badge">${played}/${g.partite.length}</span></div>
+    html += `<div class="tv-block">
+      <div class="tv-block-title">${g.nome} <span class="tv-badge">${played}/${g.partite.length} partite</span></div>
       <table class="tv-table">
         <thead><tr>
-          <th style="width:30px;"></th>
-          <th style="text-align:left;">Squadra</th>
+          <th style="width:24px;"></th>
+          <th style="text-align:left;min-width:160px;">Squadra</th>
           <th>G</th><th>V</th><th>P</th><th>S</th>
-          <th style="color:#4ade80;">GF</th>
-          <th style="color:#f87171;">GS</th>
+          <th class="tv-gf">GF</th>
+          <th class="tv-gs">GS</th>
           <th>GD</th>
-          <th style="color:#FFD700;">Pt</th>
-        </tr></thead>
-        <tbody>`;
-
+          <th class="tv-pt">Pt</th>
+        </tr></thead><tbody>`;
     cl.forEach((row, idx) => {
       const q = idx < (cat.qualificate || 2);
       const diff = row.gf - row.gs;
-      html += `<tr class="${q ? 'tv-qualifies' : ''}">
-        <td>${q ? '<span class="tv-q-dot"></span>' : ''}</td>
-        <td style="text-align:left;font-weight:${q?'700':'400'}">
-          ${logoHTML(row.sq, 'sm')} ${row.sq.nome}
+      html += `<tr class="${q ? 'tv-q' : ''}">
+        <td>${q ? '<span class="tv-qdot"></span>' : ''}</td>
+        <td class="tv-team-cell">
+          ${logoHTML(row.sq,'sm')} <span>${row.sq.nome}</span>
         </td>
         <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-        <td style="color:#4ade80;font-weight:600;">${row.gf}</td>
-        <td style="color:#f87171;font-weight:600;">${row.gs}</td>
-        <td style="color:${diff>0?'#4ade80':diff<0?'#f87171':'#aaa'}">${diff>0?'+':''}${diff}</td>
-        <td style="color:#FFD700;font-weight:800;">${row.pts}</td>
+        <td class="tv-gf">${row.gf}</td>
+        <td class="tv-gs">${row.gs}</td>
+        <td class="${diff>0?'tv-pos':diff<0?'tv-neg':''}">${diff>0?'+':''}${diff}</td>
+        <td class="tv-pt">${row.pts}</td>
       </tr>`;
     });
-
     html += `</tbody></table></div>`;
   }
 
+  html += '</div>';
   content.innerHTML = html || '<div class="tv-empty">Nessun dato disponibile</div>';
 }
 
 async function renderTVRisultati(cat, content) {
   const gironi = await getGironiWithData(cat.id);
-  let html = '';
+  let html = '<div class="tv-risultati-grid">';
 
   for (const g of gironi) {
     const giocate = g.partite.filter(p => p.giocata);
-    const dafar = g.partite.filter(p => !p.giocata).slice(0, 4);
+    const dafar   = g.partite.filter(p => !p.giocata);
 
-    if (giocate.length) {
-      html += `<div class="tv-girone-title">${g.nome} — Risultati</div>`;
-      html += `<div class="tv-risultati">`;
-      for (const p of giocate.slice(-6)) {
-        const w1 = p.gol_home > p.gol_away, w2 = p.gol_away > p.gol_home;
-        html += `<div class="tv-partita">
-          <div class="tv-team ${w1?'tv-winner':''}">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
-          <div class="tv-score">${p.gol_home} — ${p.gol_away}</div>
-          <div class="tv-team right ${w2?'tv-winner':''}">${p.away?.nome||'?'} ${logoHTML(p.away,'sm')}</div>
-        </div>`;
-      }
-      html += `</div>`;
+    html += `<div class="tv-block">`;
+    html += `<div class="tv-block-title">${g.nome}</div>`;
+
+    // Tutte le partite giocate
+    for (const p of giocate) {
+      const w1 = p.gol_home > p.gol_away;
+      const w2 = p.gol_away > p.gol_home;
+      const orario = p.orario ? `<span class="tv-orario">${p.orario}${p.campo ? ' · '+p.campo : ''}</span>` : '';
+      html += `<div class="tv-match tv-played">
+        ${orario}
+        <div class="tv-match-row">
+          <div class="tv-mteam ${w1?'tv-win':''}">${logoHTML(p.home,'sm')} <span>${p.home?.nome||'?'}</span></div>
+          <div class="tv-mscore">${p.gol_home} — ${p.gol_away}</div>
+          <div class="tv-mteam right ${w2?'tv-win':''}"><span>${p.away?.nome||'?'}</span> ${logoHTML(p.away,'sm')}</div>
+        </div>
+      </div>`;
     }
 
-    if (dafar.length) {
-      html += `<div class="tv-girone-title" style="margin-top:16px;">${g.nome} — Prossime partite</div>`;
-      html += `<div class="tv-risultati">`;
-      for (const p of dafar) {
-        html += `<div class="tv-partita tv-pending">
-          <div class="tv-team">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
-          <div class="tv-score tv-vs">${p.orario||'vs'}</div>
-          <div class="tv-team right">${p.away?.nome||'?'} ${logoHTML(p.away,'sm')}</div>
-        </div>`;
-      }
-      html += `</div>`;
+    // Partite da giocare
+    for (const p of dafar) {
+      const orario = p.orario ? `<span class="tv-orario">${p.orario}${p.campo ? ' · '+p.campo : ''}</span>` : '';
+      html += `<div class="tv-match tv-upcoming">
+        ${orario}
+        <div class="tv-match-row">
+          <div class="tv-mteam">${logoHTML(p.home,'sm')} <span>${p.home?.nome||'?'}</span></div>
+          <div class="tv-mscore tv-vs">vs</div>
+          <div class="tv-mteam right"><span>${p.away?.nome||'?'}</span> ${logoHTML(p.away,'sm')}</div>
+        </div>
+      </div>`;
     }
+
+    if (!giocate.length && !dafar.length) {
+      html += `<div class="tv-empty">Nessuna partita</div>`;
+    }
+
+    html += `</div>`;
   }
 
-  content.innerHTML = html || '<div class="tv-empty">Nessun risultato disponibile</div>';
+  html += '</div>';
+  content.innerHTML = html;
 }
 
 // ============================================================
-//  AGGIUNGI PULSANTE TV ALL'HEADER
+//  PULSANTI HEADER — aggiunti al caricamento
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   const headerRight = document.querySelector('.header-right');
-  if (headerRight) {
-    const btn = document.createElement('button');
-    btn.id = 'tv-btn';
-    btn.textContent = '📺 TV';
-    btn.className = 'tv-toggle-btn';
-    btn.onclick = toggleTVMode;
-    // Inserisci prima del pulsante Admin
-    const adminBtn = document.getElementById('admin-btn');
-    headerRight.insertBefore(btn, adminBtn);
-  }
+  if (!headerRight) return;
+  const adminBtn = document.getElementById('admin-btn');
+
+  // Pulsante Chromecast
+  const castBtn = document.createElement('button');
+  castBtn.id = 'cast-btn';
+  castBtn.textContent = '📺 Chromecast';
+  castBtn.className = 'tv-toggle-btn';
+  castBtn.onclick = avviaChomecast;
+  headerRight.insertBefore(castBtn, adminBtn);
+
+  // Inizializza Chromecast SDK
+  initChromecast();
 });
 
 // ============================================================
-//  CSS TV MODE
+//  CSS
 // ============================================================
 const tvCSS = `
-/* PULSANTE TV */
 .tv-toggle-btn {
   background: rgba(255,255,255,0.15);
   border: 1px solid rgba(255,255,255,0.3);
   color: white;
-  padding: 5px 12px;
+  padding: 5px 11px;
   border-radius: 20px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
-  margin-right: 6px;
+  margin-right: 5px;
+  transition: background 0.15s;
 }
-.tv-toggle-btn:hover { background: rgba(255,255,255,0.25); }
+.tv-toggle-btn:hover { background: rgba(255,255,255,0.28); }
 
-/* OVERLAY TV FULLSCREEN */
 #tv-overlay {
   position: fixed;
   inset: 0;
-  background: #0a0e1a;
+  background: #060b18;
   z-index: 99998;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   font-family: inherit;
+  overflow: hidden;
 }
 
-/* HEADER TV */
 #tv-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 32px;
+  padding: 10px 28px;
   background: linear-gradient(135deg, #0d1b3e 0%, #1a3a6e 100%);
   border-bottom: 2px solid #2563eb;
   flex-shrink: 0;
 }
-#tv-logo-area {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-#tv-logo-img {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255,255,255,0.3);
-}
-#tv-titolo {
-  font-size: 22px;
-  font-weight: 800;
-  color: white;
-  letter-spacing: .02em;
-}
-#tv-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-#tv-orologio {
-  font-size: 28px;
-  font-weight: 900;
-  color: white;
-  font-variant-numeric: tabular-nums;
-}
+#tv-logo-area { display:flex; align-items:center; gap:12px; }
+#tv-titolo { font-size:20px; font-weight:800; color:white; }
+#tv-info { display:flex; align-items:center; gap:14px; }
+#tv-orologio { font-size:26px; font-weight:900; color:white; font-variant-numeric:tabular-nums; }
 #tv-live-badge {
-  background: #ef4444;
-  color: white;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 99px;
-  letter-spacing: .06em;
-  animation: livePulse 2s ease infinite;
+  background:#ef4444; color:white; font-size:11px; font-weight:700;
+  padding:3px 10px; border-radius:99px; letter-spacing:.06em;
+  animation: tvLivePulse 1.8s ease infinite;
 }
-@keyframes livePulse {
-  0%,100% { opacity:1; }
-  50% { opacity:0.6; }
-}
+@keyframes tvLivePulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
-/* CONTENUTO TV */
 #tv-content {
   flex: 1;
-  overflow: hidden;
-  padding: 16px 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 28px;
+  scrollbar-width: none;
 }
+#tv-content::-webkit-scrollbar { display: none; }
 
-/* FOOTER TV */
 #tv-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 32px;
-  background: rgba(0,0,0,0.4);
+  padding: 7px 28px;
+  background: rgba(0,0,0,0.6);
   flex-shrink: 0;
+  gap: 14px;
 }
-#tv-cat-nome {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.7);
-  letter-spacing: .04em;
+#tv-cat-nome { font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); white-space:nowrap; }
+#tv-progress-bar { flex:1; height:3px; background:rgba(255,255,255,0.1); border-radius:99px; overflow:hidden; }
+#tv-progress-inner { height:100%; background:#2563eb; width:0%; }
+#tv-skip-btn, #tv-exit-btn {
+  background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);
+  color:rgba(255,255,255,0.5); padding:4px 10px; border-radius:8px;
+  cursor:pointer; font-size:11px; font-family:inherit; white-space:nowrap;
 }
-#tv-progress-bar {
-  flex: 1;
-  height: 3px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 99px;
-  margin: 0 20px;
-  overflow: hidden;
-}
-#tv-progress-inner {
-  height: 100%;
-  background: #2563eb;
-  border-radius: 99px;
-  width: 0%;
-}
-#tv-exit-btn {
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.2);
-  color: rgba(255,255,255,0.6);
-  padding: 4px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: inherit;
-}
-#tv-exit-btn:hover { background: rgba(255,255,255,0.2); color: white; }
+#tv-skip-btn:hover, #tv-exit-btn:hover { background:rgba(255,255,255,0.18); color:white; }
 
-/* GIRONE TITLE */
-.tv-girone {
-  flex: 1;
-  overflow: hidden;
+/* GRIGLIA GIRONI — affiancati se più gironi */
+.tv-gironi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 14px;
 }
-.tv-girone-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #60a5fa;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.tv-risultati-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 14px;
+}
+
+.tv-block { overflow: hidden; }
+.tv-block-title {
+  font-size:14px; font-weight:700; color:#60a5fa;
+  text-transform:uppercase; letter-spacing:.05em;
+  margin-bottom:6px; display:flex; align-items:center; gap:8px;
 }
 .tv-badge {
-  font-size: 11px;
-  background: rgba(96,165,250,0.15);
-  color: #60a5fa;
-  padding: 2px 8px;
-  border-radius: 99px;
-  font-weight: 600;
+  font-size:11px; background:rgba(96,165,250,0.15); color:#60a5fa;
+  padding:2px 8px; border-radius:99px; font-weight:600; text-transform:none;
 }
 
-/* TABELLA TV */
-.tv-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 18px;
-}
+/* TABELLA CLASSIFICA */
+.tv-table { width:100%; border-collapse:collapse; font-size:16px; }
 .tv-table th {
-  color: rgba(255,255,255,0.4);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  padding: 6px 12px;
-  text-align: center;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color:rgba(255,255,255,0.3); font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.05em;
+  padding:4px 8px; text-align:center;
+  border-bottom:1px solid rgba(255,255,255,0.07);
 }
 .tv-table td {
-  padding: 10px 12px;
-  text-align: center;
-  color: rgba(255,255,255,0.85);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  font-size: 17px;
+  padding:8px 8px; text-align:center;
+  color:rgba(255,255,255,0.8);
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  font-size:16px;
 }
-.tv-table tr.tv-qualifies td {
-  background: rgba(37,99,235,0.08);
-}
-.tv-table tr:hover td { background: rgba(255,255,255,0.03); }
-.tv-q-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22c55e;
-}
+.tv-table tr.tv-q td { background:rgba(37,99,235,0.1); }
+.tv-qdot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e; }
+.tv-team-cell { display:flex; align-items:center; gap:6px; text-align:left !important; }
+.tv-gf { color:#4ade80 !important; font-weight:600; }
+.tv-gs { color:#f87171 !important; font-weight:600; }
+.tv-pt { color:#FFD700 !important; font-weight:800; font-size:18px !important; }
+.tv-pos { color:#4ade80; }
+.tv-neg { color:#f87171; }
 
-/* RISULTATI TV */
-.tv-risultati {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* PARTITE RISULTATI */
+.tv-match {
+  border-radius:8px; margin-bottom:6px; overflow:hidden;
 }
-.tv-partita {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.04);
-  border-radius: 10px;
-  padding: 10px 16px;
-  gap: 12px;
+.tv-match.tv-played { background:rgba(255,255,255,0.05); }
+.tv-match.tv-upcoming { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); }
+.tv-orario {
+  display:block; font-size:11px; color:rgba(255,255,255,0.3);
+  padding:4px 12px 0; text-align:center;
 }
-.tv-partita.tv-pending {
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.06);
+.tv-match-row {
+  display:flex; align-items:center; gap:10px;
+  padding:8px 12px;
 }
-.tv-team {
-  flex: 1;
-  font-size: 18px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.85);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.tv-mteam {
+  flex:1; font-size:17px; font-weight:600; color:rgba(255,255,255,0.8);
+  display:flex; align-items:center; gap:6px;
+  white-space: nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.tv-team.right {
-  flex-direction: row-reverse;
-  text-align: right;
+.tv-mteam.right { flex-direction:row-reverse; text-align:right; }
+.tv-mteam.tv-win { color:#22c55e; font-weight:800; }
+.tv-mscore {
+  font-size:24px; font-weight:900; color:white;
+  min-width:80px; text-align:center;
+  background:rgba(37,99,235,0.3); border-radius:7px; padding:3px 10px;
+  border:1px solid rgba(37,99,235,0.5); flex-shrink:0;
 }
-.tv-team.tv-winner {
-  color: #22c55e;
-  font-weight: 800;
+.tv-mscore.tv-vs {
+  font-size:13px; color:rgba(255,255,255,0.3);
+  background:transparent; border-color:rgba(255,255,255,0.08);
 }
-.tv-score {
-  font-size: 28px;
-  font-weight: 900;
-  color: white;
-  min-width: 90px;
-  text-align: center;
-  background: rgba(37,99,235,0.3);
-  border-radius: 8px;
-  padding: 4px 12px;
-  border: 1px solid rgba(37,99,235,0.5);
-}
-.tv-score.tv-vs {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.4);
-  background: transparent;
-  border-color: rgba(255,255,255,0.1);
-}
-.tv-empty {
-  color: rgba(255,255,255,0.3);
-  font-size: 18px;
-  text-align: center;
-  margin-top: 40px;
-}
+.tv-empty { color:rgba(255,255,255,0.2); font-size:14px; text-align:center; padding:16px 0; }
 
-/* Nascondi header/nav normali in TV mode */
-body.tv-active > #app > #main-app > header { display: none !important; }
-body.tv-active > #app > #main-app > nav { display: none !important; }
-body.tv-active > #app > #main-app > .torneo-bar { display: none !important; }
-body.tv-active > #app > #main-app > .cat-bar { display: none !important; }
-body.tv-active > #app > #main-app > main { display: none !important; }
+/* Nascondi sito quando TV attivo */
+body.tv-active #app { visibility:hidden; }
 `;
 
 const tvStyle = document.createElement('style');
