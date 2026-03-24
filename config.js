@@ -4,7 +4,7 @@
 // ============================================================
 const CONFIG = {
   SUPABASE_URL: 'https://hvakazxnvooffskvoyyl.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2YWthenhudm9vZmZza3ZveXlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE3MDI5NzgsImV4cCI6MjA1NzI3ODk3OH0.dwGf9F8DqUUTXVBpk2Ja7HW87le0TscBkRccGEsVGPE',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2YWthenhudm9vZmZza3ZveXlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDQ0NDYsImV4cCI6MjA4OTQyMDQ0Nn0.LfEYuBmb-4f2TuuY1rUGn1SSebMxYN8TNWL4FrfBUZw',
 
   USERS: [
     // ADMIN COMPLETI
