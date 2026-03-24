@@ -1,404 +1,380 @@
 // ============================================================
-//  TV.JS — Soccer Pro Experience
-//  Modalità TV: visualizzazione fullscreen per schermi grandi
+//  TV.JS — Modalità TV ottimizzata per Chromecast
 // ============================================================
 
-let TV_SECTION  = 'classifiche';
-let TV_CAT      = null;
-let TV_AUTO     = false;
-let TV_TIMER    = null;
-let TV_CLOCK    = null;
-let TV_PROGRESS = 0;
-const TV_AUTO_INTERVAL = 15000; // 15 secondi per pagina
+let TV_MODE = false;
+let TV_INTERVAL = null;
+let TV_CAT_INDEX = 0;
+let TV_SECTION_INDEX = 0;
+const TV_SECTIONS = ['classifiche', 'risultati'];
+const TV_DURATION = 12000;
 
-// ── APRI / CHIUDI ────────────────────────────────────────────
-function openTVMode() {
-  document.getElementById('tv-mode').classList.add('active');
-  document.body.style.overflow = 'hidden';
-  _tvSyncLogo();
-  _tvStartClock();
-  _tvRenderCatBar();
-  tvShowSection('classifiche', document.querySelector('.tv-nav-btn'));
+// ============================================================
+//  ATTIVA / DISATTIVA
+// ============================================================
+function toggleTVMode() {
+  TV_MODE ? exitTVMode() : enterTVMode();
 }
 
-function closeTVMode() {
-  document.getElementById('tv-mode').classList.remove('active');
-  document.body.style.overflow = '';
-  _tvStopClock();
-  _tvStopAuto();
+function enterTVMode() {
+  TV_MODE = true;
+  TV_CAT_INDEX = 0;
+  TV_SECTION_INDEX = 0;
+
+  // Fullscreen
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+
+  document.body.classList.add('tv-active');
+
+  // Crea overlay
+  creaOverlayTV();
+  avviaAutoScorrimento();
+
+  const btn = document.getElementById('tv-btn');
+  if (btn) btn.textContent = '✕ Esci TV';
 }
 
-// ── OROLOGIO ─────────────────────────────────────────────────
-function _tvStartClock() {
-  _tvTickClock();
-  TV_CLOCK = setInterval(_tvTickClock, 1000);
-}
-function _tvStopClock() {
-  if (TV_CLOCK) { clearInterval(TV_CLOCK); TV_CLOCK = null; }
-}
-function _tvTickClock() {
-  const now  = new Date();
-  const hh   = String(now.getHours()).padStart(2,'0');
-  const mm   = String(now.getMinutes()).padStart(2,'0');
-  document.getElementById('tv-clock').textContent = `${hh}:${mm}`;
+function exitTVMode() {
+  TV_MODE = false;
 
-  const giorni  = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-  const mesi    = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-  document.getElementById('tv-date-str').textContent =
-    `${giorni[now.getDay()]} ${now.getDate()} ${mesi[now.getMonth()]} ${now.getFullYear()}`;
+  if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+
+  document.body.classList.remove('tv-active');
+
+  const overlay = document.getElementById('tv-overlay');
+  if (overlay) overlay.remove();
+
+  if (TV_INTERVAL) { clearInterval(TV_INTERVAL); TV_INTERVAL = null; }
+
+  const btn = document.getElementById('tv-btn');
+  if (btn) btn.textContent = '📺 TV';
 }
 
-// ── LOGO / TITOLO ────────────────────────────────────────────
-function _tvSyncLogo() {
-  const src = document.getElementById('header-logo')?.src;
-  if (src) document.getElementById('tv-logo').src = src;
-  const title = document.getElementById('header-title')?.textContent;
-  if (title) document.getElementById('tv-title').textContent = title;
-  if (STATE?.activeTorneo) {
-    const t = STATE.tornei?.find(x => x.id === STATE.activeTorneo);
-    if (t) {
-      document.getElementById('tv-subtitle').textContent = `● ${t.nome}${t.data ? ' — '+t.data : ''}`;
-    }
+// ============================================================
+//  OVERLAY
+// ============================================================
+function creaOverlayTV() {
+  const old = document.getElementById('tv-overlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tv-overlay';
+  overlay.innerHTML = `
+    <div id="tv-header">
+      <div id="tv-logo-area">
+        <img id="tv-logo-img" style="display:none;width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.3);" alt="SPE">
+        <div id="tv-titolo">Soccer Pro Experience</div>
+      </div>
+      <div id="tv-info">
+        <div id="tv-live-badge">● LIVE</div>
+        <div id="tv-orologio">--:--</div>
+      </div>
+    </div>
+    <div id="tv-content"></div>
+    <div id="tv-footer">
+      <div id="tv-cat-nome"></div>
+      <div id="tv-progress-bar"><div id="tv-progress-inner"></div></div>
+      <button onclick="exitTVMode()" id="tv-exit-btn">✕ Esci</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // Orologio
+  aggiornaOrologioTV();
+  setInterval(aggiornaOrologioTV, 1000);
+
+  // Logo dall'header
+  const headerLogo = document.getElementById('header-logo');
+  if (headerLogo && headerLogo.src && headerLogo.src.length > 50) {
+    const tvLogo = document.getElementById('tv-logo-img');
+    tvLogo.src = headerLogo.src;
+    tvLogo.style.display = 'block';
   }
+
+  // Titolo torneo
+  const titolo = document.getElementById('header-title');
+  if (titolo) document.getElementById('tv-titolo').textContent = titolo.textContent;
+
+  renderTV();
 }
 
-// ── CAT BAR ──────────────────────────────────────────────────
-function _tvRenderCatBar() {
-  const bar = document.getElementById('tv-cat-bar');
-  if (!STATE?.categorie?.length) { bar.style.display='none'; return; }
-  bar.style.display='flex';
-  bar.innerHTML = STATE.categorie.map((c, i) => `
-    <button class="tv-cat-btn${i===0?' active':''}" onclick="tvSelectCat(${c.id}, this)">
-      ${c.nome}
-    </button>
-  `).join('');
-  TV_CAT = STATE.categorie[0]?.id || null;
+function aggiornaOrologioTV() {
+  const el = document.getElementById('tv-orologio');
+  if (!el) return;
+  el.textContent = new Date().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
 }
 
-function tvSelectCat(id, btn) {
-  TV_CAT = id;
-  document.querySelectorAll('.tv-cat-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  _tvRender();
+// ============================================================
+//  AUTO-SCORRIMENTO
+// ============================================================
+function avviaAutoScorrimento() {
+  if (TV_INTERVAL) clearInterval(TV_INTERVAL);
+  avviaProgressBar();
+  TV_INTERVAL = setInterval(() => { prossimaSchermataTv(); }, TV_DURATION);
 }
 
-// ── SEZIONE ──────────────────────────────────────────────────
-function tvShowSection(section, btn) {
-  TV_SECTION = section;
-  document.querySelectorAll('.tv-nav-btn').forEach(b => {
-    if (!b.id) b.classList.remove('active');
-  });
-  if (btn && !btn.id) btn.classList.add('active');
-  _tvRender();
+function avviaProgressBar() {
+  const bar = document.getElementById('tv-progress-inner');
+  if (!bar) return;
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  setTimeout(() => {
+    bar.style.transition = `width ${TV_DURATION}ms linear`;
+    bar.style.width = '100%';
+  }, 50);
 }
 
-async function _tvRender() {
+function prossimaSchermataTv() {
+  if (!STATE.categorie || !STATE.categorie.length) return;
+  TV_SECTION_INDEX++;
+  if (TV_SECTION_INDEX >= TV_SECTIONS.length) {
+    TV_SECTION_INDEX = 0;
+    TV_CAT_INDEX = (TV_CAT_INDEX + 1) % STATE.categorie.length;
+  }
+  STATE.activeCat = STATE.categorie[TV_CAT_INDEX].id;
+  renderTV();
+  avviaProgressBar();
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+async function renderTV() {
+  if (!TV_MODE) return;
+  const section = TV_SECTIONS[TV_SECTION_INDEX];
+  const cat = STATE.categorie[TV_CAT_INDEX];
+  if (!cat) return;
+
+  const catNomeEl = document.getElementById('tv-cat-nome');
+  if (catNomeEl) {
+    catNomeEl.textContent = `${section === 'classifiche' ? '📊 Classifica' : '⚽ Risultati'} — ${cat.nome}`;
+  }
+
   const content = document.getElementById('tv-content');
-  content.innerHTML = `<div class="empty-state" style="padding:80px;font-size:18px;">⏳ Caricamento...</div>`;
+  if (!content) return;
 
-  if (!STATE?.activeTorneo) {
-    content.innerHTML = `<div class="empty-state" style="padding:80px;"><div class="empty-state-icon">🏟</div>Nessun torneo attivo</div>`;
-    return;
+  content.style.opacity = '0';
+  content.style.transform = 'translateY(8px)';
+
+  if (section === 'classifiche') {
+    await renderTVClassifiche(cat, content);
+  } else {
+    await renderTVRisultati(cat, content);
   }
 
-  _tvSyncLogo();
-
-  if (TV_SECTION === 'classifiche') await _tvRenderClassifiche(content);
-  else if (TV_SECTION === 'risultati')   await _tvRenderRisultati(content);
-  else if (TV_SECTION === 'tabellone')   await _tvRenderTabellone(content);
+  setTimeout(() => {
+    content.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+    content.style.opacity = '1';
+    content.style.transform = 'translateY(0)';
+  }, 50);
 }
 
-// ── CLASSIFICHE ───────────────────────────────────────────────
-async function _tvRenderClassifiche(content) {
-  try {
-    const catId = TV_CAT || STATE.categorie?.[0]?.id;
-    if (!catId) { content.innerHTML = `<div class="empty-state" style="padding:80px;">Nessuna categoria</div>`; return; }
-
-    const cat = STATE.categorie.find(c => c.id === catId);
-    const gironi = await getGironiWithData(catId);
-
-    if (!gironi.length) {
-      content.innerHTML = `<div class="empty-state" style="padding:80px;"><div class="empty-state-icon">📋</div>Nessun girone configurato</div>`;
-      return;
-    }
-
-    let html = `<div class="tv-gironi-grid">`;
-    for (const g of gironi) {
-      const cl = calcolaClassifica(g.squadre, g.partite);
-      const q  = cat?.qualificate || 2;
-      html += `
-        <div class="tv-girone-card">
-          <div class="tv-girone-title">${g.nome}</div>
-          <table class="tv-standings-table">
-            <thead>
-              <tr>
-                <th style="width:36px;">#</th>
-                <th style="width:36px;"></th>
-                <th>Squadra</th>
-                <th>G</th><th>V</th><th>P</th><th>S</th>
-                <th>GF</th><th>GS</th><th>DR</th>
-                <th>Pt</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${cl.map((r,i) => `
-                <tr class="${i < q ? 'qualifies' : ''}">
-                  <td><span class="pos-num ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
-                  <td>${_tvLogoCell(r)}</td>
-                  <td>${r.nome}</td>
-                  <td>${r.g}</td><td>${r.v}</td><td>${r.n}</td><td>${r.p}</td>
-                  <td>${r.gf}</td><td>${r.gs}</td>
-                  <td class="${r.dr>0?'diff-pos':r.dr<0?'diff-neg':''}">${r.dr>0?'+':''}${r.dr}</td>
-                  <td><span class="tv-pts">${r.pt}</span></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-    html += `</div>`;
-    content.innerHTML = html;
-  } catch(e) {
-    console.error(e);
-    content.innerHTML = `<div class="empty-state">Errore nel caricamento</div>`;
-  }
-}
-
-// ── RISULTATI ─────────────────────────────────────────────────
-async function _tvRenderRisultati(content) {
-  try {
-    const catId = TV_CAT || STATE.categorie?.[0]?.id;
-    if (!catId) return;
-    const cat = STATE.categorie.find(c => c.id === catId);
-    const gironi = await getGironiWithData(catId);
-
-    const allPartite = [];
-    for (const g of gironi) {
-      for (const p of g.partite) {
-        allPartite.push({ ...p, girone: g.nome });
-      }
-    }
-
-    if (!allPartite.length) {
-      content.innerHTML = `<div class="empty-state" style="padding:80px;"><div class="empty-state-icon">⚽</div>Nessuna partita</div>`;
-      return;
-    }
-
-    // Ordina: giocate prima, poi da giocare
-    const played  = allPartite.filter(p => p.giocata);
-    const pending = allPartite.filter(p => !p.giocata);
-    const sorted  = [...played, ...pending];
-
-    let html = `<div class="tv-results-grid">`;
-    for (const p of sorted) {
-      const hLogo = _tvLogoLg(p.home);
-      const aLogo = _tvLogoLg(p.away);
-      html += `
-        <div class="tv-match-card ${!p.giocata?'pending-match':''}">
-          <div class="tv-match-header">
-            <span>${p.girone}</span>
-            <span>${p.orario ? `⏰ ${p.orario}` : ''}${p.campo ? ` · ${p.campo}` : ''}</span>
-          </div>
-          <div class="tv-match-body">
-            <div class="tv-match-team">
-              ${hLogo}
-              <div class="tv-team-name">${p.home?.nome || '?'}</div>
-            </div>
-            <div class="tv-score-box">
-              ${p.giocata
-                ? `<span class="tv-score">${p.gol_home}</span>
-                   <span class="tv-score-sep">–</span>
-                   <span class="tv-score">${p.gol_away}</span>`
-                : `<span class="tv-score-pending">vs</span>`
-              }
-            </div>
-            <div class="tv-match-team">
-              ${aLogo}
-              <div class="tv-team-name">${p.away?.nome || '?'}</div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    html += `</div>`;
-    content.innerHTML = html;
-  } catch(e) {
-    console.error(e);
-    content.innerHTML = `<div class="empty-state">Errore nel caricamento</div>`;
-  }
-}
-
-// ── TABELLONE ─────────────────────────────────────────────────
-async function _tvRenderTabellone(content) {
-  try {
-    const catId = TV_CAT || STATE.categorie?.[0]?.id;
-    if (!catId) return;
-    const ko = await dbGetKnockout(catId);
-    const squadre = await dbGetSquadre(STATE.activeTorneo);
-    const sqMap = {}; squadre.forEach(s => sqMap[s.id] = s);
-
-    if (!ko.length) {
-      content.innerHTML = `<div class="empty-state" style="padding:80px;"><div class="empty-state-icon">🏆</div>Tabellone non ancora generato</div>`;
-      return;
-    }
-
-    const rounds = {};
-    ko.filter(m => !m.is_consolazione).forEach(m => {
-      if (!rounds[m.round_name]) rounds[m.round_name] = [];
-      rounds[m.round_name].push(m);
+async function renderTVClassifiche(cat, content) {
+  const gironi = await getGironiWithData(cat.id);
+  let html = '';
+  for (const g of gironi) {
+    const cl = calcGironeClassifica(g);
+    const played = g.partite.filter(p => p.giocata).length;
+    html += `<div class="tv-block">
+      <div class="tv-block-title">${g.nome} <span class="tv-badge">${played}/${g.partite.length}</span></div>
+      <table class="tv-table">
+        <thead><tr>
+          <th></th><th style="text-align:left;">Squadra</th>
+          <th>G</th><th>V</th><th>P</th><th>S</th>
+          <th style="color:#4ade80;">GF</th>
+          <th style="color:#f87171;">GS</th>
+          <th>GD</th>
+          <th style="color:#FFD700;">Pt</th>
+        </tr></thead><tbody>`;
+    cl.forEach((row, idx) => {
+      const q = idx < (cat.qualificate || 2);
+      const diff = row.gf - row.gs;
+      html += `<tr class="${q ? 'tv-q' : ''}">
+        <td>${q ? '<span class="tv-qdot"></span>' : ''}</td>
+        <td style="text-align:left;font-weight:${q?'700':'400'}">
+          ${logoHTML(row.sq,'sm')} ${row.sq.nome}
+        </td>
+        <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
+        <td style="color:#4ade80;font-weight:600;">${row.gf}</td>
+        <td style="color:#f87171;font-weight:600;">${row.gs}</td>
+        <td style="color:${diff>0?'#4ade80':diff<0?'#f87171':'#888'}">${diff>0?'+':''}${diff}</td>
+        <td style="color:#FFD700;font-weight:800;font-size:20px;">${row.pts}</td>
+      </tr>`;
     });
+    html += `</tbody></table></div>`;
+  }
+  content.innerHTML = html || '<div class="tv-empty">Nessun dato</div>';
+}
 
-    const roundOrder = ['Quarti di finale','Semifinali','3° posto','Finale'];
-    const sortedRounds = Object.keys(rounds).sort((a,b) => {
-      const ia = roundOrder.indexOf(a), ib = roundOrder.indexOf(b);
-      return (ia===-1?99:ia)-(ib===-1?99:ib);
-    });
+async function renderTVRisultati(cat, content) {
+  const gironi = await getGironiWithData(cat.id);
+  let html = '';
+  for (const g of gironi) {
+    const giocate = g.partite.filter(p => p.giocata);
+    const dafar   = g.partite.filter(p => !p.giocata).slice(0, 4);
 
-    let html = `<div class="ko-grid">`;
-    for (const rName of sortedRounds) {
-      const matches = rounds[rName];
-      html += `<div class="ko-col" style="min-width:220px;">
-        <div class="ko-col-title">${rName}</div>`;
-      for (const m of matches) {
-        const h = m.home_id ? sqMap[m.home_id] : null;
-        const a = m.away_id ? sqMap[m.away_id] : null;
-        const hWin = m.giocata && m.gol_home > m.gol_away;
-        const aWin = m.giocata && m.gol_away > m.gol_home;
-        html += `
-          <div class="ko-match" style="margin-bottom:14px;">
-            <div class="ko-team-row ${hWin?'winner':''}">
-              ${_tvLogoSmall(h)}
-              <span style="font-size:15px;font-weight:700;">${h?.nome || 'TBD'}</span>
-              ${m.giocata?`<span class="ko-score" style="font-size:22px;">${m.gol_home}</span>`:''}
-            </div>
-            <div class="ko-sep"></div>
-            <div class="ko-team-row ${aWin?'winner':''}">
-              ${_tvLogoSmall(a)}
-              <span style="font-size:15px;font-weight:700;">${a?.nome || 'TBD'}</span>
-              ${m.giocata?`<span class="ko-score" style="font-size:22px;">${m.gol_away}</span>`:''}
-            </div>
-          </div>`;
+    if (giocate.length) {
+      html += `<div class="tv-block-title">${g.nome} — Risultati</div>
+        <div class="tv-matches">`;
+      for (const p of giocate.slice(-6)) {
+        const w1 = p.gol_home > p.gol_away, w2 = p.gol_away > p.gol_home;
+        html += `<div class="tv-match">
+          <div class="tv-team ${w1?'tv-win':''}">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
+          <div class="tv-score">${p.gol_home} — ${p.gol_away}</div>
+          <div class="tv-team right ${w2?'tv-win':''}">${p.away?.nome||'?'} ${logoHTML(p.away,'sm')}</div>
+        </div>`;
       }
       html += `</div>`;
     }
-    html += `</div>`;
-    content.innerHTML = html;
-  } catch(e) {
-    console.error(e);
-    content.innerHTML = `<div class="empty-state">Errore nel caricamento</div>`;
-  }
-}
 
-// ── AUTO-SCORRIMENTO ──────────────────────────────────────────
-function tvToggleAutoScroll(btn) {
-  TV_AUTO = !TV_AUTO;
-  btn.textContent = TV_AUTO ? '⏸ Stop auto' : '▶ Auto-scorrimento';
-  btn.style.color = TV_AUTO ? 'var(--verde-lt)' : '';
-  if (TV_AUTO) _tvStartAuto();
-  else _tvStopAuto();
-}
-
-function _tvStartAuto() {
-  _tvStopAuto();
-  TV_PROGRESS = 0;
-  const sections = ['classifiche','risultati','tabellone'];
-  let catIndex = 0;
-  let secIndex = sections.indexOf(TV_SECTION);
-
-  TV_TIMER = setInterval(() => {
-    TV_PROGRESS += 100 / (TV_AUTO_INTERVAL / 100);
-    document.getElementById('tv-scroll-progress').style.width = Math.min(TV_PROGRESS, 100) + '%';
-
-    if (TV_PROGRESS >= 100) {
-      TV_PROGRESS = 0;
-      // Avanza categoria
-      if (STATE.categorie?.length > 1) {
-        catIndex = (catIndex + 1) % STATE.categorie.length;
-        TV_CAT = STATE.categorie[catIndex].id;
-        // Aggiorna bottoni categoria
-        document.querySelectorAll('.tv-cat-btn').forEach((b,i) => {
-          b.classList.toggle('active', i === catIndex);
-        });
-        // Quando ha girato tutte le categorie, cambia sezione
-        if (catIndex === 0) {
-          secIndex = (secIndex + 1) % sections.length;
-          const newSec = sections[secIndex];
-          const navBtn = document.querySelector(`.tv-nav-btn:not(#tv-autoscroll-btn)`);
-          document.querySelectorAll('.tv-nav-btn:not(#tv-autoscroll-btn)').forEach((b,i) => {
-            b.classList.toggle('active', b.textContent.toLowerCase().includes(newSec.substring(0,4)));
-          });
-          TV_SECTION = newSec;
-        }
-      } else {
-        secIndex = (secIndex + 1) % sections.length;
-        TV_SECTION = sections[secIndex];
-        document.querySelectorAll('.tv-nav-btn:not(#tv-autoscroll-btn)').forEach((b,i) => {
-          b.classList.toggle('active', i === secIndex);
-        });
+    if (dafar.length) {
+      html += `<div class="tv-block-title" style="margin-top:14px;">${g.nome} — In programma</div>
+        <div class="tv-matches">`;
+      for (const p of dafar) {
+        html += `<div class="tv-match tv-pending">
+          <div class="tv-team">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
+          <div class="tv-score tv-vs">${p.orario||'vs'}</div>
+          <div class="tv-team right">${p.away?.nome||'?'} ${logoHTML(p.away,'sm')}</div>
+        </div>`;
       }
-      _tvRender();
+      html += `</div>`;
     }
-  }, 100);
-}
-
-function _tvStopAuto() {
-  if (TV_TIMER) { clearInterval(TV_TIMER); TV_TIMER = null; }
-  TV_PROGRESS = 0;
-  const prog = document.getElementById('tv-scroll-progress');
-  if (prog) prog.style.width = '0%';
-}
-
-// ── HELPER LOGO ───────────────────────────────────────────────
-function _tvLogoCell(r) {
-  if (r.logo) return `<img src="${r.logo}" class="team-logo-sm" alt="">`;
-  const initials = (r.nome||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  return `<span class="team-avatar-sm">${initials}</span>`;
-}
-
-function _tvLogoLg(sq) {
-  if (!sq) return `<div class="tv-team-avatar-lg">?</div>`;
-  if (sq.logo) return `<img src="${sq.logo}" class="tv-team-logo-lg" alt="">`;
-  const initials = (sq.nome||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  return `<div class="tv-team-avatar-lg">${initials}</div>`;
-}
-
-function _tvLogoSmall(sq) {
-  if (!sq) return `<span class="team-avatar-sm">?</span>`;
-  if (sq.logo) return `<img src="${sq.logo}" class="team-logo-sm" alt="">`;
-  const initials = (sq.nome||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  return `<span class="team-avatar-sm">${initials}</span>`;
-}
-
-// ── FULLSCREEN API ────────────────────────────────────────────
-function openTVMode() {
-  const tvEl = document.getElementById('tv-mode');
-  tvEl.classList.add('active');
-  document.body.style.overflow = 'hidden';
-  _tvSyncLogo();
-  _tvStartClock();
-  _tvRenderCatBar();
-  tvShowSection('classifiche', document.querySelector('.tv-nav-btn:not(#tv-autoscroll-btn)'));
-
-  // Prova fullscreen
-  if (tvEl.requestFullscreen) tvEl.requestFullscreen().catch(()=>{});
-  else if (tvEl.webkitRequestFullscreen) tvEl.webkitRequestFullscreen();
-}
-
-function closeTVMode() {
-  document.getElementById('tv-mode').classList.remove('active');
-  document.body.style.overflow = '';
-  _tvStopClock();
-  _tvStopAuto();
-  if (document.exitFullscreen && document.fullscreenElement) {
-    document.exitFullscreen().catch(()=>{});
   }
+  content.innerHTML = html || '<div class="tv-empty">Nessun risultato</div>';
 }
 
-// Aggiorna TV mode quando cambiano i dati
-function tvRefreshIfOpen() {
-  if (document.getElementById('tv-mode').classList.contains('active')) {
-    _tvRender();
-  }
+// ============================================================
+//  CSS
+// ============================================================
+const tvCSS = `
+.tv-toggle-btn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  margin-right: 6px;
+  transition: background 0.15s;
 }
+.tv-toggle-btn:hover { background: rgba(255,255,255,0.28); }
+
+#tv-overlay {
+  position: fixed;
+  inset: 0;
+  background: #060b18;
+  z-index: 99998;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+  overflow: hidden;
+}
+
+#tv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #0d1b3e 0%, #1a3a6e 100%);
+  border-bottom: 2px solid #2563eb;
+  flex-shrink: 0;
+}
+#tv-logo-area { display:flex; align-items:center; gap:14px; }
+#tv-titolo { font-size:22px; font-weight:800; color:white; letter-spacing:.02em; }
+#tv-info { display:flex; align-items:center; gap:16px; }
+#tv-orologio { font-size:30px; font-weight:900; color:white; font-variant-numeric:tabular-nums; }
+#tv-live-badge {
+  background:#ef4444; color:white; font-size:12px; font-weight:700;
+  padding:4px 12px; border-radius:99px; letter-spacing:.06em;
+  animation: tvLivePulse 1.8s ease infinite;
+}
+@keyframes tvLivePulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+#tv-content {
+  flex: 1;
+  overflow: hidden;
+  padding: 14px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#tv-footer {
+  display: flex;
+  align-items: center;
+  padding: 8px 32px;
+  background: rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  gap: 16px;
+}
+#tv-cat-nome { font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); white-space:nowrap; }
+#tv-progress-bar { flex:1; height:3px; background:rgba(255,255,255,0.1); border-radius:99px; overflow:hidden; }
+#tv-progress-inner { height:100%; background:#2563eb; border-radius:99px; width:0%; }
+#tv-exit-btn {
+  background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+  color:rgba(255,255,255,0.6); padding:4px 12px; border-radius:8px;
+  cursor:pointer; font-size:12px; font-family:inherit; white-space:nowrap;
+}
+#tv-exit-btn:hover { background:rgba(255,255,255,0.2); color:white; }
+
+.tv-block { overflow:hidden; }
+.tv-block-title {
+  font-size:14px; font-weight:700; color:#60a5fa;
+  text-transform:uppercase; letter-spacing:.06em;
+  margin-bottom:6px;
+  display:flex; align-items:center; gap:10px;
+}
+.tv-badge {
+  font-size:11px; background:rgba(96,165,250,0.15); color:#60a5fa;
+  padding:2px 8px; border-radius:99px; font-weight:600;
+}
+
+.tv-table { width:100%; border-collapse:collapse; font-size:17px; }
+.tv-table th {
+  color:rgba(255,255,255,0.35); font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em;
+  padding:5px 10px; text-align:center;
+  border-bottom:1px solid rgba(255,255,255,0.07);
+}
+.tv-table td {
+  padding:9px 10px; text-align:center;
+  color:rgba(255,255,255,0.82);
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.tv-table tr.tv-q td { background:rgba(37,99,235,0.1); }
+.tv-qdot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e; }
+
+.tv-matches { display:flex; flex-direction:column; gap:5px; }
+.tv-match {
+  display:flex; align-items:center; gap:12px;
+  background:rgba(255,255,255,0.04); border-radius:9px; padding:9px 14px;
+}
+.tv-match.tv-pending {
+  background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);
+}
+.tv-team {
+  flex:1; font-size:17px; font-weight:600; color:rgba(255,255,255,0.82);
+  display:flex; align-items:center; gap:7px;
+}
+.tv-team.right { flex-direction:row-reverse; text-align:right; }
+.tv-team.tv-win { color:#22c55e; font-weight:800; }
+.tv-score {
+  font-size:26px; font-weight:900; color:white;
+  min-width:86px; text-align:center;
+  background:rgba(37,99,235,0.28); border-radius:8px; padding:4px 10px;
+  border:1px solid rgba(37,99,235,0.5);
+}
+.tv-score.tv-vs { font-size:13px; color:rgba(255,255,255,0.35); background:transparent; border-color:rgba(255,255,255,0.1); }
+.tv-empty { color:rgba(255,255,255,0.25); font-size:16px; text-align:center; margin-top:30px; }
+
+/* Nascondi tutto il sito quando TV è attivo */
+body.tv-active #app { visibility:hidden; }
+`;
+
+const tvStyle = document.createElement('style');
+tvStyle.textContent = tvCSS;
+document.head.appendChild(tvStyle);

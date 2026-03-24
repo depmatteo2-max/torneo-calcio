@@ -27,15 +27,23 @@
         </div>
         <div class="header-right">
           <span class="live-badge">● In corso</span>
+          <button class="tv-toggle-btn" id="tv-btn" onclick="toggleTVMode()">📺 TV</button>
           <button class="admin-toggle" id="admin-btn" onclick="toggleAdmin()">Admin</button>
         </div>
       </div>
     </header>
-
     <div id="admin-modal" class="modal-overlay" style="display:none;">
       <div class="modal-box">
         <div class="modal-title">Accesso admin</div>
-        <input type="password" id="admin-pw" placeholder="Password" class="modal-input" onkeydown="if(event.key==='Enter')checkPw()">
+        <input type="text" id="admin-username" placeholder="Username" class="modal-input"
+          style="margin-bottom:8px;"
+          onkeydown="if(event.key==='Enter')document.getElementById('admin-pw').focus()">
+        <input type="password" id="admin-pw" placeholder="Password" class="modal-input"
+          onkeydown="if(event.key==='Enter')checkPw()">
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+          <input type="checkbox" id="admin-remember" style="width:14px;height:14px;">
+          <label for="admin-remember" style="font-size:12px;color:#666;cursor:pointer;">Ricordami</label>
+        </div>
         <div id="pw-error" style="color:#A32D2D;font-size:12px;margin-top:6px;min-height:16px;"></div>
         <div class="modal-actions">
           <button class="btn" onclick="document.getElementById('admin-modal').style.display='none'">Annulla</button>
@@ -43,7 +51,6 @@
         </div>
       </div>
     </div>
-
     <nav>
       <div class="nav-inner" id="pub-nav">
         <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">Classifiche</button>
@@ -59,10 +66,8 @@
         <button class="nav-btn nav-exit" onclick="exitAdmin()">✕ Esci</button>
       </div>
     </nav>
-
     <div id="torneo-bar" class="torneo-bar"></div>
     <div class="cat-bar" id="cat-bar"></div>
-
     <main id="main-content">
       <div id="sec-classifiche" class="sec active"></div>
       <div id="sec-risultati" class="sec"></div>
@@ -82,5 +87,6 @@
 <script src="import.js"></script>
 <script src="app.js"></script>
 <script src="features.js"></script>
+<script src="tv.js"></script>
 </body>
 </html>
