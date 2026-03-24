@@ -1,84 +1,16 @@
 // ============================================================
-//  TV.JS — Modalità TV + Chromecast integrato
+//  TV.JS — Modalità TV ottimizzata per Chromecast
 // ============================================================
 
 let TV_MODE = false;
 let TV_INTERVAL = null;
-let TV_SCROLL_INTERVAL = null;
 let TV_CAT_INDEX = 0;
 let TV_SECTION_INDEX = 0;
 const TV_SECTIONS = ['classifiche', 'risultati'];
-const TV_SCROLL_SPEED = 1.2; // pixel per frame (velocità scorrimento)
-const TV_PAUSE_TOP = 3000;   // ms di pausa in cima prima di scorrere
-const TV_PAUSE_BOTTOM = 4000; // ms di pausa in fondo prima di cambiare
+const TV_DURATION = 12000;
 
 // ============================================================
-//  CHROMECAST — guida integrata
-// ============================================================
-
-function initChromecast() {
-  // Nessun SDK necessario — usiamo il cast nativo di Chrome
-}
-
-function avviaChomecast() {
-  mostraIstruzioniCast();
-}
-
-function mostraIstruzioniCast() {
-  const old = document.getElementById('cast-modal');
-  if (old) { old.remove(); return; }
-
-  const div = document.createElement('div');
-  div.id = 'cast-modal';
-  div.innerHTML = `
-    <div class="cast-box">
-      <div class="cast-title">📺 Come trasmettere alla TV</div>
-      <div class="cast-steps">
-        <div class="cast-step">
-          <span class="cast-num">1</span>
-          <div>
-            <strong>Attiva la modalità TV</strong><br>
-            <span>Clicca il pulsante <b>📺 TV</b> accanto a questo pulsante</span>
-          </div>
-        </div>
-        <div class="cast-step">
-          <span class="cast-num">2</span>
-          <div>
-            <strong>Trasmetti con Chrome</strong><br>
-            <span>Clicca i <b>3 puntini ⋮</b> in alto a destra nel browser</span>
-          </div>
-        </div>
-        <div class="cast-step">
-          <span class="cast-num">3</span>
-          <div>
-            <strong>Seleziona "Trasmetti"</strong><br>
-            <span>Poi scegli il tuo <b>Chromecast</b> o <b>Smart TV</b> dalla lista</span>
-          </div>
-        </div>
-        <div class="cast-step">
-          <span class="cast-num">4</span>
-          <div>
-            <strong>Schermo intero automatico</strong><br>
-            <span>La modalità TV va in fullscreen sulla TV — nessun altro tasto!</span>
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:16px;">
-        <button onclick="enterTVMode();document.getElementById('cast-modal').remove();"
-          style="flex:1;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
-          📺 Attiva modalità TV ora
-        </button>
-        <button onclick="document.getElementById('cast-modal').remove()"
-          style="padding:10px 16px;background:#f5f5f5;color:#333;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">
-          Chiudi
-        </button>
-      </div>
-    </div>`;
-  document.body.appendChild(div);
-}
-
-// ============================================================
-//  TV MODE
+//  ATTIVA / DISATTIVA
 // ============================================================
 function toggleTVMode() {
   TV_MODE ? exitTVMode() : enterTVMode();
@@ -89,11 +21,14 @@ function enterTVMode() {
   TV_CAT_INDEX = 0;
   TV_SECTION_INDEX = 0;
 
+  // Fullscreen
   const el = document.documentElement;
   if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
   else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 
   document.body.classList.add('tv-active');
+
+  // Crea overlay
   creaOverlayTV();
   avviaAutoScorrimento();
 
@@ -108,11 +43,11 @@ function exitTVMode() {
   else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
 
   document.body.classList.remove('tv-active');
+
   const overlay = document.getElementById('tv-overlay');
   if (overlay) overlay.remove();
 
   if (TV_INTERVAL) { clearInterval(TV_INTERVAL); TV_INTERVAL = null; }
-  if (TV_SCROLL_INTERVAL) { cancelAnimationFrame(TV_SCROLL_INTERVAL); TV_SCROLL_INTERVAL = null; }
 
   const btn = document.getElementById('tv-btn');
   if (btn) btn.textContent = '📺 TV';
@@ -130,7 +65,7 @@ function creaOverlayTV() {
   overlay.innerHTML = `
     <div id="tv-header">
       <div id="tv-logo-area">
-        <img id="tv-logo-img" style="display:none;width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.3);" alt="">
+        <img id="tv-logo-img" style="display:none;width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.3);" alt="SPE">
         <div id="tv-titolo">Soccer Pro Experience</div>
       </div>
       <div id="tv-info">
@@ -142,10 +77,7 @@ function creaOverlayTV() {
     <div id="tv-footer">
       <div id="tv-cat-nome"></div>
       <div id="tv-progress-bar"><div id="tv-progress-inner"></div></div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button onclick="saltaAvanti()" id="tv-skip-btn">⏭ Avanti</button>
-        <button onclick="exitTVMode()" id="tv-exit-btn">✕ Esci</button>
-      </div>
+      <button onclick="exitTVMode()" id="tv-exit-btn">✕ Esci</button>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -153,15 +85,15 @@ function creaOverlayTV() {
   aggiornaOrologioTV();
   setInterval(aggiornaOrologioTV, 1000);
 
-  // Logo
+  // Logo dall'header
   const headerLogo = document.getElementById('header-logo');
-  if (headerLogo && headerLogo.src && headerLogo.src.length > 80) {
+  if (headerLogo && headerLogo.src && headerLogo.src.length > 50) {
     const tvLogo = document.getElementById('tv-logo-img');
     tvLogo.src = headerLogo.src;
     tvLogo.style.display = 'block';
   }
 
-  // Titolo
+  // Titolo torneo
   const titolo = document.getElementById('header-title');
   if (titolo) document.getElementById('tv-titolo').textContent = titolo.textContent;
 
@@ -174,85 +106,36 @@ function aggiornaOrologioTV() {
   el.textContent = new Date().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
 }
 
-function saltaAvanti() {
-  prossimaSchermataTv();
-}
-
 // ============================================================
 //  AUTO-SCORRIMENTO
 // ============================================================
 function avviaAutoScorrimento() {
   if (TV_INTERVAL) clearInterval(TV_INTERVAL);
-  if (TV_SCROLL_INTERVAL) cancelAnimationFrame(TV_SCROLL_INTERVAL);
-  // Aspetta un po' prima di iniziare a scorrere
-  setTimeout(() => avviaScrollLento(), TV_PAUSE_TOP);
+  avviaProgressBar();
+  TV_INTERVAL = setInterval(() => { prossimaSchermataTv(); }, TV_DURATION);
 }
 
-function avviaScrollLento() {
-  if (!TV_MODE) return;
-  const content = document.getElementById('tv-content');
-  if (!content) return;
-
-  // Resetta scroll in cima
-  content.scrollTop = 0;
-
-  let lastTime = null;
-  let pausando = false;
-
-  function scroll(timestamp) {
-    if (!TV_MODE) return;
-    if (!lastTime) lastTime = timestamp;
-    const delta = timestamp - lastTime;
-    lastTime = timestamp;
-
-    const maxScroll = content.scrollHeight - content.clientHeight;
-
-    if (content.scrollTop >= maxScroll - 2) {
-      // Arrivato in fondo — pausa poi cambia schermata
-      if (!pausando) {
-        pausando = true;
-        aggiornaProgressBar(1);
-        setTimeout(() => {
-          if (TV_MODE) prossimaSchermataTv();
-        }, TV_PAUSE_BOTTOM);
-      }
-      return;
-    }
-
-    // Scorri verso il basso
-    content.scrollTop += TV_SCROLL_SPEED * (delta / 16.67);
-
-    // Aggiorna progress bar proporzionalmente
-    const prog = maxScroll > 0 ? content.scrollTop / maxScroll : 0;
-    aggiornaProgressBar(prog);
-
-    TV_SCROLL_INTERVAL = requestAnimationFrame(scroll);
-  }
-
-  TV_SCROLL_INTERVAL = requestAnimationFrame(scroll);
-}
-
-function aggiornaProgressBar(percentuale) {
+function avviaProgressBar() {
   const bar = document.getElementById('tv-progress-inner');
   if (!bar) return;
   bar.style.transition = 'none';
-  bar.style.width = (percentuale * 100) + '%';
+  bar.style.width = '0%';
+  setTimeout(() => {
+    bar.style.transition = `width ${TV_DURATION}ms linear`;
+    bar.style.width = '100%';
+  }, 50);
 }
 
 function prossimaSchermataTv() {
   if (!STATE.categorie || !STATE.categorie.length) return;
-  if (TV_SCROLL_INTERVAL) { cancelAnimationFrame(TV_SCROLL_INTERVAL); TV_SCROLL_INTERVAL = null; }
-
   TV_SECTION_INDEX++;
   if (TV_SECTION_INDEX >= TV_SECTIONS.length) {
     TV_SECTION_INDEX = 0;
     TV_CAT_INDEX = (TV_CAT_INDEX + 1) % STATE.categorie.length;
   }
   STATE.activeCat = STATE.categorie[TV_CAT_INDEX].id;
-  aggiornaProgressBar(0);
-  renderTV().then(() => {
-    setTimeout(() => avviaScrollLento(), TV_PAUSE_TOP);
-  });
+  renderTV();
+  avviaProgressBar();
 }
 
 // ============================================================
@@ -266,14 +149,14 @@ async function renderTV() {
 
   const catNomeEl = document.getElementById('tv-cat-nome');
   if (catNomeEl) {
-    const icon = section === 'classifiche' ? '📊' : '⚽';
-    catNomeEl.textContent = `${icon} ${section === 'classifiche' ? 'Classifica' : 'Risultati'} — ${cat.nome}`;
+    catNomeEl.textContent = `${section === 'classifiche' ? '📊 Classifica' : '⚽ Risultati'} — ${cat.nome}`;
   }
 
   const content = document.getElementById('tv-content');
   if (!content) return;
 
   content.style.opacity = '0';
+  content.style.transform = 'translateY(8px)';
 
   if (section === 'classifiche') {
     await renderTVClassifiche(cat, content);
@@ -282,121 +165,85 @@ async function renderTV() {
   }
 
   setTimeout(() => {
-    content.style.transition = 'opacity 0.4s ease';
+    content.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
     content.style.opacity = '1';
+    content.style.transform = 'translateY(0)';
   }, 50);
 }
 
 async function renderTVClassifiche(cat, content) {
   const gironi = await getGironiWithData(cat.id);
-  let html = '<div class="tv-gironi-grid">';
-
+  let html = '';
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
     const played = g.partite.filter(p => p.giocata).length;
     html += `<div class="tv-block">
-      <div class="tv-block-title">${g.nome} <span class="tv-badge">${played}/${g.partite.length} partite</span></div>
+      <div class="tv-block-title">${g.nome} <span class="tv-badge">${played}/${g.partite.length}</span></div>
       <table class="tv-table">
         <thead><tr>
-          <th style="width:24px;"></th>
-          <th style="text-align:left;min-width:160px;">Squadra</th>
+          <th></th><th style="text-align:left;">Squadra</th>
           <th>G</th><th>V</th><th>P</th><th>S</th>
-          <th class="tv-gf">GF</th>
-          <th class="tv-gs">GS</th>
+          <th style="color:#4ade80;">GF</th>
+          <th style="color:#f87171;">GS</th>
           <th>GD</th>
-          <th class="tv-pt">Pt</th>
+          <th style="color:#FFD700;">Pt</th>
         </tr></thead><tbody>`;
     cl.forEach((row, idx) => {
       const q = idx < (cat.qualificate || 2);
       const diff = row.gf - row.gs;
       html += `<tr class="${q ? 'tv-q' : ''}">
         <td>${q ? '<span class="tv-qdot"></span>' : ''}</td>
-        <td class="tv-team-cell">
-          ${logoHTML(row.sq,'sm')} <span>${row.sq.nome}</span>
+        <td style="text-align:left;font-weight:${q?'700':'400'}">
+          ${logoHTML(row.sq,'sm')} ${row.sq.nome}
         </td>
         <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-        <td class="tv-gf">${row.gf}</td>
-        <td class="tv-gs">${row.gs}</td>
-        <td class="${diff>0?'tv-pos':diff<0?'tv-neg':''}">${diff>0?'+':''}${diff}</td>
-        <td class="tv-pt">${row.pts}</td>
+        <td style="color:#4ade80;font-weight:600;">${row.gf}</td>
+        <td style="color:#f87171;font-weight:600;">${row.gs}</td>
+        <td style="color:${diff>0?'#4ade80':diff<0?'#f87171':'#888'}">${diff>0?'+':''}${diff}</td>
+        <td style="color:#FFD700;font-weight:800;font-size:20px;">${row.pts}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
   }
-
-  html += '</div>';
-  content.innerHTML = html || '<div class="tv-empty">Nessun dato disponibile</div>';
+  content.innerHTML = html || '<div class="tv-empty">Nessun dato</div>';
 }
 
 async function renderTVRisultati(cat, content) {
   const gironi = await getGironiWithData(cat.id);
-  let html = '<div class="tv-risultati-grid">';
-
+  let html = '';
   for (const g of gironi) {
     const giocate = g.partite.filter(p => p.giocata);
-    const dafar   = g.partite.filter(p => !p.giocata);
+    const dafar   = g.partite.filter(p => !p.giocata).slice(0, 4);
 
-    html += `<div class="tv-block">`;
-    html += `<div class="tv-block-title">${g.nome}</div>`;
-
-    // Tutte le partite giocate
-    for (const p of giocate) {
-      const w1 = p.gol_home > p.gol_away;
-      const w2 = p.gol_away > p.gol_home;
-      const orario = p.orario ? `<span class="tv-orario">${p.orario}${p.campo ? ' · '+p.campo : ''}</span>` : '';
-      html += `<div class="tv-match tv-played">
-        ${orario}
-        <div class="tv-match-row">
-          <div class="tv-mteam ${w1?'tv-win':''}">${logoHTML(p.home,'sm')} <span>${p.home?.nome||'?'}</span></div>
-          <div class="tv-mscore">${p.gol_home} — ${p.gol_away}</div>
-          <div class="tv-mteam right ${w2?'tv-win':''}"><span>${p.away?.nome||'?'}</span> ${logoHTML(p.away,'sm')}</div>
-        </div>
-      </div>`;
+    if (giocate.length) {
+      html += `<div class="tv-block-title">${g.nome} — Risultati</div>
+        <div class="tv-matches">`;
+      for (const p of giocate.slice(-6)) {
+        const w1 = p.gol_home > p.gol_away, w2 = p.gol_away > p.gol_home;
+        html += `<div class="tv-match">
+          <div class="tv-team ${w1?'tv-win':''}">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
+          <div class="tv-score">${p.gol_home} — ${p.gol_away}</div>
+          <div class="tv-team right ${w2?'tv-win':''}">${p.away?.nome||'?'} ${logoHTML(p.away,'sm')}</div>
+        </div>`;
+      }
+      html += `</div>`;
     }
 
-    // Partite da giocare
-    for (const p of dafar) {
-      const orario = p.orario ? `<span class="tv-orario">${p.orario}${p.campo ? ' · '+p.campo : ''}</span>` : '';
-      html += `<div class="tv-match tv-upcoming">
-        ${orario}
-        <div class="tv-match-row">
-          <div class="tv-mteam">${logoHTML(p.home,'sm')} <span>${p.home?.nome||'?'}</span></div>
-          <div class="tv-mscore tv-vs">vs</div>
-          <div class="tv-mteam right"><span>${p.away?.nome||'?'}</span> ${logoHTML(p.away,'sm')}</div>
-        </div>
-      </div>`;
+    if (dafar.length) {
+      html += `<div class="tv-block-title" style="margin-top:14px;">${g.nome} — In programma</div>
+        <div class="tv-matches">`;
+      for (const p of dafar) {
+        html += `<div class="tv-match tv-pending">
+          <div class="tv-team">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
+          <div class="tv-score tv-vs">${p.orario||'vs'}</div>
+          <div class="tv-team right">${p.away?.nome||'?'} ${logoHTML(p.away,'sm')}</div>
+        </div>`;
+      }
+      html += `</div>`;
     }
-
-    if (!giocate.length && !dafar.length) {
-      html += `<div class="tv-empty">Nessuna partita</div>`;
-    }
-
-    html += `</div>`;
   }
-
-  html += '</div>';
-  content.innerHTML = html;
+  content.innerHTML = html || '<div class="tv-empty">Nessun risultato</div>';
 }
-
-// ============================================================
-//  PULSANTI HEADER — aggiunti al caricamento
-// ============================================================
-document.addEventListener('DOMContentLoaded', () => {
-  const headerRight = document.querySelector('.header-right');
-  if (!headerRight) return;
-  const adminBtn = document.getElementById('admin-btn');
-
-  // Pulsante Chromecast
-  const castBtn = document.createElement('button');
-  castBtn.id = 'cast-btn';
-  castBtn.textContent = '📺 Chromecast';
-  castBtn.className = 'tv-toggle-btn';
-  castBtn.onclick = avviaChomecast;
-  headerRight.insertBefore(castBtn, adminBtn);
-
-  // Inizializza Chromecast SDK
-  initChromecast();
-});
 
 // ============================================================
 //  CSS
@@ -406,12 +253,12 @@ const tvCSS = `
   background: rgba(255,255,255,0.15);
   border: 1px solid rgba(255,255,255,0.3);
   color: white;
-  padding: 5px 11px;
+  padding: 5px 12px;
   border-radius: 20px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
-  margin-right: 5px;
+  margin-right: 6px;
   transition: background 0.15s;
 }
 .tv-toggle-btn:hover { background: rgba(255,255,255,0.28); }
@@ -431,187 +278,103 @@ const tvCSS = `
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 28px;
+  padding: 12px 32px;
   background: linear-gradient(135deg, #0d1b3e 0%, #1a3a6e 100%);
   border-bottom: 2px solid #2563eb;
   flex-shrink: 0;
 }
-#tv-logo-area { display:flex; align-items:center; gap:12px; }
-#tv-titolo { font-size:20px; font-weight:800; color:white; }
-#tv-info { display:flex; align-items:center; gap:14px; }
-#tv-orologio { font-size:26px; font-weight:900; color:white; font-variant-numeric:tabular-nums; }
+#tv-logo-area { display:flex; align-items:center; gap:14px; }
+#tv-titolo { font-size:22px; font-weight:800; color:white; letter-spacing:.02em; }
+#tv-info { display:flex; align-items:center; gap:16px; }
+#tv-orologio { font-size:30px; font-weight:900; color:white; font-variant-numeric:tabular-nums; }
 #tv-live-badge {
-  background:#ef4444; color:white; font-size:11px; font-weight:700;
-  padding:3px 10px; border-radius:99px; letter-spacing:.06em;
+  background:#ef4444; color:white; font-size:12px; font-weight:700;
+  padding:4px 12px; border-radius:99px; letter-spacing:.06em;
   animation: tvLivePulse 1.8s ease infinite;
 }
-@keyframes tvLivePulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+@keyframes tvLivePulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
 
 #tv-content {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 12px 28px;
-  scrollbar-width: none;
+  overflow: hidden;
+  padding: 14px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-#tv-content::-webkit-scrollbar { display: none; }
 
 #tv-footer {
   display: flex;
   align-items: center;
-  padding: 7px 28px;
-  background: rgba(0,0,0,0.6);
+  padding: 8px 32px;
+  background: rgba(0,0,0,0.5);
   flex-shrink: 0;
-  gap: 14px;
+  gap: 16px;
 }
 #tv-cat-nome { font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); white-space:nowrap; }
 #tv-progress-bar { flex:1; height:3px; background:rgba(255,255,255,0.1); border-radius:99px; overflow:hidden; }
-#tv-progress-inner { height:100%; background:#2563eb; width:0%; }
-#tv-skip-btn, #tv-exit-btn {
-  background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);
-  color:rgba(255,255,255,0.5); padding:4px 10px; border-radius:8px;
-  cursor:pointer; font-size:11px; font-family:inherit; white-space:nowrap;
+#tv-progress-inner { height:100%; background:#2563eb; border-radius:99px; width:0%; }
+#tv-exit-btn {
+  background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+  color:rgba(255,255,255,0.6); padding:4px 12px; border-radius:8px;
+  cursor:pointer; font-size:12px; font-family:inherit; white-space:nowrap;
 }
-#tv-skip-btn:hover, #tv-exit-btn:hover { background:rgba(255,255,255,0.18); color:white; }
+#tv-exit-btn:hover { background:rgba(255,255,255,0.2); color:white; }
 
-/* GRIGLIA GIRONI — affiancati se più gironi */
-.tv-gironi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 14px;
-}
-.tv-risultati-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-  gap: 14px;
-}
-
-.tv-block { overflow: hidden; }
+.tv-block { overflow:hidden; }
 .tv-block-title {
   font-size:14px; font-weight:700; color:#60a5fa;
-  text-transform:uppercase; letter-spacing:.05em;
-  margin-bottom:6px; display:flex; align-items:center; gap:8px;
+  text-transform:uppercase; letter-spacing:.06em;
+  margin-bottom:6px;
+  display:flex; align-items:center; gap:10px;
 }
 .tv-badge {
   font-size:11px; background:rgba(96,165,250,0.15); color:#60a5fa;
-  padding:2px 8px; border-radius:99px; font-weight:600; text-transform:none;
+  padding:2px 8px; border-radius:99px; font-weight:600;
 }
 
-/* TABELLA CLASSIFICA */
-.tv-table { width:100%; border-collapse:collapse; font-size:16px; }
+.tv-table { width:100%; border-collapse:collapse; font-size:17px; }
 .tv-table th {
-  color:rgba(255,255,255,0.3); font-size:11px; font-weight:700;
-  text-transform:uppercase; letter-spacing:.05em;
-  padding:4px 8px; text-align:center;
+  color:rgba(255,255,255,0.35); font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em;
+  padding:5px 10px; text-align:center;
   border-bottom:1px solid rgba(255,255,255,0.07);
 }
 .tv-table td {
-  padding:8px 8px; text-align:center;
-  color:rgba(255,255,255,0.8);
+  padding:9px 10px; text-align:center;
+  color:rgba(255,255,255,0.82);
   border-bottom:1px solid rgba(255,255,255,0.04);
-  font-size:16px;
 }
 .tv-table tr.tv-q td { background:rgba(37,99,235,0.1); }
 .tv-qdot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e; }
-.tv-team-cell { display:flex; align-items:center; gap:6px; text-align:left !important; }
-.tv-gf { color:#4ade80 !important; font-weight:600; }
-.tv-gs { color:#f87171 !important; font-weight:600; }
-.tv-pt { color:#FFD700 !important; font-weight:800; font-size:18px !important; }
-.tv-pos { color:#4ade80; }
-.tv-neg { color:#f87171; }
 
-/* PARTITE RISULTATI */
+.tv-matches { display:flex; flex-direction:column; gap:5px; }
 .tv-match {
-  border-radius:8px; margin-bottom:6px; overflow:hidden;
+  display:flex; align-items:center; gap:12px;
+  background:rgba(255,255,255,0.04); border-radius:9px; padding:9px 14px;
 }
-.tv-match.tv-played { background:rgba(255,255,255,0.05); }
-.tv-match.tv-upcoming { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); }
-.tv-orario {
-  display:block; font-size:11px; color:rgba(255,255,255,0.3);
-  padding:4px 12px 0; text-align:center;
+.tv-match.tv-pending {
+  background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);
 }
-.tv-match-row {
-  display:flex; align-items:center; gap:10px;
-  padding:8px 12px;
+.tv-team {
+  flex:1; font-size:17px; font-weight:600; color:rgba(255,255,255,0.82);
+  display:flex; align-items:center; gap:7px;
 }
-.tv-mteam {
-  flex:1; font-size:17px; font-weight:600; color:rgba(255,255,255,0.8);
-  display:flex; align-items:center; gap:6px;
-  white-space: nowrap; overflow:hidden; text-overflow:ellipsis;
+.tv-team.right { flex-direction:row-reverse; text-align:right; }
+.tv-team.tv-win { color:#22c55e; font-weight:800; }
+.tv-score {
+  font-size:26px; font-weight:900; color:white;
+  min-width:86px; text-align:center;
+  background:rgba(37,99,235,0.28); border-radius:8px; padding:4px 10px;
+  border:1px solid rgba(37,99,235,0.5);
 }
-.tv-mteam.right { flex-direction:row-reverse; text-align:right; }
-.tv-mteam.tv-win { color:#22c55e; font-weight:800; }
-.tv-mscore {
-  font-size:24px; font-weight:900; color:white;
-  min-width:80px; text-align:center;
-  background:rgba(37,99,235,0.3); border-radius:7px; padding:3px 10px;
-  border:1px solid rgba(37,99,235,0.5); flex-shrink:0;
-}
-.tv-mscore.tv-vs {
-  font-size:13px; color:rgba(255,255,255,0.3);
-  background:transparent; border-color:rgba(255,255,255,0.08);
-}
-.tv-empty { color:rgba(255,255,255,0.2); font-size:14px; text-align:center; padding:16px 0; }
+.tv-score.tv-vs { font-size:13px; color:rgba(255,255,255,0.35); background:transparent; border-color:rgba(255,255,255,0.1); }
+.tv-empty { color:rgba(255,255,255,0.25); font-size:16px; text-align:center; margin-top:30px; }
 
-/* Nascondi sito quando TV attivo */
+/* Nascondi tutto il sito quando TV è attivo */
 body.tv-active #app { visibility:hidden; }
 `;
 
 const tvStyle = document.createElement('style');
 tvStyle.textContent = tvCSS;
 document.head.appendChild(tvStyle);
-
-// CSS modal Chromecast
-const castCSS = `
-#cast-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.5);
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.cast-box {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  max-width: 380px;
-  width: 100%;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-}
-.cast-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: #1a1a1a;
-  margin-bottom: 16px;
-}
-.cast-steps { display:flex; flex-direction:column; gap:12px; }
-.cast-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px;
-  background: #f8f9fa;
-  border-radius: 10px;
-}
-.cast-num {
-  width: 28px;
-  height: 28px;
-  background: #2563eb;
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.cast-step div { font-size: 13px; color: #333; line-height: 1.5; }
-.cast-step strong { color: #1a1a1a; }
-`;
-const castStyle = document.createElement('style');
-castStyle.textContent = castCSS;
-document.head.appendChild(castStyle);
