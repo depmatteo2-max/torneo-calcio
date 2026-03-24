@@ -4,10 +4,13 @@
 
 let TV_MODE = false;
 let TV_INTERVAL = null;
+let TV_SCROLL_INTERVAL = null;
 let TV_CAT_INDEX = 0;
 let TV_SECTION_INDEX = 0;
 const TV_SECTIONS = ['classifiche', 'risultati'];
-const TV_DURATION = 15000; // 15 secondi per sezione
+const TV_SCROLL_SPEED = 1.2; // pixel per frame (velocità scorrimento)
+const TV_PAUSE_TOP = 3000;   // ms di pausa in cima prima di scorrere
+const TV_PAUSE_BOTTOM = 4000; // ms di pausa in fondo prima di cambiare
 
 // ============================================================
 //  CHROMECAST — guida integrata
@@ -109,6 +112,7 @@ function exitTVMode() {
   if (overlay) overlay.remove();
 
   if (TV_INTERVAL) { clearInterval(TV_INTERVAL); TV_INTERVAL = null; }
+  if (TV_SCROLL_INTERVAL) { cancelAnimationFrame(TV_SCROLL_INTERVAL); TV_SCROLL_INTERVAL = null; }
 
   const btn = document.getElementById('tv-btn');
   if (btn) btn.textContent = '📺 TV';
@@ -179,31 +183,76 @@ function saltaAvanti() {
 // ============================================================
 function avviaAutoScorrimento() {
   if (TV_INTERVAL) clearInterval(TV_INTERVAL);
-  avviaProgressBar();
-  TV_INTERVAL = setInterval(() => { prossimaSchermataTv(); }, TV_DURATION);
+  if (TV_SCROLL_INTERVAL) cancelAnimationFrame(TV_SCROLL_INTERVAL);
+  // Aspetta un po' prima di iniziare a scorrere
+  setTimeout(() => avviaScrollLento(), TV_PAUSE_TOP);
 }
 
-function avviaProgressBar() {
+function avviaScrollLento() {
+  if (!TV_MODE) return;
+  const content = document.getElementById('tv-content');
+  if (!content) return;
+
+  // Resetta scroll in cima
+  content.scrollTop = 0;
+
+  let lastTime = null;
+  let pausando = false;
+
+  function scroll(timestamp) {
+    if (!TV_MODE) return;
+    if (!lastTime) lastTime = timestamp;
+    const delta = timestamp - lastTime;
+    lastTime = timestamp;
+
+    const maxScroll = content.scrollHeight - content.clientHeight;
+
+    if (content.scrollTop >= maxScroll - 2) {
+      // Arrivato in fondo — pausa poi cambia schermata
+      if (!pausando) {
+        pausando = true;
+        aggiornaProgressBar(1);
+        setTimeout(() => {
+          if (TV_MODE) prossimaSchermataTv();
+        }, TV_PAUSE_BOTTOM);
+      }
+      return;
+    }
+
+    // Scorri verso il basso
+    content.scrollTop += TV_SCROLL_SPEED * (delta / 16.67);
+
+    // Aggiorna progress bar proporzionalmente
+    const prog = maxScroll > 0 ? content.scrollTop / maxScroll : 0;
+    aggiornaProgressBar(prog);
+
+    TV_SCROLL_INTERVAL = requestAnimationFrame(scroll);
+  }
+
+  TV_SCROLL_INTERVAL = requestAnimationFrame(scroll);
+}
+
+function aggiornaProgressBar(percentuale) {
   const bar = document.getElementById('tv-progress-inner');
   if (!bar) return;
   bar.style.transition = 'none';
-  bar.style.width = '0%';
-  setTimeout(() => {
-    bar.style.transition = `width ${TV_DURATION}ms linear`;
-    bar.style.width = '100%';
-  }, 50);
+  bar.style.width = (percentuale * 100) + '%';
 }
 
 function prossimaSchermataTv() {
   if (!STATE.categorie || !STATE.categorie.length) return;
+  if (TV_SCROLL_INTERVAL) { cancelAnimationFrame(TV_SCROLL_INTERVAL); TV_SCROLL_INTERVAL = null; }
+
   TV_SECTION_INDEX++;
   if (TV_SECTION_INDEX >= TV_SECTIONS.length) {
     TV_SECTION_INDEX = 0;
     TV_CAT_INDEX = (TV_CAT_INDEX + 1) % STATE.categorie.length;
   }
   STATE.activeCat = STATE.categorie[TV_CAT_INDEX].id;
-  renderTV();
-  avviaProgressBar();
+  aggiornaProgressBar(0);
+  renderTV().then(() => {
+    setTimeout(() => avviaScrollLento(), TV_PAUSE_TOP);
+  });
 }
 
 // ============================================================
