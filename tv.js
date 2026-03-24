@@ -10,78 +10,68 @@ const TV_SECTIONS = ['classifiche', 'risultati'];
 const TV_DURATION = 15000; // 15 secondi per sezione
 
 // ============================================================
-//  CHROMECAST
+//  CHROMECAST — guida integrata
 // ============================================================
-let castSession = null;
-let castAvailable = false;
 
 function initChromecast() {
-  // Carica SDK Chromecast
-  const script = document.createElement('script');
-  script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
-  document.head.appendChild(script);
-
-  window['__onGCastApiAvailable'] = function(isAvailable) {
-    if (isAvailable) {
-      castAvailable = true;
-      cast.framework.CastContext.getInstance().setOptions({
-        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
-      });
-      cast.framework.CastContext.getInstance().addEventListener(
-        cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-        (e) => {
-          if (e.sessionState === cast.framework.SessionState.SESSION_STARTED) {
-            castSession = cast.framework.CastContext.getInstance().getCurrentSession();
-            aggiornaBottoneCast();
-            toast('✅ Connesso al Chromecast!');
-          } else if (e.sessionState === cast.framework.SessionState.SESSION_ENDED) {
-            castSession = null;
-            aggiornaBottoneCast();
-          }
-        }
-      );
-      aggiornaBottoneCast();
-    }
-  };
-}
-
-function aggiornaBottoneCast() {
-  const btn = document.getElementById('cast-btn');
-  if (!btn) return;
-  if (castSession) {
-    btn.textContent = '📺 Chromecast ✓';
-    btn.style.background = 'rgba(39,174,96,0.3)';
-    btn.style.borderColor = 'rgba(39,174,96,0.6)';
-  } else {
-    btn.textContent = '📺 Chromecast';
-    btn.style.background = 'rgba(255,255,255,0.15)';
-    btn.style.borderColor = 'rgba(255,255,255,0.3)';
-  }
+  // Nessun SDK necessario — usiamo il cast nativo di Chrome
 }
 
 function avviaChomecast() {
-  if (!castAvailable) {
-    // Chromecast non disponibile — apri in finestra separata ottimizzata per TV
-    const url = window.location.href + '?tv=1';
-    const win = window.open(url, '_blank', 'width=1920,height=1080,menubar=no,toolbar=no,location=no');
-    if (win) {
-      toast('📺 Aperta finestra TV — trasmettila con Chromecast dal browser');
-    } else {
-      alert('📺 Per usare Chromecast:\n\n1. Apri il sito su Chrome\n2. Clicca i 3 puntini in alto a destra\n3. Clicca "Trasmetti"\n4. Seleziona il tuo dispositivo Chromecast\n\nOppure attiva la modalità TV con il pulsante 📺 TV e poi trasmetti.');
-    }
-    return;
-  }
-  if (castSession) {
-    // Disconnetti
-    cast.framework.CastContext.getInstance().endCurrentSession(true);
-    toast('Disconnesso dal Chromecast');
-  } else {
-    // Connetti
-    cast.framework.CastContext.getInstance().requestSession().catch(err => {
-      if (err !== 'cancel') toast('Errore Chromecast: ' + err);
-    });
-  }
+  mostraIstruzioniCast();
+}
+
+function mostraIstruzioniCast() {
+  const old = document.getElementById('cast-modal');
+  if (old) { old.remove(); return; }
+
+  const div = document.createElement('div');
+  div.id = 'cast-modal';
+  div.innerHTML = `
+    <div class="cast-box">
+      <div class="cast-title">📺 Come trasmettere alla TV</div>
+      <div class="cast-steps">
+        <div class="cast-step">
+          <span class="cast-num">1</span>
+          <div>
+            <strong>Attiva la modalità TV</strong><br>
+            <span>Clicca il pulsante <b>📺 TV</b> accanto a questo pulsante</span>
+          </div>
+        </div>
+        <div class="cast-step">
+          <span class="cast-num">2</span>
+          <div>
+            <strong>Trasmetti con Chrome</strong><br>
+            <span>Clicca i <b>3 puntini ⋮</b> in alto a destra nel browser</span>
+          </div>
+        </div>
+        <div class="cast-step">
+          <span class="cast-num">3</span>
+          <div>
+            <strong>Seleziona "Trasmetti"</strong><br>
+            <span>Poi scegli il tuo <b>Chromecast</b> o <b>Smart TV</b> dalla lista</span>
+          </div>
+        </div>
+        <div class="cast-step">
+          <span class="cast-num">4</span>
+          <div>
+            <strong>Schermo intero automatico</strong><br>
+            <span>La modalità TV va in fullscreen sulla TV — nessun altro tasto!</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button onclick="enterTVMode();document.getElementById('cast-modal').remove();"
+          style="flex:1;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
+          📺 Attiva modalità TV ora
+        </button>
+        <button onclick="document.getElementById('cast-modal').remove()"
+          style="padding:10px 16px;background:#f5f5f5;color:#333;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;">
+          Chiudi
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
 }
 
 // ============================================================
@@ -521,3 +511,58 @@ body.tv-active #app { visibility:hidden; }
 const tvStyle = document.createElement('style');
 tvStyle.textContent = tvCSS;
 document.head.appendChild(tvStyle);
+
+// CSS modal Chromecast
+const castCSS = `
+#cast-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.cast-box {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.cast-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin-bottom: 16px;
+}
+.cast-steps { display:flex; flex-direction:column; gap:12px; }
+.cast-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+.cast-num {
+  width: 28px;
+  height: 28px;
+  background: #2563eb;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.cast-step div { font-size: 13px; color: #333; line-height: 1.5; }
+.cast-step strong { color: #1a1a1a; }
+`;
+const castStyle = document.createElement('style');
+castStyle.textContent = castCSS;
+document.head.appendChild(castStyle);
