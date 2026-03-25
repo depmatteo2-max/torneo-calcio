@@ -9,6 +9,7 @@ let STATE = {
   activeTorneo: null,
   categorie: [],
   activeCat: null,
+  activeGiornata: 'tutte',
   isAdmin: false,
   currentSection: 'classifiche',
   userRole: null,
@@ -92,6 +93,9 @@ async function loadTorneo() {
   _saveSavedTorneo(STATE.activeTorneo);
   STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
   STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
+  STATE.activeGiornata = 'tutte';
+  STATE._giornateDisponibili = [];
+  if (STATE.activeCat) await _caricaGiornate();
   renderTorneoBar(); renderCatBar(); await renderCurrentSection();
 }
 
@@ -170,12 +174,83 @@ async function renderCurrentSection() {
 function renderCatBar() {
   const bar = document.getElementById('cat-bar');
   if (!STATE.categorie.length) { bar.innerHTML = ''; return; }
-  bar.innerHTML = `<div class="cat-bar-inner">${STATE.categorie.map(c =>
-    `<button class="cat-pill ${c.id === STATE.activeCat ? 'active' : ''}" onclick="selectCat(${c.id})">${c.nome}</button>`
-  ).join('')}</div>`;
+
+  // Raccoglie giornate disponibili per categoria attiva
+  bar.innerHTML = `
+    <div class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;">
+      ${STATE.categorie.map(c =>
+        `<button class="cat-pill ${c.id === STATE.activeCat ? 'active' : ''}" onclick="selectCat(${c.id})">${c.nome}</button>`
+      ).join('')}
+    </div>
+    <div id="giornata-bar" class="cat-bar-inner" style="margin-top:4px;flex-wrap:wrap;gap:4px;"></div>
+  `;
+  _renderGiornataBar();
 }
 
-async function selectCat(id) { STATE.activeCat = id; renderCatBar(); renderCurrentSection(); }
+function _renderGiornataBar() {
+  const bar = document.getElementById('giornata-bar');
+  if (!bar) return;
+
+  // Prende le giornate/date disponibili dalle partite della categoria attiva
+  // Le leggiamo dal DB tramite STATE — usiamo i gironi già caricati
+  // Per ora mostriamo filtro solo se ci sono giornate multiple
+  const giornate = STATE._giornateDisponibili || [];
+  if (giornate.length <= 1) { bar.innerHTML = ''; return; }
+
+  bar.innerHTML = [
+    { id: 'tutte', label: '📅 Tutte le giornate' },
+    ...giornate.map(g => ({ id: g, label: g }))
+  ].map(g =>
+    `<button class="cat-pill ${STATE.activeGiornata === g.id ? 'active' : ''}"
+      style="font-size:11px;padding:4px 10px;"
+      onclick="selectGiornata('${g.id}')">${g.label}</button>`
+  ).join('');
+}
+
+async function selectCat(id) {
+  STATE.activeCat = id;
+  STATE.activeGiornata = 'tutte';
+  STATE._giornateDisponibili = [];
+  // Carica giornate disponibili per questa categoria
+  await _caricaGiornate();
+  renderCatBar();
+  renderCurrentSection();
+}
+
+async function selectGiornata(g) {
+  STATE.activeGiornata = g;
+  _renderGiornataBar();
+  renderCurrentSection();
+}
+
+async function _caricaGiornate() {
+  if (!STATE.activeCat) return;
+  try {
+    // Legge tutte le partite della categoria per trovare le date/giornate uniche
+    const gironi = await dbGetGironi(STATE.activeCat);
+    const dateSet = new Set();
+    for (const g of gironi) {
+      const { data: partite } = await db.from('partite')
+        .select('giorno')
+        .eq('girone_id', g.id)
+        .not('giorno', 'is', null);
+      (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
+    }
+    // Ordina le date
+    STATE._giornateDisponibili = [...dateSet].sort((a, b) => {
+      // Prova a ordinare per data
+      const mesi = {'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,
+                    'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12};
+      const parseData = s => {
+        const parts = s.toLowerCase().split(' ').filter(Boolean);
+        const giorno = parseInt(parts[0]) || parseInt(parts[1]) || 0;
+        const mese = Object.entries(mesi).find(([m]) => parts.some(p => p.includes(m)));
+        return (mese ? mese[1] : 0) * 100 + giorno;
+      };
+      return parseData(a) - parseData(b);
+    });
+  } catch(e) { STATE._giornateDisponibili = []; }
+}
 
 function logoHTML(sq, size = 'md') {
   const cls = size === 'sm' ? 'team-logo-sm' : 'team-logo';
@@ -360,11 +435,16 @@ async function renderRisultati() {
   const gironi=await getGironiWithData(STATE.activeCat);
 
   // Raccoglie TUTTE le partite da tutti i gironi
-  const tuttePartite = [];
+  let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) {
       tuttePartite.push({ ...p, _girone: g.nome });
     }
+  }
+
+  // Filtra per giornata se selezionata
+  if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') {
+    tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
 
   // Ordina per orario
@@ -377,7 +457,7 @@ async function renderRisultati() {
 
   // Partite giocate
   if (giocate.length) {
-    html += `<div class="section-label">✅ Risultati</div><div class="card">`;
+    html += `<div class="section-label">✅ Risultati${filtroLabel||''}</div><div class="card">`;
     for (const p of giocate) {
       const mH=(p.marcatori||[]).filter(m=>m.squadra_id===p.home_id);
       const mA=(p.marcatori||[]).filter(m=>m.squadra_id===p.away_id);
@@ -407,8 +487,10 @@ async function renderRisultati() {
   }
 
   // Partite da giocare
+  const filtroLabel = STATE.activeGiornata && STATE.activeGiornata !== 'tutte'
+    ? ` — ${STATE.activeGiornata}` : '';
   if (daFare.length) {
-    html += `<div class="section-label">🕐 Programma</div><div class="card">`;
+    html += `<div class="section-label">🕐 Programma${filtroLabel}</div><div class="card">`;
     for (const p of daFare) {
       const orInfo = p.orario || p.campo ? `
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
@@ -659,9 +741,13 @@ async function renderAdminRisultati() {
   const gironi=await getGironiWithData(STATE.activeCat);
 
   // Raccoglie tutte le partite e ordina per orario
-  const tuttePartite = [];
+  let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id });
+  }
+  // Filtra per giornata se selezionata
+  if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') {
+    tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
   tuttePartite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
 
