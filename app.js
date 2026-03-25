@@ -91,6 +91,10 @@ async function selezionaTorneoPublic(id) {
 function _saveSavedTorneo(id) { try { localStorage.setItem('spe_torneo', String(id)); } catch(e) {} }
 function _loadSavedTorneo() { try { const v = localStorage.getItem('spe_torneo'); return v ? parseInt(v) : null; } catch(e) { return null; } }
 
+function _saveSavedCat(id) { try { localStorage.setItem('spe_cat', String(id)); } catch(e) {} }
+function _loadSavedCat() { try { const v = localStorage.getItem('spe_cat'); return v ? parseInt(v) : null; } catch(e) { return null; } }
+function _clearSavedCat() { try { localStorage.removeItem('spe_cat'); } catch(e) {} }
+
 async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   _saveSavedTorneo(STATE.activeTorneo);
@@ -98,16 +102,24 @@ async function loadTorneo() {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
-  // Se ci sono più categorie e nessuna è già selezionata, mostra selezione
-  if (STATE.categorie.length > 1 && !STATE.activeCat) {
+  // Ripristina categoria salvata in localStorage
+  const savedCatId = _loadSavedCat();
+  const catSalvata = savedCatId && STATE.categorie.find(c => c.id === savedCatId);
+
+  if (catSalvata) {
+    // Categoria salvata trovata — vai diretto
+    STATE.activeCat = catSalvata.id;
+    preloadCategoria(catSalvata.id); // preload in background
+  } else if (STATE.categorie.length > 1 && !STATE.activeCat) {
+    // Più categorie e nessuna salvata — mostra selezione
     STATE.activeCat = null;
     renderTorneoBar();
     document.getElementById('cat-bar').style.display = 'none';
     mostraSelezioneCat();
     return;
+  } else {
+    STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   }
-
-  STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   if (STATE.activeCat) await _caricaGiornate();
   renderTorneoBar(); renderCatBar(); await renderCurrentSection();
 }
@@ -161,8 +173,11 @@ function mostraSelezioneCat() {
 
 async function selezionaCategoriaPublic(catId) {
   STATE.activeCat = catId;
+  _saveSavedCat(catId);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+  // Avvia preload immediato in background
+  preloadCategoria(catId);
   await _caricaGiornate();
   renderCatBar();
   document.getElementById('cat-bar').style.display = '';
@@ -170,7 +185,7 @@ async function selezionaCategoriaPublic(catId) {
 }
 
 async function mostraTutteLCategorie() {
-  // Seleziona prima categoria e mostra tutto
+  _clearSavedCat(); // non salvare — mostra tutto senza filtro
   STATE.activeCat = STATE.categorie[0]?.id || null;
   if (STATE.activeCat) await _caricaGiornate();
   renderCatBar();
@@ -180,14 +195,71 @@ async function mostraTutteLCategorie() {
 
 function renderTorneoBar() {
   const bar = document.getElementById('torneo-bar'); if (!bar) return;
-  const attivi = STATE.tornei.filter(t => t.attivo);
-  if (attivi.length <= 1) { bar.style.display = 'none'; return; }
-  bar.style.display = '';
   const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
-  bar.innerHTML = `<div class="torneo-bar-inner">
-    <span style="font-size:13px;font-weight:600;color:#1a2a3a;flex:1;">${t?.nome || ''}</span>
-    <button onclick="cambiaTorneo()" style="background:#f0f4f8;border:1px solid #dde3ea;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#E85C00;cursor:pointer;">🔄 Cambia torneo</button>
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const multiCat = STATE.categorie.length > 1;
+  const multiTorneo = STATE.tornei.filter(x => x.attivo).length > 1;
+
+  if (!cat && !multiTorneo) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+
+  bar.innerHTML = `<div class="torneo-bar-inner" style="gap:8px;padding:8px 16px;">
+    ${cat ? `
+      <!-- Categoria attiva ben visibile -->
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">
+          ${t?.nome || ''}
+        </div>
+        <div style="font-size:15px;font-weight:800;color:var(--testo);margin-top:1px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${cat.nome}
+        </div>
+      </div>
+      ${multiCat ? `
+        <button onclick="cambiaCategoria()"
+          style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);
+                 border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;
+                 color:var(--testo-lt);cursor:pointer;font-family:inherit;
+                 display:flex;align-items:center;gap:5px;transition:all .15s;"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
+          ⇄ Cambia categoria
+        </button>` : ''}
+    ` : multiTorneo ? `
+      <span style="font-size:13px;font-weight:700;color:var(--testo-2);flex:1;">🏆 ${t?.nome || ''}</span>
+      <button onclick="cambiaTorneo()"
+        style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:8px;
+               padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);
+               cursor:pointer;font-family:inherit;">
+        🔄 Cambia torneo
+      </button>
+    ` : ''}
   </div>`;
+}
+
+async function cambiaCategoria() {
+  // Torna alla schermata selezione categoria senza cambiare torneo
+  STATE.activeCat = null;
+  _clearSavedCat();
+  STATE.activeGiornata = 'tutte';
+  STATE._giornateDisponibili = [];
+
+  // Nasconde cat-bar e ricrea le sezioni
+  document.getElementById('cat-bar').style.display = 'none';
+  document.getElementById('cat-bar').innerHTML = '';
+  document.getElementById('main-content').innerHTML =
+    '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
+    '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
+    '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
+  STATE.currentSection = 'classifiche';
+  document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('[data-section="classifiche"]');
+  if (btn) btn.classList.add('active');
+
+  renderTorneoBar();
+  mostraSelezioneCat();
 }
 
 async function cambiaTorneo() {
@@ -197,6 +269,7 @@ async function cambiaTorneo() {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   try { localStorage.removeItem('spe_torneo'); } catch(e) {}
+  _clearSavedCat();
 
   // Ricarica lista tornei
   STATE.tornei = await dbGetTornei();
@@ -332,6 +405,7 @@ function _abbreviaNomeCat(nome) {
 
 async function selectCat(id) {
   STATE.activeCat = id;
+  _saveSavedCat(id);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   // Carica giornate disponibili per questa categoria
@@ -347,16 +421,15 @@ async function selectGiornata(g) {
 }
 
 async function _caricaGiornate() {
+  if (!STATE.activeCat) return;
   try {
     const dateSet = new Set();
-    // Legge da TUTTE le categorie del torneo
-    for (const cat of STATE.categorie) {
-      const gironi = await dbGetGironi(cat.id);
-      for (const g of gironi) {
-        const { data: partite } = await db.from('partite')
-          .select('giorno').eq('girone_id', g.id).not('giorno', 'is', null);
-        (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
-      }
+    // Legge solo dalla categoria attiva
+    const gironi = await dbGetGironi(STATE.activeCat);
+    for (const g of gironi) {
+      const { data: partite } = await db.from('partite')
+        .select('giorno').eq('girone_id', g.id).not('giorno', 'is', null);
+      (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
     }
     const mesi = {'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,
                   'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12};
@@ -383,32 +456,6 @@ function logoHTML(sq, size = 'md') {
   return `<div class="${avcls}">${ini}</div>`;
 }
 
-async function getGironiWithData(categoria_id) {
-  // Preload tutto in 2-3 query invece di N*4 query
-  await _preloadCategoria(categoria_id);
-
-  const gironi = await dbGetGironi(categoria_id);
-  const tuttePartite = [];
-
-  for (const g of gironi) {
-    const members = await dbGetGironeSquadre(g.id);
-    g.squadre = members.map(m => m.squadre);
-    g.partite = await dbGetPartite(g.id);
-    tuttePartite.push(...g.partite);
-  }
-
-  // Preload marcatori in una query sola
-  const partitaIds = tuttePartite.map(p => p.id);
-  await _preloadMarcatori(categoria_id, partitaIds);
-
-  for (const g of gironi) {
-    for (const p of g.partite) {
-      p.marcatori = await dbGetMarcatori(p.id);
-    }
-  }
-
-  return gironi;
-}
 
 // ============================================================
 //  CLASSIFICA
@@ -571,59 +618,43 @@ function _riepilogoBanner(section) {
 // ============================================================
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
-  if (!STATE.categorie.length) { el.innerHTML='<div class="empty-state">Nessuna categoria configurata.</div>'; return; }
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
 
-  // Skeleton loader immediato
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
 
-  // Carica TUTTE le categorie in parallelo
-  const tuttiDati = await _caricaTutteCategorie();
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const gironi = await getGironiWithData(STATE.activeCat);
 
-  let html = _riepilogoBanner('classifiche');
+  if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
 
-  for (const { cat, gironi } of tuttiDati) {
-    if (!gironi.length) continue;
-
-    if (STATE.categorie.length > 1) {
-      const totPartite = gironi.reduce((s,g)=>s+g.partite.length,0);
-      const totGiocate = gironi.reduce((s,g)=>s+g.partite.filter(p=>p.giocata).length,0);
-      html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
-        color:white;border-radius:var(--radius);padding:9px 14px;margin-top:18px;margin-bottom:8px;
-        font-size:13px;font-weight:700;letter-spacing:.03em;
-        display:flex;align-items:center;justify-content:space-between;">
-        <span>🏆 ${cat.nome}</span>
-        <span style="font-size:11px;opacity:.7;">${totGiocate}/${totPartite} partite</span>
-      </div>`;
-    }
-
-    for (const g of gironi) {
-      const cl = calcGironeClassifica(g);
-      const played = g.partite.filter(p=>p.giocata).length;
-      html += `<div class="card" style="margin-bottom:8px;">
-        <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
-        <table class="standings-table">
-          <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead>
-          <tbody>`;
-      cl.forEach((row,idx) => {
-        const q = idx < (cat.qualificate||1);
-        const diff = row.gf - row.gs;
-        html += `<tr class="${q?'qualifies':''}">
-          <td><span class="${q?'q-dot':'nq-dot'}"></span></td>
-          <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
-          <td>${row.sq.nome}</td>
-          <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-          <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
-          <td class="pts-col">${row.pts}</td>
-        </tr>`;
-      });
-      html += `</tbody></table>
-        <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
-          Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
-        </div>
-      </div>`;
-    }
+  let html = '';
+  for (const g of gironi) {
+    const cl = calcGironeClassifica(g);
+    const played = g.partite.filter(p=>p.giocata).length;
+    html += `<div class="card" style="margin-bottom:8px;">
+      <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
+      <table class="standings-table">
+        <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead>
+        <tbody>`;
+    cl.forEach((row,idx) => {
+      const q = idx < (cat?.qualificate||1);
+      const diff = row.gf - row.gs;
+      html += `<tr class="${q?'qualifies':''}">
+        <td><span class="${q?'q-dot':'nq-dot'}"></span></td>
+        <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
+        <td>${row.sq.nome}</td>
+        <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
+        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
+        <td class="pts-col">${row.pts}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>
+      <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
+        Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
+      </div>
+    </div>`;
   }
-  el.innerHTML = html || '<div class="empty-state">Nessun girone trovato.</div>';
+  el.innerHTML = html;
 }
 
 // ============================================================
@@ -631,19 +662,17 @@ async function renderClassifiche() {
 // ============================================================
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
-  if (!STATE.categorie.length) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
 
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
 
-  // Carica TUTTE le categorie in parallelo
-  const tuttiDati = await _caricaTutteCategorie();
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const gironi = await getGironiWithData(STATE.activeCat);
 
   let tuttePartite = [];
-  for (const { cat, gironi } of tuttiDati) {
-    for (const g of gironi) {
-      for (const p of g.partite) {
-        tuttePartite.push({ ...p, _girone: g.nome, _cat: cat.nome });
-      }
+  for (const g of gironi) {
+    for (const p of g.partite) {
+      tuttePartite.push({ ...p, _girone: g.nome, _cat: cat?.nome || '' });
     }
   }
 
@@ -891,8 +920,8 @@ async function renderAdminSetup() {
   html+=`<div class="section-label">Categorie configurate</div>`;
   if (!STATE.categorie.length) html+=`<div style="color:#aaa;font-size:13px;padding:8px 0 12px;">Nessuna categoria. Importa da Excel o aggiungine una.</div>`;
   for (const cat of STATE.categorie) {
-    const gironi=await dbGetGironi(cat.id); let totP=0,totG=0;
-    for (const g of gironi) { const pp=await dbGetPartite(g.id); totP+=pp.length; totG+=pp.filter(p=>p.giocata).length; }
+    const gironi=await getGironiWithData(cat.id); let totP=0,totG=0;
+    for (const g of gironi) { totP+=g.partite.length; totG+=g.partite.filter(p=>p.giocata).length; }
     html+=`<div class="card" style="margin-bottom:10px;">
       <div class="card-title" style="margin-bottom:10px;">
         <div style="font-size:15px;font-weight:600;">${cat.nome}</div>
@@ -902,34 +931,35 @@ async function renderAdminSetup() {
         </div>
       </div>`;
     for (const g of gironi) {
-      const members=await dbGetGironeSquadre(g.id);
+      const members=g.squadre||[];
       html+=`<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">${g.nome}</div><div style="display:flex;flex-wrap:wrap;gap:4px;">`;
-      members.forEach(m=>{ html+=`<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">${logoHTML(m.squadre,'sm')} ${m.squadre.nome}</span>`; });
+      members.forEach(sq=>{ html+=`<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">${logoHTML(sq,'sm')} ${sq.nome}</span>`; });
       html+=`</div></div>`;
     }
     html+=`</div>`;
   }
-  html+=`<div class="section-label">Importa da Excel</div>
+  html+=`<div class="section-label">Aggiungi categorie da Excel</div>
   <div class="card">
-    <div style="font-size:13px;color:#555;margin-bottom:8px;">Fogli richiesti: <strong>CATEGORIE · GIRONI · PARTITE_FASE1 · FASE_FINALE</strong></div>
-    <label style="display:inline-flex;align-items:center;gap:8px;background:#E85C00;color:white;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
-      📂 Seleziona file Excel
-      <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)">
-    </label>
-    <div id="import-preview"></div>
-  </div>
-  <div class="section-label">Aggiungi categoria manualmente</div>
-  <div class="card">
-    <div class="form-grid-2">
-      <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="cname" placeholder="Under 10"></div>
-      <div class="form-group"><label class="form-label">Si qualificano</label>
-        <select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
+    <div style="font-size:13px;color:var(--testo-lt);margin-bottom:14px;">
+      Per ogni categoria: scrivi il nome e carica il file Excel.
     </div>
-    <div class="form-group"><label class="form-label">Squadre per girone (una riga per girone, separate da virgola)</label>
-      <textarea class="form-input" id="cteams" rows="4" placeholder="Girone A: Milan, Inter, Juve&#10;Girone B: Napoli, Lazio, Roma"></textarea></div>
-    <button class="btn btn-p" style="width:100%;" onclick="addCategoria()">+ Aggiungi categoria</button>
+    <div id="cat-import-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+    <button onclick="aggiungiRigaCategoria()"
+      style="width:100%;padding:10px;border:1.5px dashed var(--bordo);border-radius:9px;
+             background:var(--sfondo);color:var(--blu);font-size:13px;font-weight:600;
+             cursor:pointer;font-family:inherit;">
+      + Aggiungi categoria
+    </button>
+    <div id="import-preview" style="margin-top:14px;"></div>
   </div>`;
-  el.innerHTML=html;
+  el.innerHTML = html;
+  // Aggiungi prima riga automaticamente se lista vuota
+  setTimeout(() => {
+    if (document.getElementById('cat-import-list') &&
+        document.getElementById('cat-import-list').children.length === 0) {
+      aggiungiRigaCategoria();
+    }
+  }, 50);
 }
 
 async function addCategoria() {
@@ -953,6 +983,194 @@ async function addCategoria() {
     await dbSetGironeSquadre(girone.id,squadra_ids); await dbGeneraPartite(girone.id,squadra_ids);
   }
   renderCatBar(); toast('Categoria aggiunta!'); await renderAdminSetup();
+}
+
+
+
+// ============================================================
+//  RIGHE CATEGORIA + EXCEL
+// ============================================================
+let _catRigheCount = 0;
+
+function aggiungiRigaCategoria() {
+  const list = document.getElementById('cat-import-list');
+  if (!list) return;
+  const idx = _catRigheCount++;
+  const div = document.createElement('div');
+  div.id = `cat-riga-${idx}`;
+  div.style.cssText = 'display:flex;flex-direction:column;gap:8px;background:var(--sfondo);border:1px solid var(--bordo);border-radius:10px;padding:12px;';
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input id="cat-nome-${idx}" class="form-input" placeholder="Nome categoria (es. Esordienti 2013)"
+        style="flex:1;font-size:13px;"
+        oninput="_aggiornaNomeRiga(${idx})">
+      <button onclick="_rimuoviRiga(${idx})"
+        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);
+               border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
+    </div>
+    <div id="cat-file-area-${idx}">
+      <label style="display:flex;align-items:center;gap:8px;background:white;border:1.5px solid var(--bordo);
+                    border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--testo-lt);
+                    transition:all .15s;"
+             onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+             onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
+        <span>📂</span>
+        <span id="cat-file-label-${idx}">Seleziona file Excel...</span>
+        <input type="file" accept=".xlsx,.xls" style="display:none;"
+          onchange="_fileSelezionato(event, ${idx})">
+      </label>
+    </div>
+    <div id="cat-preview-${idx}" style="display:none;"></div>
+    <div id="cat-btn-${idx}" style="display:none;">
+      <button onclick="_importaRiga(${idx})"
+        style="width:100%;background:var(--blu);color:white;border:none;border-radius:8px;
+               padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
+        ✓ Importa "${document.getElementById('cat-nome-${idx}')?.value||'categoria'}"
+      </button>
+    </div>
+  `;
+  list.appendChild(div);
+}
+
+function _aggiornaNomeRiga(idx) {
+  const nome = document.getElementById(`cat-nome-${idx}`)?.value || 'categoria';
+  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  if (btnDiv && btnDiv.style.display !== 'none') {
+    const btn = btnDiv.querySelector('button');
+    if (btn) btn.textContent = `✓ Importa "${nome}"`;
+  }
+}
+
+function _rimuoviRiga(idx) {
+  const el = document.getElementById(`cat-riga-${idx}`);
+  if (el) el.remove();
+}
+
+let _fileRighe = {}; // idx -> dati excel parsati
+
+function _fileSelezionato(event, idx) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const label = document.getElementById(`cat-file-label-${idx}`);
+  if (label) label.textContent = `📄 ${file.name}`;
+
+  // Preview immediato
+  _parseExcelRiga(file, idx);
+}
+
+async function _parseExcelRiga(file, idx) {
+  const preview = document.getElementById(`cat-preview-${idx}`);
+  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
+
+  try {
+    if (typeof XLSX === 'undefined') {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const dati = {
+      categorie: leggiCategorie(wb),
+      gironi:    leggiGironi(wb),
+      partite:   leggiPartiteFase1(wb),
+      fase2:     leggiPartiteFase2(wb)
+    };
+
+    _fileRighe[idx] = dati;
+
+    // Mostra riepilogo
+    const totGironi = dati.gironi.length;
+    const totPartite = dati.partite.length;
+    const totFinali = dati.fase2.length;
+    const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
+
+    // Auto-compila nome categoria dal file se vuoto
+    if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
+      nomeCatInput.value = dati.categorie[0].nome;
+    }
+
+    if (preview) {
+      preview.innerHTML = `
+        <div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;">
+          <div style="font-weight:700;color:var(--verde);margin-bottom:6px;">✅ File letto correttamente</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${totGironi} gironi</span>
+            <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${totPartite} partite</span>
+            ${totFinali ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${totFinali} finali</span>` : ''}
+          </div>
+        </div>`;
+    }
+
+    if (btnDiv) {
+      btnDiv.style.display = 'block';
+      const nome = nomeCatInput?.value || 'categoria';
+      const btn = btnDiv.querySelector('button');
+      if (btn) btn.textContent = `✓ Importa "${nome}"`;
+    }
+  } catch(e) {
+    if (preview) preview.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
+  }
+}
+
+async function _importaRiga(idx) {
+  const dati = _fileRighe[idx];
+  const nomeInput = document.getElementById(`cat-nome-${idx}`);
+  const nomeScritto = nomeInput?.value?.trim();
+  const btn = document.querySelector(`#cat-btn-${idx} button`);
+
+  if (!dati) { toast('Carica prima un file Excel'); return; }
+
+  // Sovrascrivi il nome categoria con quello scritto dall'utente
+  if (nomeScritto && dati.categorie.length) {
+    dati.categorie[0].nome = nomeScritto;
+    dati.categorie[0].codice = nomeScritto;
+    // Aggiorna anche i riferimenti nelle partite e gironi
+    const vecchioNome = dati.gironi[0]?.categoria;
+    if (vecchioNome) {
+      dati.gironi.forEach(g => { if(g.categoria === vecchioNome) g.categoria = nomeScritto; });
+      dati.partite.forEach(p => { if(p.categoria === vecchioNome) p.categoria = nomeScritto; });
+      dati.fase2.forEach(p => { if(p.categoria === vecchioNome) p.categoria = nomeScritto; });
+    }
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Importazione...'; }
+
+  try {
+    const tornei = await db.from('tornei').select('id,nome')
+      .eq('cliente', CONFIG.CLIENTE || 'spe').eq('attivo', true)
+      .order('created_at', { ascending: false });
+
+    if (!tornei.data?.length) throw new Error('Nessun torneo attivo');
+    const torneoId = STATE.activeTorneo || tornei.data[0].id;
+
+    // Usa la funzione di importazione esistente
+    window._importDati = dati;
+    await eseguiImportazioneConTorneo(torneoId, dati, btn);
+
+    // Feedback sulla riga
+    const riga = document.getElementById(`cat-riga-${idx}`);
+    if (riga) {
+      riga.style.background = 'var(--verde-bg)';
+      riga.style.borderColor = 'rgba(22,163,74,0.3)';
+      const preview = document.getElementById(`cat-preview-${idx}`);
+      if (preview) preview.innerHTML = `<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>`;
+      if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
+    }
+
+    // Aggiorna stato
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    renderCatBar();
+
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
+    toast('❌ Errore: ' + e.message);
+    console.error(e);
+  }
 }
 
 async function deleteCat(id) {
@@ -1030,6 +1248,7 @@ let openScorers={};
 async function renderAdminRisultati() {
   const el=document.getElementById('sec-a-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const gironi=await getGironiWithData(STATE.activeCat);
 
   // Raccoglie tutte le partite e ordina per orario
