@@ -192,14 +192,54 @@ async function mostraTutteLCategorie() {
 
 function renderTorneoBar() {
   const bar = document.getElementById('torneo-bar'); if (!bar) return;
-  const attivi = STATE.tornei.filter(t => t.attivo);
-  if (attivi.length <= 1) { bar.style.display = 'none'; return; }
   bar.style.display = '';
   const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
-  bar.innerHTML = `<div class="torneo-bar-inner">
-    <span style="font-size:13px;font-weight:600;color:#1a2a3a;flex:1;">${t?.nome || ''}</span>
-    <button onclick="cambiaTorneo()" style="background:#f0f4f8;border:1px solid #dde3ea;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#E85C00;cursor:pointer;">🔄 Cambia torneo</button>
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const multiTorneo = STATE.tornei.filter(x => x.attivo).length > 1;
+  const multiCat = STATE.categorie.length > 1;
+
+  bar.innerHTML = `<div class="torneo-bar-inner" style="gap:6px;">
+    ${multiTorneo ? `<button onclick="cambiaTorneo()" 
+      style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:8px;
+             padding:5px 10px;font-size:11px;font-weight:600;color:var(--testo-lt);cursor:pointer;
+             display:flex;align-items:center;gap:4px;font-family:inherit;">
+      🏆 ${t?.nome || ''}
+    </button>` : `<span style="font-size:12px;font-weight:700;color:var(--testo-2);">🏆 ${t?.nome || ''}</span>`}
+    ${multiCat && cat ? `
+      <span style="color:var(--bordo);font-size:14px;">›</span>
+      <span style="font-size:12px;font-weight:700;color:var(--blu);">📋 ${cat.nome}</span>
+      <button onclick="cambiaCategoria()"
+        style="margin-left:auto;background:var(--blu-bg);border:1px solid var(--blu-lt);
+               border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;
+               color:var(--blu);cursor:pointer;font-family:inherit;">
+        🔄 Cambia categoria
+      </button>` : ''}
   </div>`;
+}
+
+async function cambiaCategoria() {
+  // Torna alla schermata selezione categoria senza cambiare torneo
+  STATE.activeCat = null;
+  _clearSavedCat();
+  STATE.activeGiornata = 'tutte';
+  STATE._giornateDisponibili = [];
+
+  // Nasconde cat-bar e ricrea le sezioni
+  document.getElementById('cat-bar').style.display = 'none';
+  document.getElementById('cat-bar').innerHTML = '';
+  document.getElementById('main-content').innerHTML =
+    '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
+    '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
+    '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
+  STATE.currentSection = 'classifiche';
+  document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('[data-section="classifiche"]');
+  if (btn) btn.classList.add('active');
+
+  renderTorneoBar();
+  mostraSelezioneCat();
 }
 
 async function cambiaTorneo() {
