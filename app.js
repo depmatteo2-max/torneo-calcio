@@ -82,6 +82,7 @@ async function selezionaTorneoPublic(id) {
   if (btnClass) btnClass.classList.add('active');
 
   STATE.currentSection = 'classifiche';
+  STATE.activeCat = null; // reset categoria per mostrare selezione
   await loadTorneo();
 }
 
@@ -92,11 +93,87 @@ async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   _saveSavedTorneo(STATE.activeTorneo);
   STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
-  STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+
+  // Se ci sono più categorie e nessuna è già selezionata, mostra selezione
+  if (STATE.categorie.length > 1 && !STATE.activeCat) {
+    STATE.activeCat = null;
+    renderTorneoBar();
+    document.getElementById('cat-bar').style.display = 'none';
+    mostraSelezioneCat();
+    return;
+  }
+
+  STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   if (STATE.activeCat) await _caricaGiornate();
   renderTorneoBar(); renderCatBar(); await renderCurrentSection();
+}
+
+function mostraSelezioneCat() {
+  const main = document.getElementById('main-content');
+  // Ricrea sezioni
+  main.innerHTML =
+    '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
+    '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
+    '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
+  const el = document.getElementById('sec-classifiche');
+  el.classList.add('active');
+
+  const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
+  const oggiLabel = STATE._giornateDisponibili?.length
+    ? _trovaGiornataOggi(STATE._giornateDisponibili) : null;
+
+  el.innerHTML = `
+    <div class="cat-select-screen">
+      ${oggiLabel ? `<div style="background:var(--arancio-bg);border:1px solid rgba(234,88,12,0.2);
+        border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;font-weight:600;color:var(--arancio);
+        display:flex;align-items:center;gap:8px;">
+        <span class="oggi-dot"></span> Oggi: ${oggiLabel}
+      </div>` : ''}
+      <div class="cat-select-title">Seleziona categoria</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${STATE.categorie.map(c => `
+          <button class="cat-select-btn" onclick="selezionaCategoriaPublic(${c.id})">
+            <div>
+              <div class="cat-select-btn-nome">${c.nome}</div>
+              ${c.note ? `<div class="cat-select-btn-sub">${c.note}</div>` : ''}
+            </div>
+            <span class="cat-select-arrow">›</span>
+          </button>`).join('')}
+      </div>
+      <button class="cat-select-all" onclick="mostraTutteLCategorie()">
+        📊 Vedi tutte le categorie insieme
+      </button>
+    </div>`;
+
+  // Mostra nav pubblica
+  document.getElementById('pub-nav').style.display = 'flex';
+  document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('[data-section="classifiche"]');
+  if (btn) btn.classList.add('active');
+  STATE.currentSection = 'classifiche';
+}
+
+async function selezionaCategoriaPublic(catId) {
+  STATE.activeCat = catId;
+  STATE.activeGiornata = 'tutte';
+  STATE._giornateDisponibili = [];
+  await _caricaGiornate();
+  renderCatBar();
+  document.getElementById('cat-bar').style.display = '';
+  await renderCurrentSection();
+}
+
+async function mostraTutteLCategorie() {
+  // Seleziona prima categoria e mostra tutto
+  STATE.activeCat = STATE.categorie[0]?.id || null;
+  if (STATE.activeCat) await _caricaGiornate();
+  renderCatBar();
+  document.getElementById('cat-bar').style.display = '';
+  await renderCurrentSection();
 }
 
 function renderTorneoBar() {
@@ -115,6 +192,8 @@ async function cambiaTorneo() {
   STATE.activeTorneo = null;
   STATE.categorie = [];
   STATE.activeCat = null;
+  STATE.activeGiornata = 'tutte';
+  STATE._giornateDisponibili = [];
   try { localStorage.removeItem('spe_torneo'); } catch(e) {}
 
   // Ricarica lista tornei
@@ -179,7 +258,7 @@ function renderCatBar() {
   bar.innerHTML = `
     <div class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;">
       ${STATE.categorie.map(c =>
-        `<button class="cat-pill ${c.id === STATE.activeCat ? 'active' : ''}" onclick="selectCat(${c.id})">${c.nome}</button>`
+        `<button class="cat-pill ${c.id === STATE.activeCat ? 'active' : ''}" onclick="selectCat(${c.id})" title="${c.nome}">${_abbreviaNomeCat(c.nome)}</button>`
       ).join('')}
     </div>
     <div id="giornata-bar" class="cat-bar-inner" style="margin-top:4px;flex-wrap:wrap;gap:4px;"></div>
@@ -241,6 +320,19 @@ function _trovaGiornataOggi(giornate) {
     }
   }
   return null;
+}
+
+function _abbreviaNomeCat(nome) {
+  // Abbrevia nomi lunghi per la pill bar
+  const abbr = {
+    'Girone Silver 1': 'Silver 1', 'Girone Silver 2': 'Silver 2',
+    'Girone Gold 1': 'Gold 1', 'Girone Gold 2': 'Gold 2',
+    'Pulcini 2016': 'Pulcini', 'Esordienti 2013': 'Esord. 2013',
+    'Esordienti 2014': 'Esord. 2014', 'Girone Unico': 'Girone Unico',
+  };
+  if (abbr[nome]) return abbr[nome];
+  // Tronca se troppo lungo
+  return nome.length > 14 ? nome.substring(0, 13) + '…' : nome;
 }
 
 async function selectCat(id) {
@@ -1096,3 +1188,267 @@ function loadScript(src) {
 }
 
 window.addEventListener('DOMContentLoaded', init);
+
+// ============================================================
+//  TV MODE — scorre tutte le categorie, filtra per oggi
+// ============================================================
+let _tvState = {
+  active: false,
+  section: 'classifiche', // classifiche | risultati
+  catIndex: 0,
+  scrollTimer: null,
+  catTimer: null,
+  clockTimer: null,
+};
+
+function openTV() {
+  const tv = document.getElementById('tv-mode');
+  if (!tv) return;
+  _tvState.active = true;
+  _tvState.catIndex = 0;
+  tv.classList.add('active');
+  _tvRenderCatBar();
+  _tvShowCat(0);
+  _tvStartClock();
+  _tvStartAutoscroll();
+}
+
+function closeTV() {
+  _tvState.active = false;
+  const tv = document.getElementById('tv-mode');
+  if (tv) tv.classList.remove('active');
+  clearInterval(_tvState.scrollTimer);
+  clearInterval(_tvState.catTimer);
+  clearInterval(_tvState.clockTimer);
+  // Reset scroll progress
+  const prog = document.getElementById('tv-scroll-progress');
+  if (prog) prog.style.width = '0%';
+}
+
+function _tvCategorieFiltrate() {
+  // Usa tutte le categorie disponibili
+  return STATE.categorie;
+}
+
+function _tvRenderCatBar() {
+  const bar = document.getElementById('tv-cat-bar');
+  if (!bar) return;
+  const cats = _tvCategorieFiltrate();
+  bar.innerHTML = cats.map((c, i) =>
+    `<button class="tv-cat-btn ${i === _tvState.catIndex ? 'active' : ''}"
+      onclick="_tvShowCat(${i})">${_abbreviaNomeCat(c.nome)}</button>`
+  ).join('');
+}
+
+async function _tvShowCat(idx) {
+  _tvState.catIndex = idx;
+  _tvRenderCatBar();
+
+  const cats = _tvCategorieFiltrate();
+  if (!cats[idx]) return;
+  const cat = cats[idx];
+
+  // Carica dati con filtro giorno
+  const oggi = _tvGetOggi();
+  const content = document.getElementById('tv-content');
+  if (!content) return;
+  content.innerHTML = '<div style="color:rgba(255,255,255,0.3);padding:40px;text-align:center;">Caricamento...</div>';
+
+  try {
+    if (_tvState.section === 'classifiche') {
+      await _tvRenderClassifiche(cat, oggi, content);
+    } else {
+      await _tvRenderRisultati(cat, oggi, content);
+    }
+    content.scrollTop = 0;
+  } catch(e) { console.error(e); }
+}
+
+function _tvGetOggi() {
+  // Restituisce la giornata di oggi se disponibile
+  const giornate = STATE._giornateDisponibili || [];
+  return _trovaGiornataOggi(giornate);
+}
+
+async function _tvRenderClassifiche(cat, oggi, container) {
+  const gironi = await getGironiWithData(cat.id);
+  let html = '';
+
+  if (oggi) {
+    html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;
+      padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;letter-spacing:.04em;">
+      📅 ${oggi} — Classifica in tempo reale
+    </div>`;
+  }
+
+  html += '<div class="tv-gironi-grid">';
+  for (const g of gironi) {
+    const cl = calcGironeClassifica(g);
+    html += `<div class="tv-girone-card">
+      <div class="tv-girone-title">${g.nome}
+        <span style="font-size:11px;font-weight:600;opacity:.5;margin-left:auto;">${g.partite.filter(p=>p.giocata).length}/${g.partite.length}</span>
+      </div>
+      <table class="tv-standings-table">
+        <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>Pt</th></tr></thead>
+        <tbody>`;
+    cl.forEach((row, idx) => {
+      const q = idx < (cat.qualificate || 1);
+      const diff = row.gf - row.gs;
+      html += `<tr class="${q ? 'qualifies' : ''}">
+        <td><span class="${q ? 'q-dot' : 'nq-dot'}"></span></td>
+        <td>${logoHTML(row.sq, 'sm')}</td>
+        <td>${row.sq.nome}</td>
+        <td style="color:rgba(255,255,255,0.5)">${row.g}</td>
+        <td class="tv-pts">${row.pts}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+async function _tvRenderRisultati(cat, oggi, container) {
+  const gironi = await getGironiWithData(cat.id);
+  let tuttePartite = [];
+  for (const g of gironi) {
+    for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome });
+  }
+
+  // Filtra per oggi se disponibile
+  if (oggi) {
+    const filtrateOggi = tuttePartite.filter(p => p.giorno === oggi);
+    if (filtrateOggi.length) tuttePartite = filtrateOggi;
+  }
+
+  tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
+
+  const giocate = tuttePartite.filter(p => p.giocata);
+  const daFare  = tuttePartite.filter(p => !p.giocata);
+
+  let html = '';
+  if (oggi) {
+    html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;
+      padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;">
+      📅 ${oggi}
+    </div>`;
+  }
+
+  if (giocate.length) {
+    html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;
+      letter-spacing:.08em;margin-bottom:12px;">✅ Risultati</div>
+      <div class="tv-results-grid">`;
+    for (const p of giocate) {
+      const hm = p.home; const am = p.away;
+      html += `<div class="tv-match-card">
+        <div class="tv-match-header">
+          ${p.orario ? `🕐 ${p.orario}` : ''}
+          ${p.campo ? ` · ${p.campo}` : ''}
+          <span style="margin-left:auto">${p._girone}</span>
+        </div>
+        <div class="tv-match-body">
+          <div class="tv-match-team">
+            ${hm?.logo ? `<img src="${hm.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(hm?.nome||'?').substring(0,2).toUpperCase()}</div>`}
+            <div class="tv-team-name">${hm?.nome||'?'}</div>
+          </div>
+          <div class="tv-score-box">
+            <span class="tv-score">${p.gol_home}</span>
+            <span class="tv-score-sep">—</span>
+            <span class="tv-score">${p.gol_away}</span>
+          </div>
+          <div class="tv-match-team">
+            ${am?.logo ? `<img src="${am.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(am?.nome||'?').substring(0,2).toUpperCase()}</div>`}
+            <div class="tv-team-name">${am?.nome||'?'}</div>
+          </div>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  if (daFare.length) {
+    html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;
+      letter-spacing:.08em;margin:20px 0 12px;">🕐 Programma</div>
+      <div class="tv-results-grid">`;
+    for (const p of daFare) {
+      const hm = p.home; const am = p.away;
+      html += `<div class="tv-match-card">
+        <div class="tv-match-header">
+          ${p.orario ? `🕐 ${p.orario}` : '—'}
+          ${p.campo ? ` · ${p.campo}` : ''}
+          <span style="margin-left:auto">${p._girone}</span>
+        </div>
+        <div class="tv-match-body">
+          <div class="tv-match-team">
+            ${hm?.logo ? `<img src="${hm.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(hm?.nome||'?').substring(0,2).toUpperCase()}</div>`}
+            <div class="tv-team-name">${hm?.nome||'?'}</div>
+          </div>
+          <div class="tv-score-box">
+            <span class="tv-score-pending">vs</span>
+          </div>
+          <div class="tv-match-team">
+            ${am?.logo ? `<img src="${am.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(am?.nome||'?').substring(0,2).toUpperCase()}</div>`}
+            <div class="tv-team-name">${am?.nome||'?'}</div>
+          </div>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  if (!giocate.length && !daFare.length) {
+    html += '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:60px;">Nessuna partita</div>';
+  }
+  container.innerHTML = html;
+}
+
+function _tvSwitchSection(section, btn) {
+  _tvState.section = section;
+  document.querySelectorAll('.tv-nav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _tvShowCat(_tvState.catIndex);
+}
+
+function _tvStartClock() {
+  const update = () => {
+    const now = new Date();
+    const el = document.getElementById('tv-clock');
+    if (el) el.textContent = now.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+    const del = document.getElementById('tv-date-str');
+    if (del) del.textContent = now.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' });
+  };
+  update();
+  _tvState.clockTimer = setInterval(update, 1000);
+}
+
+function _tvStartAutoscroll() {
+  const SCROLL_INTERVAL = 30000; // 30s per categoria
+  let elapsed = 0;
+  const TICK = 200;
+
+  clearInterval(_tvState.scrollTimer);
+  _tvState.scrollTimer = setInterval(() => {
+    elapsed += TICK;
+    const pct = (elapsed / SCROLL_INTERVAL) * 100;
+    const prog = document.getElementById('tv-scroll-progress');
+    if (prog) prog.style.width = Math.min(pct, 100) + '%';
+
+    // Scrolla il contenuto
+    const content = document.getElementById('tv-content');
+    if (content) {
+      content.scrollTop += 2;
+      // Se arrivato in fondo, passa alla categoria successiva
+      if (content.scrollTop + content.clientHeight >= content.scrollHeight - 10) {
+        elapsed = SCROLL_INTERVAL; // forza cambio
+      }
+    }
+
+    if (elapsed >= SCROLL_INTERVAL) {
+      elapsed = 0;
+      if (prog) prog.style.width = '0%';
+      const cats = _tvCategorieFiltrate();
+      const nextIdx = (_tvState.catIndex + 1) % cats.length;
+      _tvShowCat(nextIdx);
+    }
+  }, TICK);
+}
