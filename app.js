@@ -109,6 +109,7 @@ async function loadTorneo() {
   if (catSalvata) {
     // Categoria salvata trovata — vai diretto
     STATE.activeCat = catSalvata.id;
+    preloadCategoria(catSalvata.id); // preload in background
   } else if (STATE.categorie.length > 1 && !STATE.activeCat) {
     // Più categorie e nessuna salvata — mostra selezione
     STATE.activeCat = null;
@@ -172,9 +173,11 @@ function mostraSelezioneCat() {
 
 async function selezionaCategoriaPublic(catId) {
   STATE.activeCat = catId;
-  _saveSavedCat(catId); // salva in localStorage
+  _saveSavedCat(catId);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+  // Avvia preload immediato in background
+  preloadCategoria(catId);
   await _caricaGiornate();
   renderCatBar();
   document.getElementById('cat-bar').style.display = '';
