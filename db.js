@@ -128,7 +128,8 @@ async function dbGetPartite(gironeId) {
 async function dbSavePartita(p) {
   const { data, error } = await db.from('partite').upsert({
     id: p.id, girone_id: p.girone_id,
-    gol_home: p.gol_home, gol_away: p.gol_away, giocata: true
+    gol_home: p.gol_home, gol_away: p.gol_away, giocata: true,
+    inserito_da: p.inserito_da || null
   }).select('*').single();
   if (error) { console.error('dbSavePartita:', error); return null; }
   return data;
