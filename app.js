@@ -923,15 +923,29 @@ async function renderAdminSetup() {
     }
     html+=`</div>`;
   }
-  html+=`<div class="section-label">Importa da Excel</div>
+  html+=`<div class="section-label">Aggiungi categorie da Excel</div>
   <div class="card">
-    <div style="font-size:13px;color:#555;margin-bottom:8px;">Fogli richiesti: <strong>CATEGORIE · GIRONI · PARTITE_FASE1 · FASE_FINALE</strong></div>
-    <label style="display:inline-flex;align-items:center;gap:8px;background:#E85C00;color:white;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">
-      📂 Seleziona file Excel
-      <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importaExcel(event)">
-    </label>
-    <div id="import-preview"></div>
-  </div>
+    <div style="font-size:13px;color:var(--testo-lt);margin-bottom:14px;">
+      Per ogni categoria: scrivi il nome e carica il file Excel.
+    </div>
+    <div id="cat-import-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+    <button onclick="aggiungiRigaCategoria()"
+      style="width:100%;padding:10px;border:1.5px dashed var(--bordo);border-radius:9px;
+             background:var(--sfondo);color:var(--blu);font-size:13px;font-weight:600;
+             cursor:pointer;font-family:inherit;">
+      + Aggiungi categoria
+    </button>
+    <div id="import-preview" style="margin-top:14px;"></div>
+  </div>`;
+  el.innerHTML = html;
+  // Aggiungi prima riga automaticamente se lista vuota
+  setTimeout(() => {
+    if (document.getElementById('cat-import-list') &&
+        document.getElementById('cat-import-list').children.length === 0) {
+      aggiungiRigaCategoria();
+    }
+  }, 50);
+}
   <div class="section-label">Aggiungi categoria manualmente</div>
   <div class="card">
     <div class="form-grid-2">
@@ -967,6 +981,194 @@ async function addCategoria() {
     await dbSetGironeSquadre(girone.id,squadra_ids); await dbGeneraPartite(girone.id,squadra_ids);
   }
   renderCatBar(); toast('Categoria aggiunta!'); await renderAdminSetup();
+}
+
+
+
+// ============================================================
+//  RIGHE CATEGORIA + EXCEL
+// ============================================================
+let _catRigheCount = 0;
+
+function aggiungiRigaCategoria() {
+  const list = document.getElementById('cat-import-list');
+  if (!list) return;
+  const idx = _catRigheCount++;
+  const div = document.createElement('div');
+  div.id = `cat-riga-${idx}`;
+  div.style.cssText = 'display:flex;flex-direction:column;gap:8px;background:var(--sfondo);border:1px solid var(--bordo);border-radius:10px;padding:12px;';
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input id="cat-nome-${idx}" class="form-input" placeholder="Nome categoria (es. Esordienti 2013)"
+        style="flex:1;font-size:13px;"
+        oninput="_aggiornaNomeRiga(${idx})">
+      <button onclick="_rimuoviRiga(${idx})"
+        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);
+               border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
+    </div>
+    <div id="cat-file-area-${idx}">
+      <label style="display:flex;align-items:center;gap:8px;background:white;border:1.5px solid var(--bordo);
+                    border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--testo-lt);
+                    transition:all .15s;"
+             onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+             onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
+        <span>📂</span>
+        <span id="cat-file-label-${idx}">Seleziona file Excel...</span>
+        <input type="file" accept=".xlsx,.xls" style="display:none;"
+          onchange="_fileSelezionato(event, ${idx})">
+      </label>
+    </div>
+    <div id="cat-preview-${idx}" style="display:none;"></div>
+    <div id="cat-btn-${idx}" style="display:none;">
+      <button onclick="_importaRiga(${idx})"
+        style="width:100%;background:var(--blu);color:white;border:none;border-radius:8px;
+               padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
+        ✓ Importa "${document.getElementById('cat-nome-${idx}')?.value||'categoria'}"
+      </button>
+    </div>
+  `;
+  list.appendChild(div);
+}
+
+function _aggiornaNomeRiga(idx) {
+  const nome = document.getElementById(`cat-nome-${idx}`)?.value || 'categoria';
+  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  if (btnDiv && btnDiv.style.display !== 'none') {
+    const btn = btnDiv.querySelector('button');
+    if (btn) btn.textContent = `✓ Importa "${nome}"`;
+  }
+}
+
+function _rimuoviRiga(idx) {
+  const el = document.getElementById(`cat-riga-${idx}`);
+  if (el) el.remove();
+}
+
+let _fileRighe = {}; // idx -> dati excel parsati
+
+function _fileSelezionato(event, idx) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const label = document.getElementById(`cat-file-label-${idx}`);
+  if (label) label.textContent = `📄 ${file.name}`;
+
+  // Preview immediato
+  _parseExcelRiga(file, idx);
+}
+
+async function _parseExcelRiga(file, idx) {
+  const preview = document.getElementById(`cat-preview-${idx}`);
+  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
+
+  try {
+    if (typeof XLSX === 'undefined') {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const dati = {
+      categorie: leggiCategorie(wb),
+      gironi:    leggiGironi(wb),
+      partite:   leggiPartiteFase1(wb),
+      fase2:     leggiPartiteFase2(wb)
+    };
+
+    _fileRighe[idx] = dati;
+
+    // Mostra riepilogo
+    const totGironi = dati.gironi.length;
+    const totPartite = dati.partite.length;
+    const totFinali = dati.fase2.length;
+    const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
+
+    // Auto-compila nome categoria dal file se vuoto
+    if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
+      nomeCatInput.value = dati.categorie[0].nome;
+    }
+
+    if (preview) {
+      preview.innerHTML = `
+        <div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;">
+          <div style="font-weight:700;color:var(--verde);margin-bottom:6px;">✅ File letto correttamente</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${totGironi} gironi</span>
+            <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${totPartite} partite</span>
+            ${totFinali ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${totFinali} finali</span>` : ''}
+          </div>
+        </div>`;
+    }
+
+    if (btnDiv) {
+      btnDiv.style.display = 'block';
+      const nome = nomeCatInput?.value || 'categoria';
+      const btn = btnDiv.querySelector('button');
+      if (btn) btn.textContent = `✓ Importa "${nome}"`;
+    }
+  } catch(e) {
+    if (preview) preview.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
+  }
+}
+
+async function _importaRiga(idx) {
+  const dati = _fileRighe[idx];
+  const nomeInput = document.getElementById(`cat-nome-${idx}`);
+  const nomeScritto = nomeInput?.value?.trim();
+  const btn = document.querySelector(`#cat-btn-${idx} button`);
+
+  if (!dati) { toast('Carica prima un file Excel'); return; }
+
+  // Sovrascrivi il nome categoria con quello scritto dall'utente
+  if (nomeScritto && dati.categorie.length) {
+    dati.categorie[0].nome = nomeScritto;
+    dati.categorie[0].codice = nomeScritto;
+    // Aggiorna anche i riferimenti nelle partite e gironi
+    const vecchioNome = dati.gironi[0]?.categoria;
+    if (vecchioNome) {
+      dati.gironi.forEach(g => { if(g.categoria === vecchioNome) g.categoria = nomeScritto; });
+      dati.partite.forEach(p => { if(p.categoria === vecchioNome) p.categoria = nomeScritto; });
+      dati.fase2.forEach(p => { if(p.categoria === vecchioNome) p.categoria = nomeScritto; });
+    }
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Importazione...'; }
+
+  try {
+    const tornei = await db.from('tornei').select('id,nome')
+      .eq('cliente', CONFIG.CLIENTE || 'spe').eq('attivo', true)
+      .order('created_at', { ascending: false });
+
+    if (!tornei.data?.length) throw new Error('Nessun torneo attivo');
+    const torneoId = STATE.activeTorneo || tornei.data[0].id;
+
+    // Usa la funzione di importazione esistente
+    window._importDati = dati;
+    await eseguiImportazioneConTorneo(torneoId, dati, btn);
+
+    // Feedback sulla riga
+    const riga = document.getElementById(`cat-riga-${idx}`);
+    if (riga) {
+      riga.style.background = 'var(--verde-bg)';
+      riga.style.borderColor = 'rgba(22,163,74,0.3)';
+      const preview = document.getElementById(`cat-preview-${idx}`);
+      if (preview) preview.innerHTML = `<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>`;
+      if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
+    }
+
+    // Aggiorna stato
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    renderCatBar();
+
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
+    toast('❌ Errore: ' + e.message);
+    console.error(e);
+  }
 }
 
 async function deleteCat(id) {
