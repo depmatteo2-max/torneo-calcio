@@ -190,21 +190,57 @@ function renderCatBar() {
 function _renderGiornataBar() {
   const bar = document.getElementById('giornata-bar');
   if (!bar) return;
-
-  // Prende le giornate/date disponibili dalle partite della categoria attiva
-  // Le leggiamo dal DB tramite STATE — usiamo i gironi già caricati
-  // Per ora mostriamo filtro solo se ci sono giornate multiple
   const giornate = STATE._giornateDisponibili || [];
   if (giornate.length <= 1) { bar.innerHTML = ''; return; }
 
+  // Rileva la giornata di oggi
+  const oggi = _trovaGiornataOggi(giornate);
+
   bar.innerHTML = [
-    { id: 'tutte', label: '📅 Tutte le giornate' },
-    ...giornate.map(g => ({ id: g, label: g }))
-  ].map(g =>
-    `<button class="cat-pill ${STATE.activeGiornata === g.id ? 'active' : ''}"
-      style="font-size:11px;padding:4px 10px;"
-      onclick="selectGiornata('${g.id}')">${g.label}</button>`
-  ).join('');
+    { id: 'tutte', label: '📅 Tutte', oggi: false },
+    ...giornate.map(g => ({ id: g, label: _labelGiornata(g), oggi: g === oggi }))
+  ].map(g => {
+    const isActive = STATE.activeGiornata === g.id;
+    const isOggi = g.oggi;
+    return `<button class="cat-pill ${isActive ? 'active' : ''} ${isOggi && !isActive ? 'oggi-pill' : ''}"
+      style="font-size:11px;padding:3px 10px;"
+      onclick="selectGiornata('${g.id}')">
+      ${isOggi ? '🔴 ' : ''}${g.label}
+    </button>`;
+  }).join('');
+}
+
+function _labelGiornata(g) {
+  // Abbrevia "4 Aprile 2026" → "Sab 4 Apr"
+  const giorni = {'sabato':'Sab','domenica':'Dom','lunedì':'Lun','martedì':'Mar','mercoledì':'Mer','giovedì':'Gio','venerdì':'Ven'};
+  const mesi = {'gennaio':'Gen','febbraio':'Feb','marzo':'Mar','aprile':'Apr','maggio':'Mag','giugno':'Giu',
+                 'luglio':'Lug','agosto':'Ago','settembre':'Set','ottobre':'Ott','novembre':'Nov','dicembre':'Dic'};
+  let label = g;
+  for (const [full, short] of Object.entries(mesi)) {
+    label = label.toLowerCase().replace(full, short);
+  }
+  // Rimuovi anno
+  label = label.replace(/20\d\d/,'').trim().replace(/\s+/g,' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function _trovaGiornataOggi(giornate) {
+  // Confronta ogni giornata con la data di oggi
+  const ora = new Date();
+  const mesiMap = {'gennaio':0,'febbraio':1,'marzo':2,'aprile':3,'maggio':4,'giugno':5,
+                   'luglio':6,'agosto':7,'settembre':8,'ottobre':9,'novembre':10,'dicembre':11};
+  for (const g of giornate) {
+    const parts = g.toLowerCase().split(/\s+/);
+    const giorno = parseInt(parts.find(p => /^\d+$/.test(p)));
+    const meseStr = parts.find(p => mesiMap[p] !== undefined);
+    const anno = parseInt(parts.find(p => /^20\d\d$/.test(p)));
+    if (giorno && meseStr) {
+      const mese = mesiMap[meseStr];
+      const dataG = new Date(anno || ora.getFullYear(), mese, giorno);
+      if (dataG.toDateString() === ora.toDateString()) return g;
+    }
+  }
+  return null;
 }
 
 async function selectCat(id) {
@@ -226,30 +262,27 @@ async function selectGiornata(g) {
 async function _caricaGiornate() {
   if (!STATE.activeCat) return;
   try {
-    // Legge tutte le partite della categoria per trovare le date/giornate uniche
     const gironi = await dbGetGironi(STATE.activeCat);
     const dateSet = new Set();
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
-        .select('giorno')
-        .eq('girone_id', g.id)
-        .not('giorno', 'is', null);
+        .select('giorno').eq('girone_id', g.id).not('giorno', 'is', null);
       (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
     }
-    // Ordina le date
-    STATE._giornateDisponibili = [...dateSet].sort((a, b) => {
-      // Prova a ordinare per data
-      const mesi = {'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,
-                    'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12};
-      const parseData = s => {
-        const parts = s.toLowerCase().split(' ').filter(Boolean);
-        const giorno = parseInt(parts[0]) || parseInt(parts[1]) || 0;
-        const mese = Object.entries(mesi).find(([m]) => parts.some(p => p.includes(m)));
-        return (mese ? mese[1] : 0) * 100 + giorno;
-      };
-      return parseData(a) - parseData(b);
-    });
-  } catch(e) { STATE._giornateDisponibili = []; }
+    const mesi = {'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,
+                  'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12};
+    const parseData = s => {
+      const parts = s.toLowerCase().split(' ').filter(Boolean);
+      const giorno = parseInt(parts.find(p => /^\d+$/.test(p))) || 0;
+      const meseEntry = Object.entries(mesi).find(([m]) => parts.some(p => p.includes(m)));
+      return (meseEntry ? meseEntry[1] : 0) * 100 + giorno;
+    };
+    STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
+
+    // Auto-seleziona OGGI se disponibile, altrimenti 'tutte'
+    const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
+    STATE.activeGiornata = oggi || 'tutte';
+  } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
 }
 
 function logoHTML(sq, size = 'md') {
@@ -396,6 +429,26 @@ function _orarioToMinuti(orario) {
 }
 
 // ============================================================
+//  RIEPILOGO TORNEO (tutte le giornate)
+// ============================================================
+function _riepilogoBanner(section) {
+  if (!STATE._giornateDisponibili || STATE._giornateDisponibili.length <= 1) return '';
+  const isRiepilogo = STATE.activeGiornata === 'tutte';
+  if (isRiepilogo) return '';
+  return `
+    <button class="riepilogo-banner" onclick="selectGiornata('tutte')">
+      <div class="riepilogo-banner-left">
+        <div class="riepilogo-banner-icon">🏆</div>
+        <div>
+          <div class="riepilogo-banner-title">Riepilogo Torneo</div>
+          <div class="riepilogo-banner-sub">Vedi classifica, risultati e tabellone di tutte le giornate</div>
+        </div>
+      </div>
+      <div class="riepilogo-banner-arrow">→</div>
+    </button>`;
+}
+
+// ============================================================
 //  PUBLIC: CLASSIFICHE
 // ============================================================
 async function renderClassifiche() {
@@ -404,7 +457,7 @@ async function renderClassifiche() {
   const cat = STATE.categorie.find(c=>c.id===STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
-  let html='';
+  let html = _riepilogoBanner('classifiche');
   for (const g of gironi) {
     const cl=calcGironeClassifica(g);
     const played=g.partite.filter(p=>p.giocata).length;
@@ -453,12 +506,18 @@ async function renderRisultati() {
   const giocate = tuttePartite.filter(p => p.giocata);
   const daFare  = tuttePartite.filter(p => !p.giocata);
 
-  let html = '';
+  let html = _riepilogoBanner('risultati');
 
   // Partite giocate
   if (giocate.length) {
     html += `<div class="section-label">✅ Risultati${filtroLabel||''}</div><div class="card">`;
+    // Raggruppa per giorno se riepilogo
+    let lastGiorno = null;
     for (const p of giocate) {
+      if (STATE.activeGiornata === 'tutte' && p.giorno && p.giorno !== lastGiorno) {
+        lastGiorno = p.giorno;
+        html += `</div><div class="day-header">📅 ${p.giorno}</div><div class="card">`;
+      }
       const mH=(p.marcatori||[]).filter(m=>m.squadra_id===p.home_id);
       const mA=(p.marcatori||[]).filter(m=>m.squadra_id===p.away_id);
       const orInfo = p.orario || p.campo || p._girone ? `
