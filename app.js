@@ -456,32 +456,6 @@ function logoHTML(sq, size = 'md') {
   return `<div class="${avcls}">${ini}</div>`;
 }
 
-async function getGironiWithData(categoria_id) {
-  // Preload tutto in 2-3 query invece di N*4 query
-  await preloadCategoria(categoria_id);
-
-  const gironi = await dbGetGironi(categoria_id);
-  const tuttePartite = [];
-
-  for (const g of gironi) {
-    const members = await dbGetGironeSquadre(g.id);
-    g.squadre = members.map(m => m.squadre);
-    g.partite = await dbGetPartite(g.id);
-    tuttePartite.push(...g.partite);
-  }
-
-  // Preload marcatori in una query sola
-  const partitaIds = tuttePartite.map(p => p.id);
-  await _preloadMarcatori(categoria_id, partitaIds);
-
-  for (const g of gironi) {
-    for (const p of g.partite) {
-      p.marcatori = await dbGetMarcatori(p.id);
-    }
-  }
-
-  return gironi;
-}
 
 // ============================================================
 //  CLASSIFICA
@@ -946,8 +920,8 @@ async function renderAdminSetup() {
   html+=`<div class="section-label">Categorie configurate</div>`;
   if (!STATE.categorie.length) html+=`<div style="color:#aaa;font-size:13px;padding:8px 0 12px;">Nessuna categoria. Importa da Excel o aggiungine una.</div>`;
   for (const cat of STATE.categorie) {
-    const gironi=await dbGetGironi(cat.id); let totP=0,totG=0;
-    for (const g of gironi) { const pp=await dbGetPartite(g.id); totP+=pp.length; totG+=pp.filter(p=>p.giocata).length; }
+    const gironi=await getGironiWithData(cat.id); let totP=0,totG=0;
+    for (const g of gironi) { totP+=g.partite.length; totG+=g.partite.filter(p=>p.giocata).length; }
     html+=`<div class="card" style="margin-bottom:10px;">
       <div class="card-title" style="margin-bottom:10px;">
         <div style="font-size:15px;font-weight:600;">${cat.nome}</div>
@@ -957,9 +931,9 @@ async function renderAdminSetup() {
         </div>
       </div>`;
     for (const g of gironi) {
-      const members=await dbGetGironeSquadre(g.id);
+      const members=g.squadre||[];
       html+=`<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">${g.nome}</div><div style="display:flex;flex-wrap:wrap;gap:4px;">`;
-      members.forEach(m=>{ html+=`<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">${logoHTML(m.squadre,'sm')} ${m.squadre.nome}</span>`; });
+      members.forEach(sq=>{ html+=`<span style="display:inline-flex;align-items:center;gap:4px;background:#f5f5f5;border-radius:99px;padding:2px 8px;font-size:12px;">${logoHTML(sq,'sm')} ${sq.nome}</span>`; });
       html+=`</div></div>`;
     }
     html+=`</div>`;
