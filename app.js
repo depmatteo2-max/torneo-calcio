@@ -91,6 +91,10 @@ async function selezionaTorneoPublic(id) {
 function _saveSavedTorneo(id) { try { localStorage.setItem('spe_torneo', String(id)); } catch(e) {} }
 function _loadSavedTorneo() { try { const v = localStorage.getItem('spe_torneo'); return v ? parseInt(v) : null; } catch(e) { return null; } }
 
+function _saveSavedCat(id) { try { localStorage.setItem('spe_cat', String(id)); } catch(e) {} }
+function _loadSavedCat() { try { const v = localStorage.getItem('spe_cat'); return v ? parseInt(v) : null; } catch(e) { return null; } }
+function _clearSavedCat() { try { localStorage.removeItem('spe_cat'); } catch(e) {} }
+
 async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   _saveSavedTorneo(STATE.activeTorneo);
@@ -98,16 +102,23 @@ async function loadTorneo() {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
-  // Se ci sono più categorie e nessuna è già selezionata, mostra selezione
-  if (STATE.categorie.length > 1 && !STATE.activeCat) {
+  // Ripristina categoria salvata in localStorage
+  const savedCatId = _loadSavedCat();
+  const catSalvata = savedCatId && STATE.categorie.find(c => c.id === savedCatId);
+
+  if (catSalvata) {
+    // Categoria salvata trovata — vai diretto
+    STATE.activeCat = catSalvata.id;
+  } else if (STATE.categorie.length > 1 && !STATE.activeCat) {
+    // Più categorie e nessuna salvata — mostra selezione
     STATE.activeCat = null;
     renderTorneoBar();
     document.getElementById('cat-bar').style.display = 'none';
     mostraSelezioneCat();
     return;
+  } else {
+    STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   }
-
-  STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   if (STATE.activeCat) await _caricaGiornate();
   renderTorneoBar(); renderCatBar(); await renderCurrentSection();
 }
@@ -161,6 +172,7 @@ function mostraSelezioneCat() {
 
 async function selezionaCategoriaPublic(catId) {
   STATE.activeCat = catId;
+  _saveSavedCat(catId); // salva in localStorage
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   await _caricaGiornate();
@@ -170,7 +182,7 @@ async function selezionaCategoriaPublic(catId) {
 }
 
 async function mostraTutteLCategorie() {
-  // Seleziona prima categoria e mostra tutto
+  _clearSavedCat(); // non salvare — mostra tutto senza filtro
   STATE.activeCat = STATE.categorie[0]?.id || null;
   if (STATE.activeCat) await _caricaGiornate();
   renderCatBar();
@@ -197,6 +209,7 @@ async function cambiaTorneo() {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   try { localStorage.removeItem('spe_torneo'); } catch(e) {}
+  _clearSavedCat();
 
   // Ricarica lista tornei
   STATE.tornei = await dbGetTornei();
@@ -332,6 +345,7 @@ function _abbreviaNomeCat(nome) {
 
 async function selectCat(id) {
   STATE.activeCat = id;
+  _saveSavedCat(id);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   // Carica giornate disponibili per questa categoria
