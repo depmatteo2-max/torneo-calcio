@@ -401,16 +401,15 @@ async function selectGiornata(g) {
 }
 
 async function _caricaGiornate() {
+  if (!STATE.activeCat) return;
   try {
     const dateSet = new Set();
-    // Legge da TUTTE le categorie del torneo
-    for (const cat of STATE.categorie) {
-      const gironi = await dbGetGironi(cat.id);
-      for (const g of gironi) {
-        const { data: partite } = await db.from('partite')
-          .select('giorno').eq('girone_id', g.id).not('giorno', 'is', null);
-        (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
-      }
+    // Legge solo dalla categoria attiva
+    const gironi = await dbGetGironi(STATE.activeCat);
+    for (const g of gironi) {
+      const { data: partite } = await db.from('partite')
+        .select('giorno').eq('girone_id', g.id).not('giorno', 'is', null);
+      (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
     }
     const mesi = {'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,
                   'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12};
@@ -625,59 +624,43 @@ function _riepilogoBanner(section) {
 // ============================================================
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
-  if (!STATE.categorie.length) { el.innerHTML='<div class="empty-state">Nessuna categoria configurata.</div>'; return; }
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
 
-  // Skeleton loader immediato
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
 
-  // Carica TUTTE le categorie in parallelo
-  const tuttiDati = await _caricaTutteCategorie();
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const gironi = await getGironiWithData(STATE.activeCat);
 
-  let html = _riepilogoBanner('classifiche');
+  if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
 
-  for (const { cat, gironi } of tuttiDati) {
-    if (!gironi.length) continue;
-
-    if (STATE.categorie.length > 1) {
-      const totPartite = gironi.reduce((s,g)=>s+g.partite.length,0);
-      const totGiocate = gironi.reduce((s,g)=>s+g.partite.filter(p=>p.giocata).length,0);
-      html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
-        color:white;border-radius:var(--radius);padding:9px 14px;margin-top:18px;margin-bottom:8px;
-        font-size:13px;font-weight:700;letter-spacing:.03em;
-        display:flex;align-items:center;justify-content:space-between;">
-        <span>🏆 ${cat.nome}</span>
-        <span style="font-size:11px;opacity:.7;">${totGiocate}/${totPartite} partite</span>
-      </div>`;
-    }
-
-    for (const g of gironi) {
-      const cl = calcGironeClassifica(g);
-      const played = g.partite.filter(p=>p.giocata).length;
-      html += `<div class="card" style="margin-bottom:8px;">
-        <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
-        <table class="standings-table">
-          <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead>
-          <tbody>`;
-      cl.forEach((row,idx) => {
-        const q = idx < (cat.qualificate||1);
-        const diff = row.gf - row.gs;
-        html += `<tr class="${q?'qualifies':''}">
-          <td><span class="${q?'q-dot':'nq-dot'}"></span></td>
-          <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
-          <td>${row.sq.nome}</td>
-          <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-          <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
-          <td class="pts-col">${row.pts}</td>
-        </tr>`;
-      });
-      html += `</tbody></table>
-        <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
-          Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
-        </div>
-      </div>`;
-    }
+  let html = '';
+  for (const g of gironi) {
+    const cl = calcGironeClassifica(g);
+    const played = g.partite.filter(p=>p.giocata).length;
+    html += `<div class="card" style="margin-bottom:8px;">
+      <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
+      <table class="standings-table">
+        <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead>
+        <tbody>`;
+    cl.forEach((row,idx) => {
+      const q = idx < (cat?.qualificate||1);
+      const diff = row.gf - row.gs;
+      html += `<tr class="${q?'qualifies':''}">
+        <td><span class="${q?'q-dot':'nq-dot'}"></span></td>
+        <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
+        <td>${row.sq.nome}</td>
+        <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
+        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
+        <td class="pts-col">${row.pts}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>
+      <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
+        Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
+      </div>
+    </div>`;
   }
-  el.innerHTML = html || '<div class="empty-state">Nessun girone trovato.</div>';
+  el.innerHTML = html;
 }
 
 // ============================================================
@@ -685,19 +668,17 @@ async function renderClassifiche() {
 // ============================================================
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
-  if (!STATE.categorie.length) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
 
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
 
-  // Carica TUTTE le categorie in parallelo
-  const tuttiDati = await _caricaTutteCategorie();
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const gironi = await getGironiWithData(STATE.activeCat);
 
   let tuttePartite = [];
-  for (const { cat, gironi } of tuttiDati) {
-    for (const g of gironi) {
-      for (const p of g.partite) {
-        tuttePartite.push({ ...p, _girone: g.nome, _cat: cat.nome });
-      }
+  for (const g of gironi) {
+    for (const p of g.partite) {
+      tuttePartite.push({ ...p, _girone: g.nome, _cat: cat?.nome || '' });
     }
   }
 
@@ -1273,6 +1254,7 @@ let openScorers={};
 async function renderAdminRisultati() {
   const el=document.getElementById('sec-a-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const gironi=await getGironiWithData(STATE.activeCat);
 
   // Raccoglie tutte le partite e ordina per orario
