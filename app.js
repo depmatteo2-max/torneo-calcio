@@ -946,19 +946,6 @@ async function renderAdminSetup() {
     }
   }, 50);
 }
-  <div class="section-label">Aggiungi categoria manualmente</div>
-  <div class="card">
-    <div class="form-grid-2">
-      <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="cname" placeholder="Under 10"></div>
-      <div class="form-group"><label class="form-label">Si qualificano</label>
-        <select class="form-input" id="cqualify"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
-    </div>
-    <div class="form-group"><label class="form-label">Squadre per girone (una riga per girone, separate da virgola)</label>
-      <textarea class="form-input" id="cteams" rows="4" placeholder="Girone A: Milan, Inter, Juve&#10;Girone B: Napoli, Lazio, Roma"></textarea></div>
-    <button class="btn btn-p" style="width:100%;" onclick="addCategoria()">+ Aggiungi categoria</button>
-  </div>`;
-  el.innerHTML=html;
-}
 
 async function addCategoria() {
   const nome=document.getElementById('cname').value.trim();
