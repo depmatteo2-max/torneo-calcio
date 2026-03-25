@@ -458,7 +458,7 @@ function logoHTML(sq, size = 'md') {
 
 async function getGironiWithData(categoria_id) {
   // Preload tutto in 2-3 query invece di N*4 query
-  await _preloadCategoria(categoria_id);
+  await preloadCategoria(categoria_id);
 
   const gironi = await dbGetGironi(categoria_id);
   const tuttePartite = [];
