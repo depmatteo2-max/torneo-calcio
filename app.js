@@ -64,14 +64,24 @@ function mostraSelezioneTeorneo() {
 }
 
 async function selezionaTorneoPublic(id) {
-  STATE.activeTorneo = id; _saveSavedTorneo(id); await loadTorneo();
-  document.getElementById('pub-nav').style.display = 'flex';
+  STATE.activeTorneo = id;
+  _saveSavedTorneo(id);
+
+  // Ricrea le sezioni
   document.getElementById('main-content').innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
-  STATE.currentSection = 'classifiche'; await renderCurrentSection();
+
+  // Mostra nav pubblica, resetta bottoni attivi
+  document.getElementById('pub-nav').style.display = 'flex';
+  document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
+  const btnClass = document.querySelector('[data-section="classifiche"]');
+  if (btnClass) btnClass.classList.add('active');
+
+  STATE.currentSection = 'classifiche';
+  await loadTorneo();
 }
 
 function _saveSavedTorneo(id) { try { localStorage.setItem('spe_torneo', String(id)); } catch(e) {} }
@@ -98,12 +108,29 @@ function renderTorneoBar() {
 }
 
 async function cambiaTorneo() {
-  STATE.activeTorneo = null; try { localStorage.removeItem('spe_torneo'); } catch(e) {}
+  STATE.activeTorneo = null;
+  STATE.categorie = [];
+  STATE.activeCat = null;
+  try { localStorage.removeItem('spe_torneo'); } catch(e) {}
+
+  // Ricarica lista tornei
+  STATE.tornei = await dbGetTornei();
+
+  // Nascondi navigazione
+  document.getElementById('pub-nav').style.display = 'none';
+  if (document.getElementById('admin-nav')) document.getElementById('admin-nav').style.display = 'none';
+  const catBar = document.getElementById('cat-bar');
+  if (catBar) catBar.innerHTML = '';
+  const torneoBar = document.getElementById('torneo-bar');
+  if (torneoBar) torneoBar.style.display = 'none';
+
+  // Ricrea le sezioni nel main-content
   document.getElementById('main-content').innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
   mostraSelezioneTeorneo();
 }
 
