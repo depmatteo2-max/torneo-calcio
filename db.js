@@ -1,6 +1,6 @@
 // ============================================================
 //  DB.JS — Soccer Pro Experience + Rhodense
-//  v2: Cache in memoria + query ottimizzate (batch loading)
+//  v3: Cache lunga + query ottimizzate + loghi lazy
 // ============================================================
 
 let db;
@@ -8,7 +8,7 @@ const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIEN
 
 // ── CACHE ──────────────────────────────────────────────────
 const _cache = {};
-const _CACHE_TTL = 8000; // 8 secondi
+const _CACHE_TTL = 30000; // 30 secondi (era 8)
 
 function _cacheGet(key) {
   const e = _cache[key];
@@ -29,10 +29,10 @@ function initDB() {
 
 function subscribeRealtime(cb) {
   db.channel('realtime-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'partite' }, () => { _cacheClear(); cb(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'marcatori' }, () => { _cacheClear(); cb(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'knockout' }, () => { _cacheClear(); cb(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tornei' }, () => { _cacheClear(); cb(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'partite' },  () => { _cacheInvalid('partite_'); _cacheInvalid('gironi_data_'); cb(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'marcatori' },() => { _cacheInvalid('marc_');    _cacheInvalid('gironi_data_'); cb(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'knockout' }, () => { _cacheInvalid('ko_');      cb(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tornei' },   () => { _cacheInvalid('tornei_'); cb(); })
     .subscribe();
 }
 
@@ -97,14 +97,29 @@ async function dbUpdateCategoria(id, fields) {
   _cacheInvalid('cat_');
 }
 
-// ── SQUADRE ────────────────────────────────────────────────
+// ── SQUADRE — senza logo per default (più veloce) ─────────
 async function dbGetSquadre(torneoId) {
   if (!torneoId) return [];
   const key = `squadre_${torneoId}`;
   const cached = _cacheGet(key); if (cached) return cached;
-  const { data, error } = await db.from('squadre').select('id,nome,logo,torneo_id')
+  // NON caricare il logo qui — viene caricato solo dove serve
+  const { data, error } = await db.from('squadre')
+    .select('id,nome,torneo_id')
     .eq('torneo_id', torneoId).order('nome');
   if (error) { console.error('dbGetSquadre:', error); return []; }
+  _cacheSet(key, data || []);
+  return data || [];
+}
+
+async function dbGetSquadreFull(torneoId) {
+  // Versione con logo — solo per admin loghi
+  if (!torneoId) return [];
+  const key = `squadre_full_${torneoId}`;
+  const cached = _cacheGet(key); if (cached) return cached;
+  const { data, error } = await db.from('squadre')
+    .select('id,nome,logo,torneo_id')
+    .eq('torneo_id', torneoId).order('nome');
+  if (error) { console.error('dbGetSquadreFull:', error); return []; }
   _cacheSet(key, data || []);
   return data || [];
 }
@@ -119,7 +134,10 @@ async function dbSaveSquadra(s) {
 async function dbUpdateLogo(squadra_id, logo) {
   const { error } = await db.from('squadre').update({ logo }).eq('id', squadra_id);
   if (error) throw error;
-  _cacheClear(); // invalida tutto perché i loghi sono embeddati ovunque
+  _cacheInvalid('squadre_');
+  _cacheInvalid('gironi_data_'); // invalida solo i dati gironi, non tutto
+  _cacheInvalid('gs_');
+  _cacheInvalid('partite_');
 }
 
 // ── GIRONI ─────────────────────────────────────────────────
@@ -140,12 +158,13 @@ async function dbSaveGirone(g) {
   return data;
 }
 
-// ── GIRONE SQUADRE ─────────────────────────────────────────
+// ── GIRONE SQUADRE — senza logo per velocità ───────────────
 async function dbGetGironeSquadre(gironeId) {
   const key = `gs_${gironeId}`;
   const cached = _cacheGet(key); if (cached) return cached;
+  // Seleziona senza logo per velocità
   const { data, error } = await db.from('girone_squadre')
-    .select('*, squadre(id,nome,logo)')
+    .select('*, squadre(id,nome)')
     .eq('girone_id', gironeId).order('posizione');
   if (error) { console.error('dbGetGironeSquadre:', error); return []; }
   _cacheSet(key, data || []);
@@ -154,18 +173,17 @@ async function dbGetGironeSquadre(gironeId) {
 
 async function dbSetGironeSquadre(gironeId, squadraIds) {
   await db.from('girone_squadre').delete().eq('girone_id', gironeId);
-  for (let i = 0; i < squadraIds.length; i++) {
-    await db.from('girone_squadre').insert({ girone_id: gironeId, squadra_id: squadraIds[i], posizione: i });
-  }
+  const rows = squadraIds.map((id, i) => ({ girone_id: gironeId, squadra_id: id, posizione: i }));
+  if (rows.length) await db.from('girone_squadre').insert(rows);
   _cacheInvalid('gs_');
 }
 
-// ── PARTITE ────────────────────────────────────────────────
+// ── PARTITE — senza logo nelle squadre join ────────────────
 async function dbGetPartite(gironeId) {
   const key = `partite_${gironeId}`;
   const cached = _cacheGet(key); if (cached) return cached;
   const { data, error } = await db.from('partite')
-    .select('*, home:squadre!home_id(id,nome,logo), away:squadre!away_id(id,nome,logo)')
+    .select('*, home:squadre!home_id(id,nome), away:squadre!away_id(id,nome)')
     .eq('girone_id', gironeId).order('orario');
   if (error) { console.error('dbGetPartite:', error); return []; }
   _cacheSet(key, data || []);
@@ -186,12 +204,9 @@ async function dbSavePartita(p) {
 
 async function dbGeneraPartite(gironeId, squadraIds) {
   const partite = [];
-  for (let i = 0; i < squadraIds.length; i++) {
-    for (let j = i + 1; j < squadraIds.length; j++) {
+  for (let i = 0; i < squadraIds.length; i++)
+    for (let j = i + 1; j < squadraIds.length; j++)
       partite.push({ girone_id: gironeId, home_id: squadraIds[i], away_id: squadraIds[j], giocata: false });
-    }
-  }
-  // Insert batch unico invece di N insert separati
   if (partite.length) {
     const { error } = await db.from('partite').insert(partite);
     if (error) console.error('dbGeneraPartite:', error);
@@ -245,26 +260,24 @@ async function dbSaveKnockoutMatch(m) {
   _cacheInvalid('ko_');
 }
 
-// ── BATCH LOADER — carica tutto in parallelo ───────────────
-// Sostituisce getGironiWithData in app.js con versione veloce
+// ── BATCH LOADER — 3 query invece di N*3 ──────────────────
 async function getGironiWithData(categoriaId) {
   const key = `gironi_data_${categoriaId}`;
   const cached = _cacheGet(key); if (cached) return cached;
 
-  // 1. Carica gironi
   const gironi = await dbGetGironi(categoriaId);
   if (!gironi.length) return [];
 
   const gironeIds = gironi.map(g => g.id);
 
-  // 2. Carica tutto in parallelo con 3 query invece di N*3
+  // Tutto in parallelo — senza logo nelle join (molto più veloce)
   const [partiteRes, gsRes] = await Promise.all([
     db.from('partite')
-      .select('*, home:squadre!home_id(id,nome,logo), away:squadre!away_id(id,nome,logo)')
+      .select('*, home:squadre!home_id(id,nome), away:squadre!away_id(id,nome)')
       .in('girone_id', gironeIds)
       .order('orario'),
     db.from('girone_squadre')
-      .select('*, squadre(id,nome,logo)')
+      .select('*, squadre(id,nome)')
       .in('girone_id', gironeIds)
       .order('posizione'),
   ]);
@@ -272,30 +285,22 @@ async function getGironiWithData(categoriaId) {
   const tutte_partite = partiteRes.data || [];
   const tutte_gs = gsRes.data || [];
 
-  // 3. Carica marcatori solo per partite giocate (batch)
-  const partiteGiocateIds = tutte_partite.filter(p => p.giocata).map(p => p.id);
+  // Marcatori solo per partite giocate
+  const giocateIds = tutte_partite.filter(p => p.giocata).map(p => p.id);
   let tuttiMarcatori = [];
-  if (partiteGiocateIds.length) {
+  if (giocateIds.length) {
     const { data: marc } = await db.from('marcatori')
-      .select('*').in('partita_id', partiteGiocateIds);
+      .select('*').in('partita_id', giocateIds);
     tuttiMarcatori = marc || [];
   }
 
-  // 4. Assembla in memoria
-  const result = gironi.map(g => {
-    const partite = tutte_partite
+  const result = gironi.map(g => ({
+    ...g,
+    squadre: tutte_gs.filter(gs => gs.girone_id === g.id).map(m => m.squadre),
+    partite: tutte_partite
       .filter(p => p.girone_id === g.id)
-      .map(p => ({
-        ...p,
-        marcatori: tuttiMarcatori.filter(m => m.partita_id === p.id)
-      }));
-    const members = tutte_gs.filter(gs => gs.girone_id === g.id);
-    return {
-      ...g,
-      squadre: members.map(m => m.squadre),
-      partite
-    };
-  });
+      .map(p => ({ ...p, marcatori: tuttiMarcatori.filter(m => m.partita_id === p.id) }))
+  }));
 
   _cacheSet(key, result);
   return result;

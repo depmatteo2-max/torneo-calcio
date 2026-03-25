@@ -18,6 +18,8 @@ let STATE = {
 
 async function init() {
   initDB();
+  // Aumenta TTL cache per ridurre chiamate ripetute
+  if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
   try {
     STATE.tornei = await dbGetTornei();
     const savedId = _loadSavedTorneo();
@@ -382,13 +384,29 @@ function logoHTML(sq, size = 'md') {
 }
 
 async function getGironiWithData(categoria_id) {
+  // Preload tutto in 2-3 query invece di N*4 query
+  await _preloadCategoria(categoria_id);
+
   const gironi = await dbGetGironi(categoria_id);
+  const tuttePartite = [];
+
   for (const g of gironi) {
     const members = await dbGetGironeSquadre(g.id);
     g.squadre = members.map(m => m.squadre);
     g.partite = await dbGetPartite(g.id);
-    for (const p of g.partite) p.marcatori = await dbGetMarcatori(p.id);
+    tuttePartite.push(...g.partite);
   }
+
+  // Preload marcatori in una query sola
+  const partitaIds = tuttePartite.map(p => p.id);
+  await _preloadMarcatori(categoria_id, partitaIds);
+
+  for (const g of gironi) {
+    for (const p of g.partite) {
+      p.marcatori = await dbGetMarcatori(p.id);
+    }
+  }
+
   return gironi;
 }
 
@@ -515,6 +533,19 @@ function _orarioToMinuti(orario) {
   return 9999;
 }
 
+
+// ============================================================
+//  BATCH LOADER — carica tutte le categorie in parallelo
+// ============================================================
+async function _caricaTutteCategorie() {
+  const key = '_all_cats_' + STATE.activeTorneo;
+  // Carica tutti i gironi di tutte le categorie in parallelo
+  const results = await Promise.all(
+    STATE.categorie.map(cat => getGironiWithData(cat.id).then(gironi => ({ cat, gironi })))
+  );
+  return results;
+}
+
 // ============================================================
 //  RIEPILOGO TORNEO (tutte le giornate)
 // ============================================================
@@ -542,19 +573,22 @@ async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.categorie.length) { el.innerHTML='<div class="empty-state">Nessuna categoria configurata.</div>'; return; }
 
-  // Mostra TUTTE le categorie in cascata
+  // Skeleton loader immediato
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+
+  // Carica TUTTE le categorie in parallelo
+  const tuttiDati = await _caricaTutteCategorie();
+
   let html = _riepilogoBanner('classifiche');
 
-  for (const cat of STATE.categorie) {
-    const gironi = await getGironiWithData(cat.id);
+  for (const { cat, gironi } of tuttiDati) {
     if (!gironi.length) continue;
 
-    // Header categoria se ci sono più categorie
     if (STATE.categorie.length > 1) {
       const totPartite = gironi.reduce((s,g)=>s+g.partite.length,0);
       const totGiocate = gironi.reduce((s,g)=>s+g.partite.filter(p=>p.giocata).length,0);
       html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
-        color:white;border-radius:var(--radius);padding:9px 14px;margin:${html?'18px':'0'} 0 8px;
+        color:white;border-radius:var(--radius);padding:9px 14px;margin-top:18px;margin-bottom:8px;
         font-size:13px;font-weight:700;letter-spacing:.03em;
         display:flex;align-items:center;justify-content:space-between;">
         <span>🏆 ${cat.nome}</span>
@@ -599,10 +633,13 @@ async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
   if (!STATE.categorie.length) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
 
-  // Raccoglie partite da TUTTE le categorie
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+
+  // Carica TUTTE le categorie in parallelo
+  const tuttiDati = await _caricaTutteCategorie();
+
   let tuttePartite = [];
-  for (const cat of STATE.categorie) {
-    const gironi = await getGironiWithData(cat.id);
+  for (const { cat, gironi } of tuttiDati) {
     for (const g of gironi) {
       for (const p of g.partite) {
         tuttePartite.push({ ...p, _girone: g.nome, _cat: cat.nome });
@@ -929,7 +966,7 @@ async function deleteCat(id) {
 // ============================================================
 async function renderAdminLoghi() {
   const el=document.getElementById('sec-a-loghi');
-  const squadre=await dbGetSquadre(STATE.activeTorneo);
+  const squadre=await dbGetSquadreFull(STATE.activeTorneo); // con logo
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
   let html='<div class="section-label">Loghi squadre</div><div class="card">';
   html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
