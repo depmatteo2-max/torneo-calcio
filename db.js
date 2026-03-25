@@ -22,20 +22,38 @@ function _cacheClear() { Object.keys(_cache).forEach(k => delete _cache[k]); }
 
 // ── INIT ───────────────────────────────────────────────────
 function initDB() {
-  db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
+    realtime: { timeout: 10000 },
+    global: { headers: { 'x-my-custom-header': 'spe' } }
+  });
+}
+
+// Query con timeout automatico — se supera 8s restituisce []
+async function _q(queryFn, fallback = []) {
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    );
+    const result = await Promise.race([queryFn(), timeoutPromise]);
+    return result;
+  } catch(e) {
+    console.warn('Query timeout/error:', e.message);
+    return { data: fallback, error: e };
+  }
 }
 
 function subscribeRealtime(cb) {
-  db.channel('rt')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'partite' },
-      () => { _cacheInvalid('partite_'); _cacheInvalid('gwd_'); cb(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'marcatori' },
-      () => { _cacheInvalid('marc_'); _cacheInvalid('gwd_'); cb(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'knockout' },
-      () => { _cacheInvalid('ko_'); cb(); })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tornei' },
-      () => { _cacheInvalid('tornei_'); cb(); })
-    .subscribe();
+  // Realtime asincrono — non blocca il caricamento
+  try {
+    db.channel('rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'partite' },
+        () => { _cacheInvalid('partite_'); _cacheInvalid('gwd_'); cb(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'knockout' },
+        () => { _cacheInvalid('ko_'); cb(); })
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') console.warn('Realtime non disponibile');
+      });
+  } catch(e) { console.warn('Realtime error:', e); }
 }
 
 // ── TORNEI ─────────────────────────────────────────────────
@@ -202,50 +220,48 @@ async function getGironiWithData(categoriaId) {
   const key = `gwd_${categoriaId}`;
   const cached = _cacheGet(key); if (cached) return cached;
 
-  // Query 1: gironi
-  const { data: gironi } = await db.from('gironi')
-    .select('*').eq('categoria_id', categoriaId).order('nome');
-  if (!gironi?.length) return [];
-
-  const gironeIds = gironi.map(g => g.id);
-
-  // Query 2+3+4 in parallelo
-  const [p1, p2, p3] = await Promise.all([
+  // Tutto in parallelo con timeout
+  const [r1, r2] = await Promise.all([
+    db.from('gironi').select('*').eq('categoria_id', categoriaId).order('nome'),
     db.from('partite')
       .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,home:squadre!home_id(id,nome),away:squadre!away_id(id,nome)')
-      .in('girone_id', gironeIds)
-      .order('orario'),
-    db.from('girone_squadre')
-      .select('girone_id,squadra_id,posizione,squadre(id,nome)')
-      .in('girone_id', gironeIds)
-      .order('posizione'),
-    // Marcatori solo per partite giocate — query lazy dopo
-    Promise.resolve({ data: null })
+      .eq('girone_id.categoria_id', categoriaId) // filtro diretto
+      .order('orario')
   ]);
 
-  const tuttePartite = p1.data || [];
-  const tutteGs = p2.data || [];
+  // Se il join non funziona, fallback a query separate
+  const gironi = r1.data || [];
+  if (!gironi.length) return [];
+  const gironeIds = gironi.map(g => g.id);
 
-  // Marcatori: solo se ci sono partite giocate
-  const giocateIds = tuttePartite.filter(p => p.giocata).map(p => p.id);
+  const [r2b, r3] = await Promise.all([
+    r2.data ? Promise.resolve(r2) :
+      db.from('partite')
+        .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,home:squadre!home_id(id,nome),away:squadre!away_id(id,nome)')
+        .in('girone_id', gironeIds).order('orario'),
+    db.from('girone_squadre')
+      .select('girone_id,squadra_id,squadre(id,nome)')
+      .in('girone_id', gironeIds).order('posizione')
+  ]);
+
+  const tuttePartite = r2b.data || [];
+  const tutteGs = r3.data || [];
+
+  // Marcatori solo per giocate
   let marcatori = [];
-  if (giocateIds.length > 0) {
+  const giocateIds = tuttePartite.filter(p => p.giocata).map(p => p.id);
+  if (giocateIds.length) {
     const { data: m } = await db.from('marcatori')
       .select('partita_id,squadra_id,nome,minuto')
       .in('partita_id', giocateIds);
     marcatori = m || [];
   }
 
-  // Assembla tutto in memoria — zero query aggiuntive
   const result = gironi.map(g => ({
     ...g,
     squadre: tutteGs.filter(x => x.girone_id === g.id).map(x => x.squadre),
-    partite: tuttePartite
-      .filter(p => p.girone_id === g.id)
-      .map(p => ({
-        ...p,
-        marcatori: marcatori.filter(m => m.partita_id === p.id)
-      }))
+    partite: tuttePartite.filter(p => p.girone_id === g.id)
+      .map(p => ({ ...p, marcatori: marcatori.filter(m => m.partita_id === p.id) }))
   }));
 
   _cacheSet(key, result);
