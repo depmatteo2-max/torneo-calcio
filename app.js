@@ -192,28 +192,45 @@ async function mostraTutteLCategorie() {
 
 function renderTorneoBar() {
   const bar = document.getElementById('torneo-bar'); if (!bar) return;
-  bar.style.display = '';
   const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
-  const multiTorneo = STATE.tornei.filter(x => x.attivo).length > 1;
   const multiCat = STATE.categorie.length > 1;
+  const multiTorneo = STATE.tornei.filter(x => x.attivo).length > 1;
 
-  bar.innerHTML = `<div class="torneo-bar-inner" style="gap:6px;">
-    ${multiTorneo ? `<button onclick="cambiaTorneo()" 
-      style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:8px;
-             padding:5px 10px;font-size:11px;font-weight:600;color:var(--testo-lt);cursor:pointer;
-             display:flex;align-items:center;gap:4px;font-family:inherit;">
-      🏆 ${t?.nome || ''}
-    </button>` : `<span style="font-size:12px;font-weight:700;color:var(--testo-2);">🏆 ${t?.nome || ''}</span>`}
-    ${multiCat && cat ? `
-      <span style="color:var(--bordo);font-size:14px;">›</span>
-      <span style="font-size:12px;font-weight:700;color:var(--blu);">📋 ${cat.nome}</span>
-      <button onclick="cambiaCategoria()"
-        style="margin-left:auto;background:var(--blu-bg);border:1px solid var(--blu-lt);
-               border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;
-               color:var(--blu);cursor:pointer;font-family:inherit;">
-        🔄 Cambia categoria
-      </button>` : ''}
+  if (!cat && !multiTorneo) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+
+  bar.innerHTML = `<div class="torneo-bar-inner" style="gap:8px;padding:8px 16px;">
+    ${cat ? `
+      <!-- Categoria attiva ben visibile -->
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">
+          ${t?.nome || ''}
+        </div>
+        <div style="font-size:15px;font-weight:800;color:var(--testo);margin-top:1px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${cat.nome}
+        </div>
+      </div>
+      ${multiCat ? `
+        <button onclick="cambiaCategoria()"
+          style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);
+                 border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;
+                 color:var(--testo-lt);cursor:pointer;font-family:inherit;
+                 display:flex;align-items:center;gap:5px;transition:all .15s;"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
+          ⇄ Cambia categoria
+        </button>` : ''}
+    ` : multiTorneo ? `
+      <span style="font-size:13px;font-weight:700;color:var(--testo-2);flex:1;">🏆 ${t?.nome || ''}</span>
+      <button onclick="cambiaTorneo()"
+        style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:8px;
+               padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);
+               cursor:pointer;font-family:inherit;">
+        🔄 Cambia torneo
+      </button>
+    ` : ''}
   </div>`;
 }
 
