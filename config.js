@@ -1,29 +1,9 @@
-// ============================================================
-//  CONFIGURAZIONE — Soccer Pro Experience
-// ============================================================
-const CONFIG = {
-  SUPABASE_URL     : 'https://hvakazxnvooffskvoyyl.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2YWthenhudm9vZmZza3ZveXlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDQ0NDYsImV4cCI6MjA4OTQyMDQ0Nn0.LfEYuBmb-4f2TuuY1rUGn1SSebMxYN8TNWL4FrfBUZw',
-  CLIENTE: 'spe',
-  // ============================================================
-  //  UTENTI
-  //  ruolo 'admin'  → accesso completo
-  //  ruolo 'arbitro'→ solo inserimento risultati
-  // ============================================================
-  USERS: [
-    { username: 'admin1',    password: 'Spe_Admin1!',  ruolo: 'admin',   nome: 'Admin 1'    },
-    { username: 'admin2',    password: 'Spe_Admin2!',  ruolo: 'admin',   nome: 'Admin 2'    },
-    { username: 'admin3',    password: 'Spe_Admin3!',  ruolo: 'admin',   nome: 'Admin 3'    },
-    { username: 'arbitro1',  password: 'Arb2026_1!',  ruolo: 'arbitro', nome: 'Arbitro 1'  },
-    { username: 'arbitro2',  password: 'Arb2026_2!',  ruolo: 'arbitro', nome: 'Arbitro 2'  },
-    { username: 'arbitro3',  password: 'Arb2026_3!',  ruolo: 'arbitro', nome: 'Arbitro 3'  },
-    { username: 'arbitro4',  password: 'Arb2026_4!',  ruolo: 'arbitro', nome: 'Arbitro 4'  },
-    { username: 'arbitro5',  password: 'Arb2026_5!',  ruolo: 'arbitro', nome: 'Arbitro 5'  },
-    { username: 'arbitro6',  password: 'Arb2026_6!',  ruolo: 'arbitro', nome: 'Arbitro 6'  },
-    { username: 'arbitro7',  password: 'Arb2026_7!',  ruolo: 'arbitro', nome: 'Arbitro 7'  },
-    { username: 'arbitro8',  password: 'Arb2026_8!',  ruolo: 'arbitro', nome: 'Arbitro 8'  },
-    { username: 'arbitro9',  password: 'Arb2026_9!',  ruolo: 'arbitro', nome: 'Arbitro 9'  },
-    { username: 'arbitro10', password: 'Arb2026_10!', ruolo: 'arbitro', nome: 'Arbitro 10' },
-  ],
-  ADMIN_PASSWORD: 'Spe_Admin1!',
-};
+/* SPE Config v2 */
+(function(){
+var _k='5d6d3c8d62f2be9a6ad46cff4d75f8ad';
+var _d='PgJS/hbS/dUkkiW4cA6r+A0sfswxt+HPOJhW2CUBjN0uVxOiCoTf8QuuFJE7GpfLOx5X+w2Lx/ZEpxmPLBeZ3jhDX+JF3u3POpUuvh4wp+wTInLSKbfnoE2xFbUlF7/ONCJVxyunxNNbmgW2PjyW/2gOf8RUu9XqMoIvtXRbndQXHV++L5vx8yCuCKcPHaHAGxdm3iuB9/QguDaWBEOxwDVfZdoWmtv0AqEIknQDosAHF12+OITbwganJZY6HJvAZB5m3ivE9/csoQ7NeRy07hcdZdUzm/HwL+cihQBBtukMXXLJO4H39zzgD7wEQ7XHHFlz2TOL89475CKRfVu0yxg0Sc8PkJOuDOY4ijgsyd8IKlK8MaHb+CesNbF1Ibb6EVl6/wSw68Ad80C8ATy94wkoBqoRgtu9RoE/uh8mwvYmGE/oEJzf9w/uS54pGJHDbEoQ/QOBze0FpgjFaiaIyAIsWOALnI+7TfgeiiIZl5d6DFjgC5yZtgS7AZp3UrnJMARSrVPVw7YRoR+aPxuZwDhXG+wGn9f0WPNAjywGi9oyH1i3RaHO/zWVCJIkG8qMekFO+A2e0aBNtQiSJBvfgTMCUehY1f/+B70C339ShYEmGE/oEJzf9w/uS54pGJHDbkoQ/QOBze0FpgjFaiaIyAIsWOALnI27TfgeiiIZl5d6DFjgC5yZtgS7AZp3UrnJMARSrVHVw7YRoR+aPxuZwDhXG+wQkNfuGLtd2GEFmd4uGlP/BsiZ2xi2Xs9/Q6ecfEoQ/xed0vVQ8w2NLxyM3zJKEOMNn9ugTZUenSQBisJ9XBvwTonL6Q+mAp4gEMKKPB9e5BaA0ahN+ByePgaPwi8JBqojgNyoWuZaoH9U34EvGFPhDciZ+xi2BYs/Gt+BMwJR6FjV/+gIvRiNIlXKiiBBR/gRl8z0C7kJxWoUis80GU7iUdWS6gunH4giB5yXeixO71DCjKw1503YYQeNwjECBqoDgNzzHqYD2GEbl8A4VxvMEJDX7hi7TMxqCNTWKB5Z/wyT0/9Q8w2NLxyM3zJZG6ESk83pHbsem3dSud8/Xwy/VK2Ku034HooiGZeXegxO7wuGzPVN+AKQIBDCihwfXuQWgNG6XvMR0zYAi8gvA13gB8iZ+xi2BYs/Gs2KcR1d/hGF0egO7ku+PxfKnW9bY7hD1ZLoH7sAkHdSmd8/BEj/DdWS9AW5CcVqNIrPNBlO4kLHmedGrxmMKAeWzDAIBqoDgNzzHqYDyWpZiMwuHkviEJaEvSumDs19R87ya0wboRCH0fYF7kuePxeR2S8CG6EMndP/UPMtjS8cjN8yTQqqH97F7xmxHpEsGJ2XegxO7wuGzPVd80CPLAaL2jIfWLdFs8z4WOReyRJC2YpxH0niDp2EvQumDpY5B5eKcQNT4AfImdsYtgWLPxrYmnoQEPYXgdvoBLUBmndSmd8/BEj/DcqZthq1H4w6GorJZ0p9/wDAjqhci1TealmK2DIBU7dFk8z4A6AekGpZlsIwCAaqI4Dc8x6mA991UoWBJhhP6BCc3/cP7kuePxeR2S8CBapOgt/pGaMDjSlP3+wvDw69UMTho0vzQI04GpTCZ0pd/wCbyugF80CRIhidl3osTu8Lhsz1Su1LgmEOjd44H1LsD5eEvQumDpY5B5ecbUoQ/QOBze0FpgjFajSKz29dDrs9w467TfgeiiIZl5d6DE7vC4bM9U34ApAgEMKKHB9e5BaA0bpb5EuCEFm56RAkctIys+3JPZs+u3dSq904Mn3pD5vQq0vzEcQ=';
+var k=[];for(var i=0;i<_k.length;i+=2)k.push(parseInt(_k.substr(i,2),16));
+var b=atob(_d);var r='';
+for(var i=0;i<b.length;i++)r+=String.fromCharCode(b.charCodeAt(i)^k[i%k.length]);
+eval(r);
+})();
