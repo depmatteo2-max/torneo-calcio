@@ -27,5 +27,3 @@ const CONFIG = {
   ],
   ADMIN_PASSWORD: 'Spe_Admin1!',
 };
- 
- 
