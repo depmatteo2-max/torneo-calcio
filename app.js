@@ -149,13 +149,26 @@ function mostraSelezioneCat() {
       </div>` : ''}
       <div class="cat-select-title">Seleziona categoria</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        ${STATE.categorie.map(c => `
-          <button class="cat-select-btn" onclick="selezionaCategoriaPublic(${c.id})">
-            <div>
-              <div class="cat-select-btn-nome">${c.nome}</div>
-              ${c.note ? `<div class="cat-select-btn-sub">${c.note}</div>` : ''}
-            </div>
-            <span class="cat-select-arrow">›</span>
+        ${STATE.categorie
+          .filter(c => {
+            const n = c.nome || '';
+            // Mostra solo categorie con nome "pulito" — escludi note e descrizioni
+            if (n.length > 40) return false;
+            if (/^(Girone [A-Z]$|Gruppo [A-Z]$)/i.test(n.trim())) return false;
+            if (/accedono|vince|finali|spareggio|semifinal|classific|punti/i.test(n)) return false;
+            if (/^\d/.test(n.trim())) return false; // inizia con numero
+            return true;
+          })
+          .map(c => `
+          <button onclick="selezionaCategoriaPublic(${c.id})"
+            style="background:white;border:1.5px solid var(--bordo);border-radius:12px;
+                   padding:16px 20px;cursor:pointer;font-family:inherit;
+                   display:flex;align-items:center;justify-content:space-between;
+                   box-shadow:var(--shadow-xs);transition:all .15s;"
+            onmouseover="this.style.borderColor='var(--blu)';this.style.boxShadow='var(--shadow-md)';this.style.transform='translateY(-1px)'"
+            onmouseout="this.style.borderColor='var(--bordo)';this.style.boxShadow='var(--shadow-xs)';this.style.transform='translateY(0)'">
+            <span style="font-size:17px;font-weight:800;color:var(--testo);">\${c.nome}</span>
+            <span style="font-size:22px;color:var(--testo-xs);">›</span>
           </button>`).join('')}
       </div>
       <button class="cat-select-all" onclick="mostraTutteLCategorie()">
