@@ -1249,6 +1249,15 @@ async function renderAdminLoghi() {
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
   let html='<div class="section-label">Loghi squadre</div><div class="card">';
   html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
+  html+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-p" onclick="cercaLoghiAuto()" id="btn-cerca-loghi">
+      🔍 Cerca loghi automatici
+    </button>
+    <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">
+      📦 Comprimi loghi grandi
+    </button>
+  </div>
+  <div id="loghi-auto-log" style="display:none;background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;max-height:200px;overflow-y:auto;font-family:monospace;"></div>`;
   for (const sq of squadre) {
     html+=`<div class="logo-team-row">
       <div class="logo-upload-btn">${logoHTML(sq,'md')}
@@ -1262,6 +1271,189 @@ async function renderAdminLoghi() {
   }
   html+='</div>'; el.innerHTML=html;
 }
+// ============================================================
+//  CERCA LOGHI AUTOMATICI
+// ============================================================
+async function cercaLoghiAuto() {
+  const btn = document.getElementById('btn-cerca-loghi');
+  const log = document.getElementById('loghi-auto-log');
+  if (!btn || !log) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Ricerca in corso...';
+  log.style.display = 'block';
+  log.innerHTML = '🔍 Avvio ricerca loghi...<br>';
+
+  const squadre = await dbGetSquadreFull(STATE.activeTorneo);
+  const senzaLogo = squadre.filter(s => !s.logo);
+
+  if (!senzaLogo.length) {
+    log.innerHTML += '✅ Tutte le squadre hanno già un logo!';
+    btn.disabled = false;
+    btn.textContent = '🔍 Cerca loghi automatici';
+    return;
+  }
+
+  log.innerHTML += `📋 ${senzaLogo.length} squadre senza logo — ricerca in corso...<br>`;
+
+  let trovati = 0, nonTrovati = 0;
+
+  for (const sq of senzaLogo) {
+    log.innerHTML += `🔎 ${sq.nome}... `;
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const logo = await _cercaLogoSquadra(sq.nome);
+      if (logo) {
+        // Comprimi prima di salvare
+        const compressed = await _comprimiImmagineUrl(logo);
+        if (compressed) {
+          await dbUpdateLogo(sq.id, compressed);
+          trovati++;
+          log.innerHTML += `✅ Trovato!<br>`;
+        } else {
+          log.innerHTML += `⚠️ Trovato ma errore compressione<br>`;
+          nonTrovati++;
+        }
+      } else {
+        log.innerHTML += `❌ Non trovato<br>`;
+        nonTrovati++;
+      }
+    } catch(e) {
+      log.innerHTML += `❌ Errore<br>`;
+      nonTrovati++;
+    }
+
+    log.scrollTop = log.scrollHeight;
+    // Pausa per non sovraccaricare
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  log.innerHTML += `<br>🏁 <strong>Fine! ${trovati} trovati, ${nonTrovati} non trovati</strong>`;
+  btn.disabled = false;
+  btn.textContent = '🔍 Cerca loghi automatici';
+
+  if (trovati > 0) {
+    await renderAdminLoghi();
+    toast(`✅ ${trovati} loghi trovati e salvati!`);
+  }
+}
+
+async function _cercaLogoSquadra(nome) {
+  // Prova Wikipedia/Wikimedia
+  try {
+    const query = encodeURIComponent(nome + ' calcio football club');
+    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(nome)}&prop=pageimages&format=json&pithumbsize=200&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = data.query?.pages;
+    if (pages) {
+      for (const page of Object.values(pages)) {
+        if (page.thumbnail?.source) return page.thumbnail.source;
+      }
+    }
+  } catch(e) {}
+
+  // Prova con ricerca Wikipedia IT
+  try {
+    const url = `https://it.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(nome)}&prop=pageimages&format=json&pithumbsize=200&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = data.query?.pages;
+    if (pages) {
+      for (const page of Object.values(pages)) {
+        if (page.thumbnail?.source) return page.thumbnail.source;
+      }
+    }
+  } catch(e) {}
+
+  // Prova con Clearbit logo API (per società con sito web)
+  try {
+    const domain = nome.toLowerCase()
+      .replace(/\s+(calcio|football|fc|asd|ssd|ac|us|ss)\s*/gi, '')
+      .replace(/[^a-z0-9]/g, '') + '.it';
+    const url = `https://logo.clearbit.com/${domain}`;
+    const res = await fetch(url);
+    if (res.ok && res.headers.get('content-type')?.includes('image')) {
+      return url;
+    }
+  } catch(e) {}
+
+  return null;
+}
+
+async function _comprimiImmagineUrl(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxSize = 120;
+      let w = img.width, h = img.height;
+      if (w > h) { if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
+      else        { if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
+      canvas.width = w || maxSize; canvas.height = h || maxSize;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      try { resolve(canvas.toDataURL('image/jpeg', 0.75)); }
+      catch(e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+    setTimeout(() => resolve(null), 5000);
+  });
+}
+
+// ── COMPRIMI LOGHI ESISTENTI ────────────────────────────────
+async function comprimiloghiEsistenti() {
+  const btn = document.getElementById('btn-comprimi-loghi');
+  const log = document.getElementById('loghi-auto-log');
+  if (!btn || !log) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Compressione...';
+  log.style.display = 'block';
+  log.innerHTML = '📦 Avvio compressione loghi...<br>';
+
+  const squadre = await dbGetSquadreFull(STATE.activeTorneo);
+  const conLogo = squadre.filter(s => s.logo?.startsWith('data:'));
+
+  let compressi = 0, saltati = 0;
+  for (const sq of conLogo) {
+    const kb = Math.round(sq.logo.length * 0.75 / 1024);
+    if (kb < 15) { saltati++; continue; }
+
+    log.innerHTML += `📦 ${sq.nome} (${kb}KB)... `;
+    log.scrollTop = log.scrollHeight;
+
+    try {
+      const compressed = await _comprimiImmagine(
+        { arrayBuffer: async () => {
+          const b64 = sq.logo.split(',')[1];
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for (let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+          return arr.buffer;
+        }},
+        120, 0.75,
+        sq.logo // passa direttamente
+      );
+      const newKb = Math.round(compressed.length * 0.75 / 1024);
+      await dbUpdateLogo(sq.id, compressed);
+      compressi++;
+      log.innerHTML += `✅ ${newKb}KB (-${Math.round((1-newKb/kb)*100)}%)<br>`;
+    } catch(e) {
+      log.innerHTML += `❌ Errore<br>`;
+    }
+    log.scrollTop = log.scrollHeight;
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  log.innerHTML += `<br>🏁 <strong>${compressi} compressi, ${saltati} già piccoli</strong>`;
+  btn.disabled = false;
+  btn.textContent = '📦 Comprimi loghi grandi';
+  if (compressi > 0) { await renderAdminLoghi(); toast(`✅ ${compressi} loghi compressi!`); }
+}
+
 async function uploadLogo(event, squadra_id) {
   const file = event.target.files[0]; if (!file) return;
   toast('⏳ Compressione logo...');
@@ -1276,25 +1468,25 @@ async function uploadLogo(event, squadra_id) {
   }
 }
 
-function _comprimiImmagine(file, maxSize = 120, quality = 0.75) {
+function _comprimiImmagine(file, maxSize = 120, quality = 0.75, dataUrl = null) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    const processUrl = (src) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        // Ridimensiona mantenendo proporzioni, max 120x120px
         let w = img.width, h = img.height;
         if (w > h) { if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
         else        { if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
+        canvas.width = w || maxSize; canvas.height = h || maxSize;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.onerror = reject;
-      img.src = e.target.result;
+      img.src = src;
     };
+    if (dataUrl) { processUrl(dataUrl); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => processUrl(e.target.result);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
