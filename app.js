@@ -952,6 +952,7 @@ async function renderAdminSetup() {
         <div style="font-size:15px;font-weight:600;">${cat.nome}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <span class="badge badge-gray">${totG}/${totP} partite</span>
+          <button class="btn btn-sm" onclick="rinominaCat(${cat.id}, '${cat.nome.replace(/'/g, "\\'")}')">✏️ Rinomina</button>
           <button class="btn btn-danger btn-sm" onclick="deleteCat(${cat.id})">Elimina</button>
         </div>
       </div>`;
@@ -1195,6 +1196,21 @@ async function _importaRiga(idx) {
     if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
     toast('❌ Errore: ' + e.message);
     console.error(e);
+  }
+}
+
+async function rinominaCat(id, nomeAttuale) {
+  const nuovo = prompt('Nuovo nome categoria:', nomeAttuale);
+  if (!nuovo || nuovo.trim() === nomeAttuale) return;
+  try {
+    await dbUpdateCategoria(id, { nome: nuovo.trim() });
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    renderCatBar();
+    renderTorneoBar();
+    toast('✅ Categoria rinominata!');
+    await renderAdminSetup();
+  } catch(e) {
+    toast('❌ Errore: ' + e.message);
   }
 }
 
