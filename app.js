@@ -190,9 +190,9 @@ async function selezionaCategoriaPublic(catId) {
   _saveSavedCat(catId);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
-  // Avvia preload immediato in background
   preloadCategoria(catId);
   await _caricaGiornate();
+  renderTorneoBar(); // aggiorna subito la barra con categoria + cambia
   renderCatBar();
   document.getElementById('cat-bar').style.display = '';
   await renderCurrentSection();
@@ -265,13 +265,11 @@ function renderTorneoBar() {
 }
 
 async function cambiaCategoria() {
-  // Torna alla schermata selezione categoria senza cambiare torneo
   STATE.activeCat = null;
   _clearSavedCat();
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
-  // Nasconde cat-bar e ricrea le sezioni
   document.getElementById('cat-bar').style.display = 'none';
   document.getElementById('cat-bar').innerHTML = '';
   document.getElementById('main-content').innerHTML =
@@ -285,7 +283,7 @@ async function cambiaCategoria() {
   const btn = document.querySelector('[data-section="classifiche"]');
   if (btn) btn.classList.add('active');
 
-  renderTorneoBar();
+  renderTorneoBar(); // ridisegna subito la barra con 🏠
   mostraSelezioneCat();
 }
 
