@@ -1249,13 +1249,23 @@ async function renderAdminLoghi() {
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
   let html='<div class="section-label">Loghi squadre</div><div class="card">';
   html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
-  html+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
-    <button class="btn btn-p" onclick="cercaLoghiAuto()" id="btn-cerca-loghi">
-      🔍 Cerca loghi automatici
+  html+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <label style="display:inline-flex;align-items:center;gap:8px;background:var(--blu,#1a56db);color:white;
+                  padding:9px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;
+                  font-family:inherit;border:2px solid var(--blu,#1a56db);transition:all .15s;"
+           onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+      📁 Carica loghi da cartella
+      <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
+    </label>
+    <button class="btn btn-p" onclick="cercaLoghiWikipedia()" id="btn-wiki-loghi">
+      🌐 Cerca su Wikipedia
     </button>
     <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">
       📦 Comprimi loghi grandi
     </button>
+  </div>
+  <div style="font-size:11px;color:#888;margin-bottom:12px;">
+    💡 <strong>Suggerimento:</strong> rinomina i file con il nome della squadra (es. <em>rhodense.png</em>, <em>scarioni.jpg</em>) e selezionali tutti insieme
   </div>
   <div id="loghi-auto-log" style="display:none;background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;max-height:200px;overflow-y:auto;font-family:monospace;"></div>`;
   for (const sq of squadre) {
@@ -1272,135 +1282,186 @@ async function renderAdminLoghi() {
   html+='</div>'; el.innerHTML=html;
 }
 // ============================================================
-//  CERCA LOGHI AUTOMATICI
+//  CARICA LOGHI DA CARTELLA
 // ============================================================
-async function cercaLoghiAuto() {
-  const btn = document.getElementById('btn-cerca-loghi');
+async function caricaLoghiDaCartella(event) {
+  const files = Array.from(event.target.files);
+  const log = document.getElementById('loghi-auto-log');
+  if (!files.length || !log) return;
+
+  log.style.display = 'block';
+  log.innerHTML = `📁 ${files.length} file selezionati — abbinamento in corso...<br>`;
+
+  const squadre = await dbGetSquadreFull(STATE.activeTorneo);
+
+  // Normalizza nome per confronto
+  const normalizza = (s) => s.toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/(asd|ssd|acd|usd|fc|ac|us|ss|calcio|football|club|sport)/g, '')
+    .trim();
+
+  let abbinati = 0, nonAbbinati = [];
+
+  for (const file of files) {
+    // Nome file senza estensione
+    const nomeFile = normalizza(file.name.replace(/\.[^.]+$/, ''));
+
+    // Cerca squadra con nome simile
+    let squadra = null;
+    let bestScore = 0;
+
+    for (const sq of squadre) {
+      const nomeSq = normalizza(sq.nome);
+      // Corrispondenza esatta
+      if (nomeSq === nomeFile || nomeSq.includes(nomeFile) || nomeFile.includes(nomeSq)) {
+        const score = Math.min(nomeSq.length, nomeFile.length) / Math.max(nomeSq.length, nomeFile.length);
+        if (score > bestScore) { bestScore = score; squadra = sq; }
+      }
+    }
+
+    if (squadra && bestScore > 0.4) {
+      log.innerHTML += `✅ <strong>${file.name}</strong> → ${squadra.nome} `;
+      try {
+        const compressed = await _comprimiImmagine(file, 120, 0.80);
+        await dbUpdateLogo(squadra.id, compressed);
+        abbinati++;
+        log.innerHTML += `(salvato)<br>`;
+      } catch(e) {
+        log.innerHTML += `(errore)<br>`;
+      }
+    } else {
+      nonAbbinati.push(file.name);
+      log.innerHTML += `❓ <strong>${file.name}</strong> → nessuna squadra trovata<br>`;
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  log.innerHTML += `<br>🏁 <strong>${abbinati} abbinati</strong>`;
+  if (nonAbbinati.length) {
+    log.innerHTML += ` | ⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
+  }
+
+  if (abbinati > 0) {
+    await renderAdminLoghi();
+    toast(`✅ ${abbinati} loghi caricati!`);
+  }
+
+  // Reset input
+  event.target.value = '';
+}
+
+// ============================================================
+//  CERCA LOGHI SU WIKIPEDIA (con "logo calcio")
+// ============================================================
+async function cercaLoghiWikipedia() {
+  const btn = document.getElementById('btn-wiki-loghi');
   const log = document.getElementById('loghi-auto-log');
   if (!btn || !log) return;
 
   btn.disabled = true;
-  btn.textContent = '⏳ Ricerca in corso...';
+  btn.textContent = '⏳ Ricerca...';
   log.style.display = 'block';
-  log.innerHTML = '🔍 Avvio ricerca loghi...<br>';
+  log.innerHTML = '🌐 Ricerca su Wikipedia...<br>';
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
   const senzaLogo = squadre.filter(s => !s.logo);
 
   if (!senzaLogo.length) {
     log.innerHTML += '✅ Tutte le squadre hanno già un logo!';
-    btn.disabled = false;
-    btn.textContent = '🔍 Cerca loghi automatici';
-    return;
+    btn.disabled = false; btn.textContent = '🌐 Cerca su Wikipedia'; return;
   }
 
-  log.innerHTML += `📋 ${senzaLogo.length} squadre senza logo — ricerca in corso...<br>`;
-
-  let trovati = 0, nonTrovati = 0;
+  log.innerHTML += `📋 ${senzaLogo.length} squadre senza logo<br><br>`;
+  let trovati = 0;
 
   for (const sq of senzaLogo) {
     log.innerHTML += `🔎 ${sq.nome}... `;
     log.scrollTop = log.scrollHeight;
 
-    try {
-      const logo = await _cercaLogoSquadra(sq.nome);
-      if (logo) {
-        // Comprimi prima di salvare
-        const compressed = await _comprimiImmagineUrl(logo);
-        if (compressed) {
-          await dbUpdateLogo(sq.id, compressed);
-          trovati++;
-          log.innerHTML += `✅ Trovato!<br>`;
-        } else {
-          log.innerHTML += `⚠️ Trovato ma errore compressione<br>`;
-          nonTrovati++;
-        }
+    const logo = await _wikiCercaLogo(sq.nome);
+    if (logo) {
+      const compressed = await _comprimiImmagine(null, 120, 0.80, logo);
+      if (compressed) {
+        await dbUpdateLogo(sq.id, compressed);
+        trovati++;
+        log.innerHTML += `✅<br>`;
       } else {
-        log.innerHTML += `❌ Non trovato<br>`;
-        nonTrovati++;
+        log.innerHTML += `⚠️ errore compressione<br>`;
       }
-    } catch(e) {
-      log.innerHTML += `❌ Errore<br>`;
-      nonTrovati++;
+    } else {
+      log.innerHTML += `❌ non trovato<br>`;
     }
-
     log.scrollTop = log.scrollHeight;
-    // Pausa per non sovraccaricare
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 600));
   }
 
-  log.innerHTML += `<br>🏁 <strong>Fine! ${trovati} trovati, ${nonTrovati} non trovati</strong>`;
-  btn.disabled = false;
-  btn.textContent = '🔍 Cerca loghi automatici';
-
-  if (trovati > 0) {
-    await renderAdminLoghi();
-    toast(`✅ ${trovati} loghi trovati e salvati!`);
-  }
+  log.innerHTML += `<br>🏁 <strong>${trovati} loghi trovati!</strong>`;
+  btn.disabled = false; btn.textContent = '🌐 Cerca su Wikipedia';
+  if (trovati > 0) { await renderAdminLoghi(); toast(`✅ ${trovati} loghi da Wikipedia!`); }
 }
 
-async function _cercaLogoSquadra(nome) {
-  // Prova Wikipedia/Wikimedia
-  try {
-    const query = encodeURIComponent(nome + ' calcio football club');
-    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(nome)}&prop=pageimages&format=json&pithumbsize=200&origin=*`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const pages = data.query?.pages;
-    if (pages) {
-      for (const page of Object.values(pages)) {
-        if (page.thumbnail?.source) return page.thumbnail.source;
+async function _wikiCercaLogo(nome) {
+  // Varianti di ricerca: "RHODENSE logo calcio", "RHODENSE calcio logo", ecc.
+  const varianti = [
+    `${nome} logo calcio`,
+    `${nome} calcio`,
+    `${nome} football club`,
+    `${nome} FC`,
+    nome,
+  ];
+
+  for (const query of varianti) {
+    try {
+      // 1. Cerca pagina Wikipedia
+      const searchUrl = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=3`;
+      const searchRes = await fetch(searchUrl);
+      const searchData = await searchRes.json();
+      const results = searchData.query?.search || [];
+
+      for (const result of results) {
+        // 2. Ottieni immagine dalla pagina
+        const pageUrl = `https://it.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(result.title)}&prop=pageimages&format=json&pithumbsize=300&origin=*`;
+        const pageRes = await fetch(pageUrl);
+        const pageData = await pageRes.json();
+        const pages = pageData.query?.pages || {};
+
+        for (const page of Object.values(pages)) {
+          if (page.thumbnail?.source) {
+            const src = page.thumbnail.source;
+            // Filtra immagini che sembrano loghi (non foto di persone/stadi)
+            if (!src.includes('Flag_of') && !src.includes('Bandiera')) {
+              return src;
+            }
+          }
+        }
       }
-    }
-  } catch(e) {}
+    } catch(e) {}
 
-  // Prova con ricerca Wikipedia IT
-  try {
-    const url = `https://it.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(nome)}&prop=pageimages&format=json&pithumbsize=200&origin=*`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const pages = data.query?.pages;
-    if (pages) {
-      for (const page of Object.values(pages)) {
-        if (page.thumbnail?.source) return page.thumbnail.source;
+    // Prova anche EN Wikipedia
+    try {
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=2`;
+      const searchRes = await fetch(searchUrl);
+      const searchData = await searchRes.json();
+      const results = searchData.query?.search || [];
+
+      for (const result of results) {
+        const pageUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(result.title)}&prop=pageimages&format=json&pithumbsize=300&origin=*`;
+        const pageRes = await fetch(pageUrl);
+        const pageData = await pageRes.json();
+        const pages = pageData.query?.pages || {};
+
+        for (const page of Object.values(pages)) {
+          if (page.thumbnail?.source) {
+            const src = page.thumbnail.source;
+            if (!src.includes('Flag_of') && !src.includes('map')) {
+              return src;
+            }
+          }
+        }
       }
-    }
-  } catch(e) {}
-
-  // Prova con Clearbit logo API (per società con sito web)
-  try {
-    const domain = nome.toLowerCase()
-      .replace(/\s+(calcio|football|fc|asd|ssd|ac|us|ss)\s*/gi, '')
-      .replace(/[^a-z0-9]/g, '') + '.it';
-    const url = `https://logo.clearbit.com/${domain}`;
-    const res = await fetch(url);
-    if (res.ok && res.headers.get('content-type')?.includes('image')) {
-      return url;
-    }
-  } catch(e) {}
-
+    } catch(e) {}
+  }
   return null;
-}
-
-async function _comprimiImmagineUrl(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const maxSize = 120;
-      let w = img.width, h = img.height;
-      if (w > h) { if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
-      else        { if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
-      canvas.width = w || maxSize; canvas.height = h || maxSize;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      try { resolve(canvas.toDataURL('image/jpeg', 0.75)); }
-      catch(e) { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-    setTimeout(() => resolve(null), 5000);
-  });
 }
 
 // ── COMPRIMI LOGHI ESISTENTI ────────────────────────────────
