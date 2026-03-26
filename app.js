@@ -952,7 +952,7 @@ async function renderAdminSetup() {
         <div style="font-size:15px;font-weight:600;">${cat.nome}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <span class="badge badge-gray">${totG}/${totP} partite</span>
-          <button class="btn btn-sm" onclick="rinominaCat(${cat.id}, '${cat.nome.replace(/'/g, "\\'")}')">✏️ Rinomina</button>
+          <button class="btn btn-sm" onclick="rinominaCat(${cat.id})">✏️ Rinomina</button>
           <button class="btn btn-danger btn-sm" onclick="deleteCat(${cat.id})">Elimina</button>
         </div>
       </div>`;
@@ -1199,7 +1199,9 @@ async function _importaRiga(idx) {
   }
 }
 
-async function rinominaCat(id, nomeAttuale) {
+async function rinominaCat(id) {
+  const cat = STATE.categorie.find(c => c.id === id);
+  const nomeAttuale = cat ? cat.nome : '';
   const nuovo = prompt('Nuovo nome categoria:', nomeAttuale);
   if (!nuovo || nuovo.trim() === nomeAttuale) return;
   try {
