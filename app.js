@@ -152,11 +152,8 @@ function mostraSelezioneCat() {
         ${STATE.categorie
           .filter(c => {
             const n = c.nome || '';
-            // Mostra solo categorie con nome "pulito" — escludi note e descrizioni
             if (n.length > 40) return false;
-            if (/^(Girone [A-Z]$|Gruppo [A-Z]$)/i.test(n.trim())) return false;
-            if (/accedono|vince|finali|spareggio|semifinal|classific|punti/i.test(n)) return false;
-            if (/^\d/.test(n.trim())) return false; // inizia con numero
+            if (/accedono|vince|finali|spareggio|semifinal|classific|punti|girone [a-z]$|gruppo [a-z]$/i.test(n.trim())) return false;
             return true;
           })
           .map(c => `
@@ -167,7 +164,7 @@ function mostraSelezioneCat() {
                    box-shadow:var(--shadow-xs);transition:all .15s;"
             onmouseover="this.style.borderColor='var(--blu)';this.style.boxShadow='var(--shadow-md)';this.style.transform='translateY(-1px)'"
             onmouseout="this.style.borderColor='var(--bordo)';this.style.boxShadow='var(--shadow-xs)';this.style.transform='translateY(0)'">
-            <span style="font-size:17px;font-weight:800;color:var(--testo);">\${c.nome}</span>
+            <span style="font-size:17px;font-weight:800;color:var(--testo);">${c.nome}</span>
             <span style="font-size:22px;color:var(--testo-xs);">›</span>
           </button>`).join('')}
       </div>
