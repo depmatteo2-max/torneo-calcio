@@ -348,6 +348,24 @@ async function renderCurrentSection() {
   else if (s === 'a-loghi') await renderAdminLoghi();
   else if (s === 'a-risultati') await renderAdminRisultati();
   else if (s === 'a-knockout') await renderAdminKnockout();
+  _renderFooter();
+}
+
+function _renderFooter() {
+  let footer = document.getElementById('app-footer');
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.id = 'app-footer';
+    footer.className = 'footer-credits';
+    const main = document.getElementById('main-content');
+    if (main) main.appendChild(footer);
+  }
+  footer.innerHTML = `
+    <div>Creato da <strong>Matteo De Pandis</strong></div>
+    <div style="margin-top:4px;">
+      <a href="tel:+393283951608">📱 +39 328 395 1608</a>
+    </div>
+  `;
 }
 
 function renderCatBar() {
