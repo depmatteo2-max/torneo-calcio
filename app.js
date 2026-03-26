@@ -214,40 +214,53 @@ function renderTorneoBar() {
   const multiCat = STATE.categorie.length > 1;
   const multiTorneo = STATE.tornei.filter(x => x.attivo).length > 1;
 
-  if (!cat && !multiTorneo) { bar.style.display = 'none'; return; }
   bar.style.display = '';
 
-  bar.innerHTML = `<div class="torneo-bar-inner" style="gap:8px;padding:8px 16px;">
+  bar.innerHTML = `<div style="max-width:700px;margin:0 auto;display:flex;align-items:center;
+    gap:8px;padding:8px 16px;min-height:52px;">
+
+    <!-- Tasto HOME torneo — sempre visibile -->
+    <button onclick="${multiTorneo ? 'cambiaTorneo()' : 'cambiaCategoria()'}"
+      style="flex-shrink:0;display:flex;align-items:center;gap:6px;
+             background:white;border:1.5px solid var(--bordo);border-radius:10px;
+             padding:6px 12px;cursor:pointer;font-family:inherit;transition:all .15s;
+             box-shadow:var(--shadow-xs);"
+      onmouseover="this.style.borderColor='var(--blu-lt)';this.style.background='var(--blu-bg)'"
+      onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">
+      <span style="font-size:15px;">🏠</span>
+      <div style="text-align:left;">
+        <div style="font-size:10px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.05em;line-height:1;">Torneo</div>
+        <div style="font-size:12px;font-weight:700;color:var(--testo-2);line-height:1.3;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t?.nome || 'Home'}</div>
+      </div>
+    </button>
+
     ${cat ? `
-      <!-- Categoria attiva ben visibile -->
+      <!-- Separatore -->
+      <span style="color:var(--bordo);font-size:18px;font-weight:300;">›</span>
+
+      <!-- Categoria attiva -->
       <div style="flex:1;min-width:0;">
-        <div style="font-size:11px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">
-          ${t?.nome || ''}
-        </div>
-        <div style="font-size:15px;font-weight:800;color:var(--testo);margin-top:1px;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <div style="font-size:10px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Categoria</div>
+        <div style="font-size:15px;font-weight:800;color:var(--testo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
           ${cat.nome}
         </div>
       </div>
+
+      <!-- Cambia categoria — sempre visibile se ci sono più categorie -->
       ${multiCat ? `
         <button onclick="cambiaCategoria()"
           style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);
                  border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;
                  color:var(--testo-lt);cursor:pointer;font-family:inherit;
-                 display:flex;align-items:center;gap:5px;transition:all .15s;"
-          onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
-          onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
-          ⇄ Cambia categoria
+                 display:flex;align-items:center;gap:4px;transition:all .15s;"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)';this.style.background='var(--blu-bg)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)';this.style.background='var(--sfondo)'">
+          ⇄ Cambia
         </button>` : ''}
-    ` : multiTorneo ? `
-      <span style="font-size:13px;font-weight:700;color:var(--testo-2);flex:1;">🏆 ${t?.nome || ''}</span>
-      <button onclick="cambiaTorneo()"
-        style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:8px;
-               padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);
-               cursor:pointer;font-family:inherit;">
-        🔄 Cambia torneo
-      </button>
-    ` : ''}
+    ` : `
+      <!-- Nessuna categoria selezionata — mostra solo torneo -->
+      <div style="flex:1;"></div>
+    `}
   </div>`;
 }
 
