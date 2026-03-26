@@ -151,9 +151,13 @@ function mostraSelezioneCat() {
       <div style="display:flex;flex-direction:column;gap:10px;">
         ${STATE.categorie
           .filter(c => {
-            const n = c.nome || '';
-            if (n.length > 40) return false;
-            if (/accedono|vince|finali|spareggio|semifinal|classific|punti|girone [a-z]$|gruppo [a-z]$/i.test(n.trim())) return false;
+            const n = (c.nome || '').trim();
+            // Escludi note lunghe
+            if (n.length > 35) return false;
+            // Escludi tutto ciò che inizia con "Girone" o "Gruppo"
+            if (/^(Girone|Gruppo)/i.test(n)) return false;
+            // Escludi descrizioni/note
+            if (/accedono|vince|finali|spareggio|semifinal|classific|punti|→|=|vs /i.test(n)) return false;
             return true;
           })
           .map(c => `
