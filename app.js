@@ -301,62 +301,52 @@ function renderTorneoBar() {
   bar.style.display = '';
 
   bar.innerHTML = `<div style="max-width:700px;margin:0 auto;display:flex;align-items:center;
-    gap:8px;padding:8px 16px;min-height:52px;">
+    gap:6px;padding:6px 12px;min-height:50px;">
 
-    <!-- Tasto HOME torneo — sempre visibile -->
+    <!-- 🏠 Home compatto -->
     <button onclick="${multiTorneo ? 'cambiaTorneo()' : 'cambiaCategoria()'}"
-      style="flex-shrink:0;display:flex;align-items:center;gap:6px;
+      style="flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;
+             justify-content:center;font-size:16px;
              background:white;border:1.5px solid var(--bordo);border-radius:10px;
-             padding:6px 12px;cursor:pointer;font-family:inherit;transition:all .15s;
-             box-shadow:var(--shadow-xs);"
-      onmouseover="this.style.borderColor='var(--blu-lt)';this.style.background='var(--blu-bg)'"
-      onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">
-      <span style="font-size:15px;">🏠</span>
-      <div style="text-align:left;">
-        <div style="font-size:10px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.05em;line-height:1;">Torneo</div>
-        <div style="font-size:12px;font-weight:700;color:var(--testo-2);line-height:1.3;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t?.nome || 'Home'}</div>
-      </div>
-    </button>
+             cursor:pointer;transition:all .15s;box-shadow:var(--shadow-xs);"
+      title="Home"
+      onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
+      onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">🏠</button>
 
     ${cat ? `
-      <!-- Separatore -->
-      <span style="color:var(--bordo);font-size:18px;font-weight:300;">›</span>
-
-      <!-- Categoria attiva -->
+      <!-- Categoria — prende tutto lo spazio -->
       <div style="flex:1;min-width:0;">
-        <div style="font-size:10px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Categoria</div>
-        <div style="font-size:15px;font-weight:800;color:var(--testo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <div style="font-size:9px;color:var(--testo-xs);font-weight:700;
+                    text-transform:uppercase;letter-spacing:.07em;line-height:1;margin-bottom:1px;">Categoria</div>
+        <div style="font-size:16px;font-weight:900;color:var(--testo);
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">
           ${cat.nome}
         </div>
       </div>
 
-      <!-- Cambia categoria — sempre visibile se ci sono più categorie -->
-      <!-- Condividi + Cambia categoria -->
-      <div style="display:flex;gap:6px;flex-shrink:0;">
+      <!-- Azioni -->
+      <div style="display:flex;gap:5px;flex-shrink:0;">
         <button onclick="mostraLinkCondivisibile()"
-          style="background:var(--sfondo);border:1.5px solid var(--bordo);
-                 border-radius:8px;padding:6px 10px;font-size:14px;
-                 color:var(--testo-lt);cursor:pointer;transition:all .15s;"
-          title="Copia link condivisibile"
+          style="width:34px;height:34px;border-radius:8px;font-size:14px;
+                 background:var(--sfondo);border:1.5px solid var(--bordo);
+                 color:var(--testo-lt);cursor:pointer;display:flex;align-items:center;
+                 justify-content:center;transition:all .15s;"
+          title="Copia link"
           onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.background='var(--sfondo)'">🔗</button>
-      ${multiCat ? `
-        <button onclick="cambiaCategoria()"
-          style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);
-                 border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;
+        ${multiCat ? `<button onclick="cambiaCategoria()"
+          style="height:34px;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;
+                 background:var(--sfondo);border:1.5px solid var(--bordo);
                  color:var(--testo-lt);cursor:pointer;font-family:inherit;
-                 display:flex;align-items:center;gap:4px;transition:all .15s;"
+                 display:flex;align-items:center;gap:3px;white-space:nowrap;transition:all .15s;"
           onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)';this.style.background='var(--sfondo)'">
-          ⇄ Cambia
-        </button>` : ''}
+          ⇄ Cambia</button>` : ''}
       </div>
-    ` : `
-      <!-- Nessuna categoria selezionata — mostra solo torneo -->
-      <div style="flex:1;"></div>
-    `}
+    ` : `<div style="flex:1;"></div>`}
   </div>`;
 }
+
 
 async function cambiaCategoria() {
   STATE.activeCat = null;
