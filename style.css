@@ -645,6 +645,47 @@ nav {
   .h-title { font-size: 16px; }
 }
 
+
+/* ── FOOTER ───────────────────────────────────────────────── */
+.footer-credits {
+  text-align: center;
+  padding: 20px 16px 36px;
+  color: var(--testo-xs);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  border-top: 1px solid var(--bordo);
+  margin-top: 32px;
+  line-height: 1.7;
+}
+.footer-credits strong {
+  color: var(--testo-2);
+  font-weight: 700;
+}
+.footer-credits a {
+  color: var(--blu);
+  text-decoration: none;
+  font-weight: 600;
+}
+.footer-credits a:hover {
+  text-decoration: underline;
+}
+
+/* ── HOME PREMIUM ─────────────────────────────────────────── */
+@keyframes pulse-live {
+  0%,100% { opacity:1; transform:scale(1); }
+  50% { opacity:0.5; transform:scale(1.3); }
+}
+
+/* ── VARIABILI EXTRA ──────────────────────────────────────── */
+:root {
+  --verde-bg: #f0fdf4;
+  --arancio-bg: #fff7ed;
+  --arancio: #ea580c;
+  --blu-bg: #eff6ff;
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.12);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
