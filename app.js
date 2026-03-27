@@ -1280,7 +1280,7 @@ async function renderAdminLoghi() {
   html+='</div>'; el.innerHTML=html;
 }
 // ============================================================
-//  CARICA LOGHI DA CARTELLA — abbinamento intelligente
+//  CARICA LOGHI DA CARTELLA — abbinamento intelligente v2
 // ============================================================
 async function caricaLoghiDaCartella(event) {
   const files = Array.from(event.target.files);
@@ -1292,71 +1292,114 @@ async function caricaLoghiDaCartella(event) {
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
 
-  // Normalizza: toglie tutto tranne lettere e numeri, lowercase
-  const norm = (s) => (s||'').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // rimuovi accenti
-    .replace(/[^a-z0-9]/g, '')
-    .replace(/^(asd|ssd|acd|usd|fc|ac|us|ss|ssc|asc)/, '')
-    .replace(/(calcio|football|club|sport|city|united)$/, '')
-    .trim();
+  // Prefissi da rimuovere all'inizio
+  const PREFISSI = /^(a\.s\.d\.|asd|ssd|acd|usd|a\.c\.|ac|a\.s\.|as|u\.s\.|us|s\.s\.|ss|ssc|asc|fc|f\.c\.|gc|gc|pd|pol|polisportiva|unione|sporting|real|atletico|athletic|pro|new|calcio|football|club|team)\s*/gi;
+  // Suffissi da rimuovere alla fine
+  const SUFFISSI = /\s*(calcio|football|club|sport|city|united|1972|1908|1919|1973|2016|2024|verde|bianco|blu|grigio|srl|spa|s\.p\.a\.|f\.c\.)\s*$/gi;
 
-  // Calcola similarità tra due stringhe (0-1)
-  const similarita = (a, b) => {
-    if (!a || !b) return 0;
-    if (a === b) return 1;
-    if (a.includes(b) || b.includes(a)) {
-      return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+  const norm = (s) => {
+    if (!s) return '';
+    let r = s.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // togli accenti
+      .replace(/[''`]/g, '')
+      .replace(PREFISSI, '')
+      .replace(SUFFISSI, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return r;
+  };
+
+  // Token principali (parole >= 3 lettere)
+  const tokens = (s) => norm(s).split(' ').filter(w => w.length >= 3);
+
+  const similarita = (fileStr, sqStr) => {
+    const fn = norm(fileStr);
+    const sn = norm(sqStr);
+    if (!fn || !sn) return 0;
+
+    // 1. Corrispondenza esatta dopo normalizzazione
+    if (fn === sn) return 1.0;
+
+    // 2. Uno contiene l'altro
+    if (sn.includes(fn) || fn.includes(sn)) {
+      return Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
     }
-    // Controlla se una inizia con l'altra (es. "rho" → "rhodense")
-    if (a.startsWith(b) || b.startsWith(a)) {
-      return Math.min(a.length, b.length) / Math.max(a.length, b.length) * 0.9;
+
+    // 3. Inizia con (es. "rho" → "rhodense", "luc" → "luciano manara")
+    if (sn.startsWith(fn) || fn.startsWith(sn)) {
+      const ratio = Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
+      return ratio * 0.95;
     }
-    // Controlla parole in comune
-    const wordsA = a.match(/.{2,}/g) || [];
-    const wordsB = b.match(/.{2,}/g) || [];
-    let comuni = 0;
-    for (const w of wordsA) {
-      if (b.includes(w) && w.length >= 3) comuni++;
+
+    // 4. Token in comune
+    const tf = tokens(fileStr);
+    const ts = tokens(sqStr);
+    if (!tf.length || !ts.length) return 0;
+    let comuni = 0, parziali = 0;
+    for (const w of tf) {
+      if (ts.some(t => t === w)) comuni++;
+      else if (ts.some(t => t.startsWith(w) || w.startsWith(t))) parziali++;
     }
-    if (comuni > 0) return comuni / Math.max(wordsA.length, wordsB.length) * 0.8;
+    if (comuni > 0) return (comuni + parziali * 0.5) / Math.max(tf.length, ts.length) * 0.9;
+
+    // 5. Il file è un'abbreviazione (prima lettera di ogni parola)
+    const iniziali = ts.map(t => t[0]).join('');
+    if (fn === iniziali) return 0.75;
+    // Abbreviazione parziale
+    if (iniziali.startsWith(fn) || fn.startsWith(iniziali)) return 0.6;
+
     return 0;
   };
+
+  // Raggruppa squadre per gestire doppioni (stessa squadra in gironi diversi)
+  // Usa Map per tenere solo una per nome normalizzato
+  const sqUniche = new Map();
+  for (const sq of squadre) {
+    const key = norm(sq.nome);
+    if (!sqUniche.has(key)) sqUniche.set(key, []);
+    sqUniche.get(key).push(sq);
+  }
 
   let abbinati = 0, nonAbbinati = [];
 
   for (const file of files) {
-    const nomeFile = norm(file.name.replace(/\.[^.]+$/, ''));
-    if (!nomeFile) continue;
+    const nomeFilePulito = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+    const nomeFileNorm = norm(nomeFilePulito);
+    if (!nomeFileNorm) continue;
 
-    let bestSq = null, bestScore = 0;
-
-    for (const sq of squadre) {
-      const nomeSq = norm(sq.nome);
-      const score = similarita(nomeFile, nomeSq);
-      if (score > bestScore) { bestScore = score; bestSq = sq; }
+    let bestKey = null, bestScore = 0;
+    for (const [key, _] of sqUniche) {
+      const score = similarita(nomeFilePulito, key);
+      if (score > bestScore) { bestScore = score; bestKey = key; }
     }
 
-    // Soglia minima 0.3 — abbina anche iniziali parziali
-    if (bestSq && bestScore >= 0.3) {
-      const conf = bestScore >= 0.8 ? '✅' : bestScore >= 0.5 ? '🟡' : '🟠';
-      log.innerHTML += `${conf} <strong>${file.name}</strong> → ${bestSq.nome} (${Math.round(bestScore*100)}%) `;
+    if (bestKey && bestScore >= 0.3) {
+      const targets = sqUniche.get(bestKey);
+      const conf = bestScore >= 0.85 ? '✅' : bestScore >= 0.55 ? '🟡' : '🟠';
+      const nomiTarget = targets.map(s => s.nome).join(' + ');
+      log.innerHTML += `${conf} <strong>${file.name}</strong> → ${nomiTarget} (${Math.round(bestScore*100)}%) `;
+
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
-        await dbUpdateLogo(bestSq.id, compressed);
+        // Carica logo per TUTTE le squadre con lo stesso nome (doppioni)
+        for (const sq of targets) {
+          await dbUpdateLogo(sq.id, compressed);
+        }
         abbinati++;
-        log.innerHTML += `✓<br>`;
+        log.innerHTML += targets.length > 1 ? `✓ (${targets.length} squadre)<br>` : `✓<br>`;
       } catch(e) { log.innerHTML += `errore<br>`; }
     } else {
       nonAbbinati.push(file.name);
-      log.innerHTML += `❓ <strong>${file.name}</strong> → nessuna squadra (${bestSq?.nome||'?'} ${Math.round(bestScore*100)}%)<br>`;
+      log.innerHTML += `❓ <strong>${file.name}</strong> → non trovata<br>`;
     }
     log.scrollTop = log.scrollHeight;
   }
 
-  log.innerHTML += `<br>🏁 <strong>${abbinati} abbinati</strong>`;
+  log.innerHTML += `<br>🏁 <strong>${abbinati} file abbinati</strong>`;
   if (nonAbbinati.length) {
     log.innerHTML += `<br>⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
-    log.innerHTML += `<br><small>💡 Rinomina il file con parte del nome squadra</small>`;
+    log.innerHTML += `<br><small>💡 Usa parte del nome senza prefissi (es. "vercelli.png" per Pro Vercelli)</small>`;
   }
 
   if (abbinati > 0) { await renderAdminLoghi(); toast(`✅ ${abbinati} loghi caricati!`); }
