@@ -83,7 +83,9 @@ async function dbSaveSquadra(s) {
 }
 async function dbUpdateLogo(squadra_id,logo) {
   const {error}=await db.from('squadre').update({logo}).eq('id',squadra_id);
-  if(error)throw error; _cacheInvalid('sq_'); _cacheInvalid('gwd_');
+  if(error)throw error;
+  // Invalida TUTTA la cache così i loghi appaiono subito
+  _cacheClear();
 }
 
 async function dbGetGironi(categoriaId) {
