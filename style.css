@@ -624,27 +624,134 @@ nav {
   animation: pulse-live 1.5s infinite;
 }
 
-/* ── MOBILE ───────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  .form-grid-2     { grid-template-columns: 1fr; }
-  .h-title         { font-size: 13.5px; }
-  .card            { padding: 12px 10px; border-radius: 10px; }
-  .standings-table { font-size: 12px; }
-  .standings-table td, .standings-table th { padding: 7px 2px; }
-  .admin-team-name { font-size: 12px; }
-  .score-input     { width: 40px; height: 36px; font-size: 16px; }
-  .nav-btn         { padding: 10px 11px; font-size: 12px; }
-  .modal-box       { padding: 20px 16px; border-radius: var(--radius-lg); }
-  .match-score     { font-size: 17px; min-width: 52px; }
+/* ── MOBILE FIRST ─────────────────────────────────────────── */
+
+/* Piccoli (< 400px — iPhone SE, vecchi Android) */
+@media (max-width: 400px) {
+  .header-inner    { padding: 7px 10px; gap: 6px; }
+  .h-title         { font-size: 12px; letter-spacing: 0; }
+  .h-date          { display: none; }
+  .header-logo     { width: 32px !important; height: 32px !important; }
+  .live-badge      { display: none; }
+  .admin-toggle    { padding: 6px 10px; font-size: 11px; }
   .tv-btn          { display: none; }
-  .cat-pill        { font-size: 11.5px; padding: 4px 12px; }
-}
-@media (min-width: 681px) {
-  #main-content { padding: 20px 0 80px; }
-  .card { border-radius: var(--radius-lg); }
-  .h-title { font-size: 16px; }
+
+  /* Nav */
+  .nav-btn         { padding: 10px 10px; font-size: 11px; letter-spacing: 0; }
+
+  /* Main */
+  #main-content    { padding: 8px 8px 80px; }
+  .card            { padding: 10px 8px; border-radius: 10px; margin-bottom: 10px; }
+  .card-title      { font-size: 13px; }
+
+  /* Classifica */
+  .standings-table         { font-size: 11px; }
+  .standings-table td,
+  .standings-table th      { padding: 6px 3px; }
+  .pts-col                 { font-size: 13px; }
+  /* Nascondi colonne meno importanti */
+  .standings-table th:nth-child(5),
+  .standings-table td:nth-child(5),
+  .standings-table th:nth-child(6),
+  .standings-table td:nth-child(6),
+  .standings-table th:nth-child(7),
+  .standings-table td:nth-child(7) { display: none; }
+
+  /* Risultati */
+  .match-team      { font-size: 11px; gap: 4px; }
+  .match-score     { font-size: 16px; min-width: 48px; padding: 3px 6px; }
+
+  /* Admin risultati */
+  .admin-team-name { font-size: 11px; min-width: 70px; }
+  .score-input     { width: 36px !important; font-size: 15px !important; }
+  .match-actions   { gap: 5px; }
+  .btn-sm          { padding: 5px 8px; font-size: 10px; }
+
+  /* Form */
+  .form-grid-2     { grid-template-columns: 1fr; }
+  input, select, textarea { font-size: 16px; padding: 8px 10px; } /* no zoom iOS */
+
+  /* Modal */
+  .modal-box       { padding: 18px 14px; width: 95%; }
+  .modal-title     { font-size: 18px; }
+
+  /* Cat pill */
+  .cat-pill        { font-size: 10px; padding: 4px 10px; }
 }
 
+/* Medi (401-600px — iPhone, Galaxy) */
+@media (min-width: 401px) and (max-width: 600px) {
+  .header-inner    { padding: 8px 12px; }
+  .h-title         { font-size: 13px; }
+  .tv-btn          { display: none; }
+
+  .nav-btn         { padding: 11px 13px; font-size: 12px; }
+  #main-content    { padding: 10px 10px 80px; }
+  .card            { padding: 12px 10px; }
+
+  .standings-table         { font-size: 12px; }
+  .standings-table td,
+  .standings-table th      { padding: 7px 4px; }
+  /* Nascondi GD su schermi medi */
+  .standings-table th:nth-child(7),
+  .standings-table td:nth-child(7) { display: none; }
+
+  .match-team      { font-size: 12px; }
+  .match-score     { font-size: 18px; min-width: 54px; }
+  .admin-team-name { font-size: 12px; }
+  .score-input     { width: 42px !important; font-size: 16px !important; }
+  .form-grid-2     { grid-template-columns: 1fr; }
+  input, select, textarea { font-size: 16px; } /* no zoom iOS */
+  .cat-pill        { font-size: 11px; padding: 5px 12px; }
+}
+
+/* Tablet (601-960px) */
+@media (min-width: 601px) and (max-width: 960px) {
+  .h-title         { font-size: 15px; }
+  #main-content    { padding: 14px 14px 60px; }
+}
+
+/* Desktop (> 960px) */
+@media (min-width: 961px) {
+  #main-content    { padding: 20px 0 60px; }
+  .card            { border-radius: var(--radius-lg); }
+  .h-title         { font-size: 17px; }
+}
+
+/* Bottoni admin su mobile — full width per tap facile */
+@media (max-width: 600px) {
+  .match-actions           { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--bordo); }
+  .match-actions .btn      { flex: 1; justify-content: center; min-height: 38px; }
+  .admin-match-header      { flex-wrap: wrap; }
+  /* Score centrato */
+  .score-area              { margin: 4px auto; }
+  /* Torneo bar compatta */
+  .torneo-bar-inner        { padding: 6px 10px; gap: 6px; }
+  /* Cat bar scroll orizzontale fluido */
+  .cat-bar-inner           { gap: 5px; padding: 7px 10px; }
+  /* Modal full width */
+  .modal-overlay           { padding: 12px; }
+  .modal-box               { width: 100%; max-width: 100%; border-radius: 16px 16px 0 0;
+                             position: fixed; bottom: 0; left: 0; right: 0; margin: 0; }
+  /* Giornate filter scroll */
+  .giornate-bar            { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+
+/* ── TOUCH & MOBILE GLOBALS ──────────────────────────────── */
+* { -webkit-tap-highlight-color: transparent; }
+body { -webkit-text-size-adjust: 100%; overscroll-behavior-y: contain; }
+button, .btn, .nav-btn, .cat-pill { min-height: 36px; touch-action: manipulation; }
+input[type="text"], input[type="number"], input[type="password"], select {
+  font-size: 16px !important; /* evita zoom automatico su iPhone */
+}
+/* Scroll fluido nativo */
+.cat-bar-inner, .nav-inner { -webkit-overflow-scrolling: touch; }
+/* Animazione pulse live hero */
+@keyframes pulse-live {
+  0%,100% { opacity:1; transform:scale(1); }
+  50% { opacity:0.4; transform:scale(1.4); }
+}
 
 /* ── FOOTER ───────────────────────────────────────────────── */
 .footer-credits {
