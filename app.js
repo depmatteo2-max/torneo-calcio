@@ -1257,9 +1257,7 @@ async function renderAdminLoghi() {
       📁 Carica loghi da cartella
       <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
     </label>
-    <button class="btn btn-p" onclick="cercaLoghiWikipedia()" id="btn-wiki-loghi">
-      🌐 Cerca su Wikipedia
-    </button>
+
     <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">
       📦 Comprimi loghi grandi
     </button>
@@ -1282,7 +1280,7 @@ async function renderAdminLoghi() {
   html+='</div>'; el.innerHTML=html;
 }
 // ============================================================
-//  CARICA LOGHI DA CARTELLA
+//  CARICA LOGHI DA CARTELLA — abbinamento intelligente
 // ============================================================
 async function caricaLoghiDaCartella(event) {
   const files = Array.from(event.target.files);
@@ -1294,175 +1292,77 @@ async function caricaLoghiDaCartella(event) {
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
 
-  // Normalizza nome per confronto
-  const normalizza = (s) => s.toLowerCase()
+  // Normalizza: toglie tutto tranne lettere e numeri, lowercase
+  const norm = (s) => (s||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // rimuovi accenti
     .replace(/[^a-z0-9]/g, '')
-    .replace(/(asd|ssd|acd|usd|fc|ac|us|ss|calcio|football|club|sport)/g, '')
+    .replace(/^(asd|ssd|acd|usd|fc|ac|us|ss|ssc|asc)/, '')
+    .replace(/(calcio|football|club|sport|city|united)$/, '')
     .trim();
+
+  // Calcola similarità tra due stringhe (0-1)
+  const similarita = (a, b) => {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    if (a.includes(b) || b.includes(a)) {
+      return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+    }
+    // Controlla se una inizia con l'altra (es. "rho" → "rhodense")
+    if (a.startsWith(b) || b.startsWith(a)) {
+      return Math.min(a.length, b.length) / Math.max(a.length, b.length) * 0.9;
+    }
+    // Controlla parole in comune
+    const wordsA = a.match(/.{2,}/g) || [];
+    const wordsB = b.match(/.{2,}/g) || [];
+    let comuni = 0;
+    for (const w of wordsA) {
+      if (b.includes(w) && w.length >= 3) comuni++;
+    }
+    if (comuni > 0) return comuni / Math.max(wordsA.length, wordsB.length) * 0.8;
+    return 0;
+  };
 
   let abbinati = 0, nonAbbinati = [];
 
   for (const file of files) {
-    // Nome file senza estensione
-    const nomeFile = normalizza(file.name.replace(/\.[^.]+$/, ''));
+    const nomeFile = norm(file.name.replace(/\.[^.]+$/, ''));
+    if (!nomeFile) continue;
 
-    // Cerca squadra con nome simile
-    let squadra = null;
-    let bestScore = 0;
+    let bestSq = null, bestScore = 0;
 
     for (const sq of squadre) {
-      const nomeSq = normalizza(sq.nome);
-      // Corrispondenza esatta
-      if (nomeSq === nomeFile || nomeSq.includes(nomeFile) || nomeFile.includes(nomeSq)) {
-        const score = Math.min(nomeSq.length, nomeFile.length) / Math.max(nomeSq.length, nomeFile.length);
-        if (score > bestScore) { bestScore = score; squadra = sq; }
-      }
+      const nomeSq = norm(sq.nome);
+      const score = similarita(nomeFile, nomeSq);
+      if (score > bestScore) { bestScore = score; bestSq = sq; }
     }
 
-    if (squadra && bestScore > 0.4) {
-      log.innerHTML += `✅ <strong>${file.name}</strong> → ${squadra.nome} `;
+    // Soglia minima 0.3 — abbina anche iniziali parziali
+    if (bestSq && bestScore >= 0.3) {
+      const conf = bestScore >= 0.8 ? '✅' : bestScore >= 0.5 ? '🟡' : '🟠';
+      log.innerHTML += `${conf} <strong>${file.name}</strong> → ${bestSq.nome} (${Math.round(bestScore*100)}%) `;
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
-        await dbUpdateLogo(squadra.id, compressed);
+        await dbUpdateLogo(bestSq.id, compressed);
         abbinati++;
-        log.innerHTML += `(salvato)<br>`;
-      } catch(e) {
-        log.innerHTML += `(errore)<br>`;
-      }
+        log.innerHTML += `✓<br>`;
+      } catch(e) { log.innerHTML += `errore<br>`; }
     } else {
       nonAbbinati.push(file.name);
-      log.innerHTML += `❓ <strong>${file.name}</strong> → nessuna squadra trovata<br>`;
+      log.innerHTML += `❓ <strong>${file.name}</strong> → nessuna squadra (${bestSq?.nome||'?'} ${Math.round(bestScore*100)}%)<br>`;
     }
     log.scrollTop = log.scrollHeight;
   }
 
   log.innerHTML += `<br>🏁 <strong>${abbinati} abbinati</strong>`;
   if (nonAbbinati.length) {
-    log.innerHTML += ` | ⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
+    log.innerHTML += `<br>⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
+    log.innerHTML += `<br><small>💡 Rinomina il file con parte del nome squadra</small>`;
   }
 
-  if (abbinati > 0) {
-    await renderAdminLoghi();
-    toast(`✅ ${abbinati} loghi caricati!`);
-  }
-
-  // Reset input
+  if (abbinati > 0) { await renderAdminLoghi(); toast(`✅ ${abbinati} loghi caricati!`); }
   event.target.value = '';
 }
 
-// ============================================================
-//  CERCA LOGHI SU WIKIPEDIA (con "logo calcio")
-// ============================================================
-async function cercaLoghiWikipedia() {
-  const btn = document.getElementById('btn-wiki-loghi');
-  const log = document.getElementById('loghi-auto-log');
-  if (!btn || !log) return;
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Ricerca...';
-  log.style.display = 'block';
-  log.innerHTML = '🌐 Ricerca su Wikipedia...<br>';
-
-  const squadre = await dbGetSquadreFull(STATE.activeTorneo);
-  const senzaLogo = squadre.filter(s => !s.logo);
-
-  if (!senzaLogo.length) {
-    log.innerHTML += '✅ Tutte le squadre hanno già un logo!';
-    btn.disabled = false; btn.textContent = '🌐 Cerca su Wikipedia'; return;
-  }
-
-  log.innerHTML += `📋 ${senzaLogo.length} squadre senza logo<br><br>`;
-  let trovati = 0;
-
-  for (const sq of senzaLogo) {
-    log.innerHTML += `🔎 ${sq.nome}... `;
-    log.scrollTop = log.scrollHeight;
-
-    const logo = await _wikiCercaLogo(sq.nome);
-    if (logo) {
-      const compressed = await _comprimiImmagine(null, 120, 0.80, logo);
-      if (compressed) {
-        await dbUpdateLogo(sq.id, compressed);
-        trovati++;
-        log.innerHTML += `✅<br>`;
-      } else {
-        log.innerHTML += `⚠️ errore compressione<br>`;
-      }
-    } else {
-      log.innerHTML += `❌ non trovato<br>`;
-    }
-    log.scrollTop = log.scrollHeight;
-    await new Promise(r => setTimeout(r, 600));
-  }
-
-  log.innerHTML += `<br>🏁 <strong>${trovati} loghi trovati!</strong>`;
-  btn.disabled = false; btn.textContent = '🌐 Cerca su Wikipedia';
-  if (trovati > 0) { await renderAdminLoghi(); toast(`✅ ${trovati} loghi da Wikipedia!`); }
-}
-
-async function _wikiCercaLogo(nome) {
-  // Varianti di ricerca: "RHODENSE logo calcio", "RHODENSE calcio logo", ecc.
-  const varianti = [
-    `${nome} logo calcio`,
-    `${nome} calcio`,
-    `${nome} football club`,
-    `${nome} FC`,
-    nome,
-  ];
-
-  for (const query of varianti) {
-    try {
-      // 1. Cerca pagina Wikipedia
-      const searchUrl = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=3`;
-      const searchRes = await fetch(searchUrl);
-      const searchData = await searchRes.json();
-      const results = searchData.query?.search || [];
-
-      for (const result of results) {
-        // 2. Ottieni immagine dalla pagina
-        const pageUrl = `https://it.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(result.title)}&prop=pageimages&format=json&pithumbsize=300&origin=*`;
-        const pageRes = await fetch(pageUrl);
-        const pageData = await pageRes.json();
-        const pages = pageData.query?.pages || {};
-
-        for (const page of Object.values(pages)) {
-          if (page.thumbnail?.source) {
-            const src = page.thumbnail.source;
-            // Filtra immagini che sembrano loghi (non foto di persone/stadi)
-            if (!src.includes('Flag_of') && !src.includes('Bandiera')) {
-              return src;
-            }
-          }
-        }
-      }
-    } catch(e) {}
-
-    // Prova anche EN Wikipedia
-    try {
-      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=2`;
-      const searchRes = await fetch(searchUrl);
-      const searchData = await searchRes.json();
-      const results = searchData.query?.search || [];
-
-      for (const result of results) {
-        const pageUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(result.title)}&prop=pageimages&format=json&pithumbsize=300&origin=*`;
-        const pageRes = await fetch(pageUrl);
-        const pageData = await pageRes.json();
-        const pages = pageData.query?.pages || {};
-
-        for (const page of Object.values(pages)) {
-          if (page.thumbnail?.source) {
-            const src = page.thumbnail.source;
-            if (!src.includes('Flag_of') && !src.includes('map')) {
-              return src;
-            }
-          }
-        }
-      }
-    } catch(e) {}
-  }
-  return null;
-}
 
 // ── COMPRIMI LOGHI ESISTENTI ────────────────────────────────
 async function comprimiloghiEsistenti() {
