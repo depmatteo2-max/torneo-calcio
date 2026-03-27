@@ -102,16 +102,28 @@ async function loadTorneo() {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
-  // Ripristina categoria salvata in localStorage
+  // 1. Controlla link condiviso nell'URL (#cat=X&tab=Y)
+  const hashParams = _leggiHash();
+  if (hashParams.cat) {
+    const catId = parseInt(hashParams.cat);
+    if (STATE.categorie.find(c => c.id === catId)) {
+      await selezionaCategoriaPublic(catId);
+      if (hashParams.tab) {
+        const btn = document.querySelector(`[data-section="${hashParams.tab}"]`);
+        if (btn) showSection(hashParams.tab, btn);
+      }
+      return;
+    }
+  }
+
+  // 2. Ripristina categoria salvata in localStorage
   const savedCatId = _loadSavedCat();
   const catSalvata = savedCatId && STATE.categorie.find(c => c.id === savedCatId);
 
   if (catSalvata) {
-    // Categoria salvata trovata — vai diretto
     STATE.activeCat = catSalvata.id;
-    preloadCategoria(catSalvata.id); // preload in background
+    preloadCategoria(catSalvata.id);
   } else if (STATE.categorie.length > 1 && !STATE.activeCat) {
-    // Più categorie e nessuna salvata — mostra selezione
     STATE.activeCat = null;
     renderTorneoBar();
     document.getElementById('cat-bar').style.display = 'none';
@@ -126,7 +138,6 @@ async function loadTorneo() {
 
 function mostraSelezioneCat() {
   const main = document.getElementById('main-content');
-  // Ricrea sezioni
   main.innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
@@ -135,55 +146,127 @@ function mostraSelezioneCat() {
 
   const el = document.getElementById('sec-classifiche');
   el.classList.add('active');
-
   const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
-  const oggiLabel = STATE._giornateDisponibili?.length
-    ? _trovaGiornataOggi(STATE._giornateDisponibili) : null;
+  const oggiLabel = STATE._giornateDisponibili?.length ? _trovaGiornataOggi(STATE._giornateDisponibili) : null;
+  const icons = ['⚽','🏅','🎯','🏆','⭐','🔥'];
+  const colors = ['var(--blu-bg)','var(--verde-bg)','var(--arancio-bg)','#fef9c3','#f0fdf4','var(--blu-bg)'];
+
+  const catFiltrate = STATE.categorie.filter(c => {
+    const n = (c.nome || '').trim();
+    if (n.length > 35) return false;
+    if (/^(Girone|Gruppo)/i.test(n)) return false;
+    if (/accedono|vince|finali|spareggio|semifinal|classific|punti|→|=|vs /i.test(n)) return false;
+    return true;
+  });
+
+  const firstId = catFiltrate[0]?.id || 0;
 
   el.innerHTML = `
-    <div class="cat-select-screen">
-      ${oggiLabel ? `<div style="background:var(--arancio-bg);border:1px solid rgba(234,88,12,0.2);
-        border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;font-weight:600;color:var(--arancio);
-        display:flex;align-items:center;gap:8px;">
-        <span class="oggi-dot"></span> Oggi: ${oggiLabel}
-      </div>` : ''}
-      <div class="cat-select-title">Seleziona categoria</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        ${STATE.categorie
-          .filter(c => {
-            const n = (c.nome || '').trim();
-            // Escludi note lunghe
-            if (n.length > 35) return false;
-            // Escludi tutto ciò che inizia con "Girone" o "Gruppo"
-            if (/^(Girone|Gruppo)/i.test(n)) return false;
-            // Escludi descrizioni/note
-            if (/accedono|vince|finali|spareggio|semifinal|classific|punti|→|=|vs /i.test(n)) return false;
-            return true;
-          })
-          .map(c => `
+    <div style="padding-bottom:32px;">
+
+      <!-- HERO -->
+      <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1a56db 100%);
+                  border-radius:16px;padding:24px 20px;margin-bottom:22px;
+                  display:flex;align-items:center;gap:16px;position:relative;overflow:hidden;">
+        <div style="position:absolute;right:-20px;top:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.04);"></div>
+        <div style="position:absolute;right:40px;bottom:-30px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,0.03);"></div>
+        <img id="hero-logo" src="" alt="" style="width:58px;height:58px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.25);flex-shrink:0;display:none;">
+        <div style="position:relative;flex:1;min-width:0;">
+          <div style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">⚽ Torneo in corso</div>
+          <div style="font-size:20px;font-weight:900;color:white;line-height:1.2;letter-spacing:-.01em;
+                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t?.nome || 'Soccer Pro Experience'}</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">${t?.data || ''}</div>
+          ${oggiLabel ? `<div style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+            background:rgba(234,88,12,0.25);border:1px solid rgba(234,88,12,0.5);
+            border-radius:20px;padding:3px 10px;">
+            <span style="width:6px;height:6px;border-radius:50%;background:#fb923c;display:inline-block;animation:pulse-live 1.5s infinite;"></span>
+            <span style="font-size:11px;color:#fb923c;font-weight:700;">Oggi: ${oggiLabel}</span>
+          </div>` : ''}
+        </div>
+      </div>
+
+      <!-- 3 TASTI PRINCIPALI -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:22px;">
+        <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('classifiche',document.querySelector('[data-section=classifiche]'))},150)"
+          style="background:white;border:2px solid var(--bordo);border-radius:14px;
+                 padding:18px 8px;cursor:pointer;font-family:inherit;
+                 display:flex;flex-direction:column;align-items:center;gap:8px;
+                 box-shadow:var(--shadow);transition:all .2s;"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow)'">
+          <span style="font-size:30px;">🏆</span>
+          <span style="font-size:12px;font-weight:800;color:var(--testo);">Classifiche</span>
+        </button>
+        <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('risultati',document.querySelector('[data-section=risultati]'))},150)"
+          style="background:var(--blu);border:2px solid var(--blu);border-radius:14px;
+                 padding:18px 8px;cursor:pointer;font-family:inherit;
+                 display:flex;flex-direction:column;align-items:center;gap:8px;
+                 box-shadow:0 4px 16px rgba(26,86,219,0.35);transition:all .2s;"
+          onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(26,86,219,0.45)'"
+          onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 16px rgba(26,86,219,0.35)'">
+          <span style="font-size:30px;">⚽</span>
+          <span style="font-size:12px;font-weight:800;color:white;">Risultati</span>
+        </button>
+        <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('tabellone',document.querySelector('[data-section=tabellone]'))},150)"
+          style="background:white;border:2px solid var(--bordo);border-radius:14px;
+                 padding:18px 8px;cursor:pointer;font-family:inherit;
+                 display:flex;flex-direction:column;align-items:center;gap:8px;
+                 box-shadow:var(--shadow);transition:all .2s;"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow)'">
+          <span style="font-size:30px;">🥇</span>
+          <span style="font-size:12px;font-weight:800;color:var(--testo);">Tabellone</span>
+        </button>
+      </div>
+
+      <!-- CATEGORIE -->
+      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;
+                  letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+        Seleziona categoria
+        <span style="flex:1;height:1px;background:var(--bordo);"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${catFiltrate.map((c,i) => `
           <button onclick="selezionaCategoriaPublic(${c.id})"
             style="background:white;border:1.5px solid var(--bordo);border-radius:12px;
-                   padding:16px 20px;cursor:pointer;font-family:inherit;
-                   display:flex;align-items:center;justify-content:space-between;
-                   box-shadow:var(--shadow-xs);transition:all .15s;"
-            onmouseover="this.style.borderColor='var(--blu)';this.style.boxShadow='var(--shadow-md)';this.style.transform='translateY(-1px)'"
-            onmouseout="this.style.borderColor='var(--bordo)';this.style.boxShadow='var(--shadow-xs)';this.style.transform='translateY(0)'">
-            <span style="font-size:17px;font-weight:800;color:var(--testo);">${c.nome}</span>
-            <span style="font-size:22px;color:var(--testo-xs);">›</span>
+                   padding:14px 16px;cursor:pointer;font-family:inherit;
+                   display:flex;align-items:center;gap:12px;
+                   box-shadow:var(--shadow-xs);transition:all .15s;text-align:left;"
+            onmouseover="this.style.borderColor='var(--blu)';this.style.transform='translateY(-1px)';this.style.boxShadow='var(--shadow)'"
+            onmouseout="this.style.borderColor='var(--bordo)';this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow-xs)'">
+            <div style="width:38px;height:38px;border-radius:10px;background:${colors[i%colors.length]};
+                        display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+              ${icons[i%icons.length]}
+            </div>
+            <span style="font-size:16px;font-weight:800;color:var(--testo);flex:1;">${c.nome}</span>
+            <span style="font-size:18px;color:var(--testo-xs);">›</span>
           </button>`).join('')}
       </div>
-      <button class="cat-select-all" onclick="mostraTutteLCategorie()">
+
+      ${catFiltrate.length > 1 ? `
+      <button onclick="mostraTutteLCategorie()"
+        style="width:100%;margin-top:12px;padding:12px;background:var(--sfondo);
+               border:1.5px solid var(--bordo);border-radius:10px;
+               font-size:13px;font-weight:600;color:var(--testo-lt);
+               cursor:pointer;font-family:inherit;transition:all .15s;"
+        onmouseover="this.style.background='var(--blu-bg)';this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+        onmouseout="this.style.background='var(--sfondo)';this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
         📊 Vedi tutte le categorie insieme
-      </button>
+      </button>` : ''}
     </div>`;
 
-  // Mostra nav pubblica
-  document.getElementById('pub-nav').style.display = 'flex';
-  document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.querySelector('[data-section="classifiche"]');
-  if (btn) btn.classList.add('active');
+  // Logo hero
+  if (typeof getLogo === 'function') {
+    const l = getLogo();
+    if (l) { const img = el.querySelector('#hero-logo'); if(img){img.src=l;img.style.display='block';} }
+  }
+
+  // Nascondi nav nella home — più pulita
+  document.getElementById('pub-nav').style.display = 'none';
+  document.getElementById('cat-bar').style.display = 'none';
   STATE.currentSection = 'classifiche';
 }
+
 
 async function selezionaCategoriaPublic(catId) {
   STATE.activeCat = catId;
@@ -192,9 +275,10 @@ async function selezionaCategoriaPublic(catId) {
   STATE._giornateDisponibili = [];
   preloadCategoria(catId);
   await _caricaGiornate();
-  renderTorneoBar(); // aggiorna subito la barra con categoria + cambia
+  renderTorneoBar();
   renderCatBar();
   document.getElementById('cat-bar').style.display = '';
+  _scriviHash(catId, STATE.currentSection); // aggiorna URL
   await renderCurrentSection();
 }
 
@@ -247,6 +331,15 @@ function renderTorneoBar() {
       </div>
 
       <!-- Cambia categoria — sempre visibile se ci sono più categorie -->
+      <!-- Condividi + Cambia categoria -->
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="mostraLinkCondivisibile()"
+          style="background:var(--sfondo);border:1.5px solid var(--bordo);
+                 border-radius:8px;padding:6px 10px;font-size:14px;
+                 color:var(--testo-lt);cursor:pointer;transition:all .15s;"
+          title="Copia link condivisibile"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.background='var(--sfondo)'">🔗</button>
       ${multiCat ? `
         <button onclick="cambiaCategoria()"
           style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);
@@ -257,6 +350,7 @@ function renderTorneoBar() {
           onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)';this.style.background='var(--sfondo)'">
           ⇄ Cambia
         </button>` : ''}
+      </div>
     ` : `
       <!-- Nessuna categoria selezionata — mostra solo torneo -->
       <div style="flex:1;"></div>
@@ -267,6 +361,7 @@ function renderTorneoBar() {
 async function cambiaCategoria() {
   STATE.activeCat = null;
   _clearSavedCat();
+  _cancellaHash(); // rimuove il link dall'URL
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
@@ -349,6 +444,52 @@ async function renderCurrentSection() {
   else if (s === 'a-risultati') await renderAdminRisultati();
   else if (s === 'a-knockout') await renderAdminKnockout();
   _renderFooter();
+}
+
+// ============================================================
+//  LINK CONDIVISIBILE — Hash URL
+// ============================================================
+function _leggiHash() {
+  const hash = window.location.hash.replace('#', '');
+  const params = {};
+  hash.split('&').forEach(p => {
+    const [k, v] = p.split('=');
+    if (k && v) params[k] = v;
+  });
+  return params;
+}
+
+function _scriviHash(catId, tab) {
+  const t = STATE.activeTorneo || '';
+  const parts = [`cat=${catId}`];
+  if (tab && tab !== 'classifiche') parts.push(`tab=${tab}`);
+  window.location.hash = parts.join('&');
+}
+
+function _cancellaHash() {
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+function _getLinkCondivisibile(catId, tab) {
+  const base = window.location.href.split('#')[0];
+  const parts = [`cat=${catId}`];
+  if (tab && tab !== 'classifiche') parts.push(`tab=${tab}`);
+  return `${base}#${parts.join('&')}`;
+}
+
+function mostraLinkCondivisibile() {
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  if (!cat) return;
+  const tab = STATE.currentSection || 'classifiche';
+  const link = _getLinkCondivisibile(STATE.activeCat, tab);
+
+  // Copia negli appunti
+  navigator.clipboard.writeText(link).then(() => {
+    toast('🔗 Link copiato! Incollalo su WhatsApp o Telegram');
+  }).catch(() => {
+    // Fallback: mostra il link
+    prompt('Copia questo link:', link);
+  });
 }
 
 function _renderFooter() {
