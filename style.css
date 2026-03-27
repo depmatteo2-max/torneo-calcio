@@ -486,6 +486,119 @@ input:focus, select:focus, textarea:focus {
 .riepilogo-banner-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
 .riepilogo-banner-arrow { font-size: 18px; color: rgba(255,255,255,0.4); }
 
+/* ── TOUCH & MOBILE GLOBALS ──────────────────────────────── */
+* { -webkit-tap-highlight-color: transparent; }
+body { -webkit-text-size-adjust: 100%; overscroll-behavior-y: contain; }
+button, .btn, .nav-btn, .cat-pill { min-height: 36px; touch-action: manipulation; }
+input[type="text"], input[type="number"], input[type="password"], select {
+  font-size: 16px !important; /* evita zoom automatico su iPhone */
+}
+.cat-bar-inner, .nav-inner { -webkit-overflow-scrolling: touch; }
+
+/* ── PICCOLI < 400px (iPhone SE, vecchi Android) ─────────── */
+@media (max-width: 400px) {
+  .header-inner    { padding: 7px 10px; gap: 6px; }
+  .h-title         { font-size: 12px; letter-spacing: 0; }
+  .h-date          { display: none; }
+  .header-left img { width: 30px !important; height: 30px !important; }
+  .live-badge      { display: none; }
+  .admin-toggle    { padding: 6px 10px; font-size: 11px; }
+  .tv-toggle-btn   { display: none; }
+
+  .nav-btn         { padding: 10px 10px; font-size: 11px; letter-spacing: 0; }
+
+  main             { padding: 8px 8px 80px; }
+  .card            { padding: 10px 8px; margin-bottom: 10px; }
+  .card-title      { font-size: 12px; }
+
+  /* Classifica — nascondi colonne meno importanti */
+  .standings-table         { font-size: 11px; }
+  .standings-table td,
+  .standings-table th      { padding: 6px 3px; }
+  .standings-table th:nth-child(5),
+  .standings-table td:nth-child(5),
+  .standings-table th:nth-child(6),
+  .standings-table td:nth-child(6),
+  .standings-table th:nth-child(7),
+  .standings-table td:nth-child(7) { display: none; }
+  .pts-col         { font-size: 13px; }
+
+  /* Risultati */
+  .match-team      { font-size: 11px; gap: 4px; }
+  .match-score     { font-size: 15px; min-width: 46px; padding: 3px 6px; }
+
+  /* Admin */
+  .admin-team-name { font-size: 11px; min-width: 70px; }
+  .score-input     { width: 36px !important; font-size: 15px !important; }
+  .btn             { padding: 8px 10px; font-size: 10px; }
+  .btn-sm          { padding: 5px 8px; font-size: 10px; }
+
+  /* Form */
+  .form-grid-2     { grid-template-columns: 1fr; }
+
+  /* Modal → bottom sheet */
+  .modal-overlay   { padding: 0; align-items: flex-end; }
+  .modal-box       { width: 100%; max-width: 100%; border-radius: 18px 18px 0 0;
+                     padding: 20px 16px 32px; }
+  .modal-title     { font-size: 18px; }
+
+  .cat-pill        { font-size: 10px; padding: 4px 10px; }
+}
+
+/* ── MEDI 401-600px (iPhone, Galaxy) ─────────────────────── */
+@media (min-width: 401px) and (max-width: 600px) {
+  .header-inner    { padding: 8px 12px; }
+  .h-title         { font-size: 14px; }
+  .tv-toggle-btn   { display: none; }
+
+  .nav-btn         { padding: 11px 13px; font-size: 12px; }
+  main             { padding: 10px 10px 80px; }
+  .card            { padding: 12px 10px; }
+  .card-title      { font-size: 13px; }
+
+  .standings-table         { font-size: 12px; }
+  .standings-table td,
+  .standings-table th      { padding: 7px 4px; }
+  /* Nascondi GD */
+  .standings-table th:nth-child(7),
+  .standings-table td:nth-child(7) { display: none; }
+
+  .match-team      { font-size: 12px; }
+  .match-score     { font-size: 17px; min-width: 52px; }
+  .admin-team-name { font-size: 12px; }
+  .score-input     { width: 42px !important; font-size: 16px !important; }
+  .form-grid-2     { grid-template-columns: 1fr; }
+  .cat-pill        { font-size: 11px; padding: 5px 12px; }
+
+  /* Modal → bottom sheet */
+  .modal-overlay   { padding: 0; align-items: flex-end; }
+  .modal-box       { width: 100%; max-width: 100%; border-radius: 16px 16px 0 0;
+                     padding: 22px 18px 32px; }
+}
+
+/* ── Tasti admin full width su mobile ────────────────────── */
+@media (max-width: 600px) {
+  .match-actions        { width: 100%; margin-top: 8px;
+                          padding-top: 8px; border-top: 1px solid var(--border); }
+  .match-actions .btn   { flex: 1; justify-content: center; min-height: 40px; }
+  .admin-match-header   { flex-wrap: wrap; }
+  .torneo-bar-inner     { padding: 6px 10px; gap: 6px; flex-wrap: wrap; }
+  .cat-bar-inner        { gap: 5px; padding: 7px 10px; }
+  .giornate-bar         { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+/* ── TABLET 601-960px ────────────────────────────────────── */
+@media (min-width: 601px) and (max-width: 960px) {
+  .h-title   { font-size: 17px; }
+  main       { padding: 14px; }
+}
+
+/* ── DESKTOP > 960px ─────────────────────────────────────── */
+@media (min-width: 961px) {
+  main       { padding: 20px 0; }
+  .h-title   { font-size: 20px; }
+}
+
 /* ── FOOTER CREDITS ──────────────────────────────────────── */
 .footer-credits {
   text-align: center; padding: 20px 16px 40px;
