@@ -301,62 +301,52 @@ function renderTorneoBar() {
   bar.style.display = '';
 
   bar.innerHTML = `<div style="max-width:700px;margin:0 auto;display:flex;align-items:center;
-    gap:8px;padding:8px 16px;min-height:52px;">
+    gap:6px;padding:6px 12px;min-height:50px;">
 
-    <!-- Tasto HOME torneo — sempre visibile -->
+    <!-- 🏠 Home compatto -->
     <button onclick="${multiTorneo ? 'cambiaTorneo()' : 'cambiaCategoria()'}"
-      style="flex-shrink:0;display:flex;align-items:center;gap:6px;
+      style="flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;
+             justify-content:center;font-size:16px;
              background:white;border:1.5px solid var(--bordo);border-radius:10px;
-             padding:6px 12px;cursor:pointer;font-family:inherit;transition:all .15s;
-             box-shadow:var(--shadow-xs);"
-      onmouseover="this.style.borderColor='var(--blu-lt)';this.style.background='var(--blu-bg)'"
-      onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">
-      <span style="font-size:15px;">🏠</span>
-      <div style="text-align:left;">
-        <div style="font-size:10px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.05em;line-height:1;">Torneo</div>
-        <div style="font-size:12px;font-weight:700;color:var(--testo-2);line-height:1.3;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t?.nome || 'Home'}</div>
-      </div>
-    </button>
+             cursor:pointer;transition:all .15s;box-shadow:var(--shadow-xs);"
+      title="Home"
+      onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
+      onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">🏠</button>
 
     ${cat ? `
-      <!-- Separatore -->
-      <span style="color:var(--bordo);font-size:18px;font-weight:300;">›</span>
-
-      <!-- Categoria attiva -->
+      <!-- Categoria — prende tutto lo spazio -->
       <div style="flex:1;min-width:0;">
-        <div style="font-size:10px;color:var(--testo-xs);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Categoria</div>
-        <div style="font-size:15px;font-weight:800;color:var(--testo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <div style="font-size:9px;color:var(--testo-xs);font-weight:700;
+                    text-transform:uppercase;letter-spacing:.07em;line-height:1;margin-bottom:1px;">Categoria</div>
+        <div style="font-size:16px;font-weight:900;color:var(--testo);
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">
           ${cat.nome}
         </div>
       </div>
 
-      <!-- Cambia categoria — sempre visibile se ci sono più categorie -->
-      <!-- Condividi + Cambia categoria -->
-      <div style="display:flex;gap:6px;flex-shrink:0;">
+      <!-- Azioni -->
+      <div style="display:flex;gap:5px;flex-shrink:0;">
         <button onclick="mostraLinkCondivisibile()"
-          style="background:var(--sfondo);border:1.5px solid var(--bordo);
-                 border-radius:8px;padding:6px 10px;font-size:14px;
-                 color:var(--testo-lt);cursor:pointer;transition:all .15s;"
-          title="Copia link condivisibile"
+          style="width:34px;height:34px;border-radius:8px;font-size:14px;
+                 background:var(--sfondo);border:1.5px solid var(--bordo);
+                 color:var(--testo-lt);cursor:pointer;display:flex;align-items:center;
+                 justify-content:center;transition:all .15s;"
+          title="Copia link"
           onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.background='var(--sfondo)'">🔗</button>
-      ${multiCat ? `
-        <button onclick="cambiaCategoria()"
-          style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);
-                 border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;
+        ${multiCat ? `<button onclick="cambiaCategoria()"
+          style="height:34px;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;
+                 background:var(--sfondo);border:1.5px solid var(--bordo);
                  color:var(--testo-lt);cursor:pointer;font-family:inherit;
-                 display:flex;align-items:center;gap:4px;transition:all .15s;"
+                 display:flex;align-items:center;gap:3px;white-space:nowrap;transition:all .15s;"
           onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)';this.style.background='var(--sfondo)'">
-          ⇄ Cambia
-        </button>` : ''}
+          ⇄ Cambia</button>` : ''}
       </div>
-    ` : `
-      <!-- Nessuna categoria selezionata — mostra solo torneo -->
-      <div style="flex:1;"></div>
-    `}
+    ` : `<div style="flex:1;"></div>`}
   </div>`;
 }
+
 
 async function cambiaCategoria() {
   STATE.activeCat = null;
@@ -706,41 +696,115 @@ function _risolviGruppi(lista, giocate) {
 }
 
 // ============================================================
-//  RISOLUZIONE TRIANGOLARI
+//  RISOLUZIONE PLACEHOLDER FASE FINALE
+//  Funziona girone per girone — non aspetta tutti i gironi
 // ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     if (!gironi||!gironi.length) return;
+
     const classificheGironi = {};
+
+    // Calcola classifica solo per gironi COMPLETI (tutte partite giocate)
     for (const g of gironi) {
-      const { data: partite } = await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id', g.id);
-      if (!partite||partite.length===0||partite.some(p=>!p.giocata)) return;
-      const { data: gsRows } = await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id', g.id);
-      const squadre = (gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
+      const { data: partite } = await db.from('partite')
+        .select('id,home_id,away_id,gol_home,gol_away,giocata')
+        .eq('girone_id', g.id);
+      if (!partite||partite.length===0) continue;
+      // Girone completo solo se ha almeno una partita e tutte giocate
+      if (partite.some(p=>!p.giocata)) continue;
+      const { data: gsRows } = await db.from('girone_squadre')
+        .select('squadra_id,squadre(id,nome,logo)')
+        .eq('girone_id', g.id);
+      const squadre = (gsRows||[]).map(r=>({
+        id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
+      }));
       classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
     }
-    const { data: matches } = await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id', categoriaId);
+
+    // Se nessun girone è completo non fare nulla
+    if (!Object.keys(classificheGironi).length) return;
+
+    // Calcola anche "miglior 2°" tra tutti i gironi completi
+    const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
+
+    const { data: matches } = await db.from('knockout')
+      .select('id,note_home,note_away,home_id,away_id')
+      .eq('categoria_id', categoriaId);
     if (!matches||!matches.length) return;
+
     let risolti=0;
     for (const match of matches) {
-      const newH=_resolvePlaceholder(match.note_home,classificheGironi);
-      const newA=_resolvePlaceholder(match.note_away,classificheGironi);
-      if ((newH&&newH!==match.home_id)||(newA&&newA!==match.away_id)) {
-        const upd={}; if(newH)upd.home_id=newH; if(newA)upd.away_id=newA;
-        await db.from('knockout').update(upd).eq('id',match.id); risolti++;
+      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
+      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
+      const upd={};
+      if (newH && newH!==match.home_id) upd.home_id=newH;
+      if (newA && newA!==match.away_id) upd.away_id=newA;
+      if (Object.keys(upd).length) {
+        await db.from('knockout').update(upd).eq('id',match.id);
+        risolti++;
       }
     }
-    if (risolti>0) { _mostraNotificaTriangolari(); if(STATE.currentSection==='a-knockout')await renderAdminKnockout(); if(STATE.currentSection==='tabellone')await renderTabellone(); }
+
+    if (risolti>0) {
+      _mostraNotificaTriangolari();
+      if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
+      if (STATE.currentSection==='tabellone') await renderTabellone();
+    }
   } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi) {
+function _calcolaMiglioriSecondi(classificheGironi) {
+  // Raccoglie tutti i 2° classificati e li ordina per punti/DR/GF
+  const secondi = [];
+  for (const [nome, cl] of Object.entries(classificheGironi)) {
+    if (cl.length >= 2) secondi.push({ girone: nome, sq: cl[1].sq, stat: cl[1] });
+  }
+  secondi.sort((a,b) => {
+    if (b.stat.pt !== a.stat.pt) return b.stat.pt - a.stat.pt;
+    const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
+    if (drB !== drA) return drB - drA;
+    return b.stat.gf - a.stat.gf;
+  });
+  return secondi;
+}
+
+function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[]) {
   if (!placeholder) return null;
-  const m = placeholder.match(/(\d+)[°º]?\s*Girone\s+(.+)/i); if (!m) return null;
-  const pos=parseInt(m[1]); const nome=`Girone ${m[2].trim()}`;
-  const cl=classificheGironi[nome]; if (!cl||cl.length<pos) return null;
-  return cl[pos-1]?.sq?.id||null;
+  const s = placeholder.trim();
+
+  // Gestisce "Miglior 2°" o "Miglior secondo"
+  if (/miglior\s*2[°º]?/i.test(s)) {
+    return miglioriSecondi[0]?.sq?.id || null;
+  }
+  // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
+  const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
+  if (mMig) {
+    const idx = parseInt(mMig[1]) - 1;
+    return miglioriSecondi[idx]?.sq?.id || null;
+  }
+
+  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
+  const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
+  if (m) {
+    const pos = parseInt(m[1]);
+    const nomeGirone = `Girone ${m[2].trim()}`;
+    const cl = classificheGironi[nomeGirone];
+    if (!cl || cl.length < pos) return null;
+    return cl[pos-1]?.sq?.id || null;
+  }
+
+  return null;
+}
+
+async function forzaRisoluzioneAccoppiamenti() {
+  if (!STATE.activeCat) return;
+  toast('⏳ Risoluzione accoppiamenti...');
+  await verificaEGeneraTriangolari(STATE.activeCat);
+  await renderAdminKnockout();
+  await renderTabellone();
+  toast('✅ Accoppiamenti aggiornati!');
 }
 
 function _mostraNotificaTriangolari() {
@@ -1759,6 +1823,8 @@ async function saveMarcatori(partita_id, girone_id) {
 async function renderAdminKnockout() {
   const el=document.getElementById('sec-a-knockout');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  // Risolvi automaticamente i placeholder prima di mostrare
+  await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
