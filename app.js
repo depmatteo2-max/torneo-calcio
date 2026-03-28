@@ -696,41 +696,115 @@ function _risolviGruppi(lista, giocate) {
 }
 
 // ============================================================
-//  RISOLUZIONE TRIANGOLARI
+//  RISOLUZIONE PLACEHOLDER FASE FINALE
+//  Funziona girone per girone — non aspetta tutti i gironi
 // ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     if (!gironi||!gironi.length) return;
+
     const classificheGironi = {};
+
+    // Calcola classifica solo per gironi COMPLETI (tutte partite giocate)
     for (const g of gironi) {
-      const { data: partite } = await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id', g.id);
-      if (!partite||partite.length===0||partite.some(p=>!p.giocata)) return;
-      const { data: gsRows } = await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id', g.id);
-      const squadre = (gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
+      const { data: partite } = await db.from('partite')
+        .select('id,home_id,away_id,gol_home,gol_away,giocata')
+        .eq('girone_id', g.id);
+      if (!partite||partite.length===0) continue;
+      // Girone completo solo se ha almeno una partita e tutte giocate
+      if (partite.some(p=>!p.giocata)) continue;
+      const { data: gsRows } = await db.from('girone_squadre')
+        .select('squadra_id,squadre(id,nome,logo)')
+        .eq('girone_id', g.id);
+      const squadre = (gsRows||[]).map(r=>({
+        id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
+      }));
       classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
     }
-    const { data: matches } = await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id', categoriaId);
+
+    // Se nessun girone è completo non fare nulla
+    if (!Object.keys(classificheGironi).length) return;
+
+    // Calcola anche "miglior 2°" tra tutti i gironi completi
+    const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
+
+    const { data: matches } = await db.from('knockout')
+      .select('id,note_home,note_away,home_id,away_id')
+      .eq('categoria_id', categoriaId);
     if (!matches||!matches.length) return;
+
     let risolti=0;
     for (const match of matches) {
-      const newH=_resolvePlaceholder(match.note_home,classificheGironi);
-      const newA=_resolvePlaceholder(match.note_away,classificheGironi);
-      if ((newH&&newH!==match.home_id)||(newA&&newA!==match.away_id)) {
-        const upd={}; if(newH)upd.home_id=newH; if(newA)upd.away_id=newA;
-        await db.from('knockout').update(upd).eq('id',match.id); risolti++;
+      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
+      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
+      const upd={};
+      if (newH && newH!==match.home_id) upd.home_id=newH;
+      if (newA && newA!==match.away_id) upd.away_id=newA;
+      if (Object.keys(upd).length) {
+        await db.from('knockout').update(upd).eq('id',match.id);
+        risolti++;
       }
     }
-    if (risolti>0) { _mostraNotificaTriangolari(); if(STATE.currentSection==='a-knockout')await renderAdminKnockout(); if(STATE.currentSection==='tabellone')await renderTabellone(); }
+
+    if (risolti>0) {
+      _mostraNotificaTriangolari();
+      if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
+      if (STATE.currentSection==='tabellone') await renderTabellone();
+    }
   } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi) {
+function _calcolaMiglioriSecondi(classificheGironi) {
+  // Raccoglie tutti i 2° classificati e li ordina per punti/DR/GF
+  const secondi = [];
+  for (const [nome, cl] of Object.entries(classificheGironi)) {
+    if (cl.length >= 2) secondi.push({ girone: nome, sq: cl[1].sq, stat: cl[1] });
+  }
+  secondi.sort((a,b) => {
+    if (b.stat.pt !== a.stat.pt) return b.stat.pt - a.stat.pt;
+    const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
+    if (drB !== drA) return drB - drA;
+    return b.stat.gf - a.stat.gf;
+  });
+  return secondi;
+}
+
+function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[]) {
   if (!placeholder) return null;
-  const m = placeholder.match(/(\d+)[°º]?\s*Girone\s+(.+)/i); if (!m) return null;
-  const pos=parseInt(m[1]); const nome=`Girone ${m[2].trim()}`;
-  const cl=classificheGironi[nome]; if (!cl||cl.length<pos) return null;
-  return cl[pos-1]?.sq?.id||null;
+  const s = placeholder.trim();
+
+  // Gestisce "Miglior 2°" o "Miglior secondo"
+  if (/miglior\s*2[°º]?/i.test(s)) {
+    return miglioriSecondi[0]?.sq?.id || null;
+  }
+  // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
+  const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
+  if (mMig) {
+    const idx = parseInt(mMig[1]) - 1;
+    return miglioriSecondi[idx]?.sq?.id || null;
+  }
+
+  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
+  const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
+  if (m) {
+    const pos = parseInt(m[1]);
+    const nomeGirone = `Girone ${m[2].trim()}`;
+    const cl = classificheGironi[nomeGirone];
+    if (!cl || cl.length < pos) return null;
+    return cl[pos-1]?.sq?.id || null;
+  }
+
+  return null;
+}
+
+async function forzaRisoluzioneAccoppiamenti() {
+  if (!STATE.activeCat) return;
+  toast('⏳ Risoluzione accoppiamenti...');
+  await verificaEGeneraTriangolari(STATE.activeCat);
+  await renderAdminKnockout();
+  await renderTabellone();
+  toast('✅ Accoppiamenti aggiornati!');
 }
 
 function _mostraNotificaTriangolari() {
@@ -1749,6 +1823,8 @@ async function saveMarcatori(partita_id, girone_id) {
 async function renderAdminKnockout() {
   const el=document.getElementById('sec-a-knockout');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  // Risolvi automaticamente i placeholder prima di mostrare
+  await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
