@@ -706,37 +706,36 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
     const classificheGironi = {};
 
-    // Calcola classifica per ogni girone che ha almeno una partita giocata
+    // Calcola classifica solo per gironi COMPLETI (tutte partite giocate)
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
       if (!partite||partite.length===0) continue;
-      const giocate = partite.filter(p=>p.giocata);
-      if (giocate.length === 0) continue;
+      // Girone completo solo se ha almeno una partita e tutte giocate
+      if (partite.some(p=>!p.giocata)) continue;
       const { data: gsRows } = await db.from('girone_squadre')
         .select('squadra_id,squadre(id,nome,logo)')
         .eq('girone_id', g.id);
       const squadre = (gsRows||[]).map(r=>({
         id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
       }));
-      // Usa solo squadre reali (non placeholder)
-      const squadreReali = squadre.filter(s => !/^\d+[°º*]?\s*(Girone|Gruppo)/i.test(s.nome));
-      if (squadreReali.length > 0) {
-        classificheGironi[g.nome] = calcGironeClassifica({squadre: squadreReali, partite: giocate});
-      }
+      classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
     }
 
+    // Se nessun girone è completo non fare nulla
     if (!Object.keys(classificheGironi).length) return;
 
+    // Calcola anche "miglior 2°" tra tutti i gironi completi
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
-    let risolti = 0;
 
-    // 1. Risolvi placeholder nel KNOCKOUT
     const { data: matches } = await db.from('knockout')
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
-    for (const match of (matches||[])) {
+    if (!matches||!matches.length) return;
+
+    let risolti=0;
+    for (const match of matches) {
       const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
       const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
       const upd={};
@@ -748,30 +747,10 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
-    // 2. Risolvi placeholder nelle PARTITE normali (triangolari)
-    // Cerca partite con note_home/note_away non nulli
-    const { data: partitePlaceholder } = await db.from('partite')
-      .select('id,note_home,note_away,home_id,away_id,girone_id')
-      .in('girone_id', gironi.map(g=>g.id))
-      .or('note_home.not.is.null,note_away.not.is.null');
-
-    for (const p of (partitePlaceholder||[])) {
-      const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
-      const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi);
-      const upd={};
-      if (newH && newH!==p.home_id) upd.home_id=newH;
-      if (newA && newA!==p.away_id) upd.away_id=newA;
-      if (Object.keys(upd).length) {
-        await db.from('partite').update(upd).eq('id',p.id);
-        risolti++;
-      }
-    }
-
     if (risolti>0) {
       _mostraNotificaTriangolari();
       if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
       if (STATE.currentSection==='tabellone') await renderTabellone();
-      if (STATE.currentSection==='a-risultati') await renderAdminRisultati();
     }
   } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
 }
@@ -796,50 +775,22 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
   const s = placeholder.trim();
 
   // Gestisce "Miglior 2°" o "Miglior secondo"
-  if (/miglior\s*2[°º*]?/i.test(s)) {
+  if (/miglior\s*2[°º]?/i.test(s)) {
     return miglioriSecondi[0]?.sq?.id || null;
   }
   // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
-  const mMig = s.match(/(\d+)[°º*]?\s*Miglior/i);
+  const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
   if (mMig) {
     const idx = parseInt(mMig[1]) - 1;
     return miglioriSecondi[idx]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" o "N* Girone X" — supporta nomi composti
-  const m = s.match(/(\d+)[°º*]?\s*(?:del\s*)?(?:Girone|Gruppo)\s+(.+)/i);
+  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
+  const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
-    const gironePart = m[2].trim();
-    const nomeGirone = `Girone ${gironePart}`;
-
-    // 1. Match esatto
-    let cl = classificheGironi[nomeGirone];
-
-    // 2. Case-insensitive
-    if (!cl) {
-      const k = Object.keys(classificheGironi).find(k =>
-        k.toLowerCase() === nomeGirone.toLowerCase()
-      );
-      if (k) cl = classificheGironi[k];
-    }
-
-    // 3. Suffisso (es. "Silver 1" dentro "Girone Silver 1")
-    if (!cl) {
-      const k = Object.keys(classificheGironi).find(k =>
-        k.toLowerCase().endsWith(gironePart.toLowerCase())
-      );
-      if (k) cl = classificheGironi[k];
-    }
-
-    // 4. Solo lettera finale (es. "A" → "Girone A")
-    if (!cl && gironePart.length === 1) {
-      const k = Object.keys(classificheGironi).find(k =>
-        k.toUpperCase() === `GIRONE ${gironePart.toUpperCase()}`
-      );
-      if (k) cl = classificheGironi[k];
-    }
-
+    const nomeGirone = `Girone ${m[2].trim()}`;
+    const cl = classificheGironi[nomeGirone];
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
@@ -2010,7 +1961,27 @@ function enterAdmin(user) {
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
     document.getElementById('sec-a-tornei').classList.add('active');
     document.getElementById('cat-bar').style.display='none'; STATE.currentSection='a-tornei'; renderAdminTornei();
+    _addSimBtn();
   }
+}
+
+function _addSimBtn() {
+  // Aggiungi tasto simulazione nell'header (solo per admin, non arbitri)
+  if (document.getElementById('sim-toggle-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'sim-toggle-btn';
+  btn.textContent = '🎮';
+  btn.title = 'Modalità Simulazione';
+  btn.style.cssText = `
+    background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);
+    color:#f59e0b;border-radius:8px;padding:6px 10px;font-size:15px;
+    cursor:pointer;transition:all .18s;
+  `;
+  btn.onmouseover = () => btn.style.background = 'rgba(245,158,11,0.25)';
+  btn.onmouseout  = () => btn.style.background = 'rgba(245,158,11,0.12)';
+  btn.onclick = toggleSimulazione;
+  const headerRight = document.querySelector('.header-right');
+  if (headerRight) headerRight.insertBefore(btn, headerRight.firstChild);
 }
 
 function _mostraNavArbitro() {
@@ -2030,6 +2001,12 @@ function exitAdmin() {
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('admin-btn').textContent='Admin';
+  // Rimuovi tasto simulazione e pannello
+  const simBtn = document.getElementById('sim-toggle-btn');
+  if (simBtn) simBtn.remove();
+  const simPanel = document.getElementById('sim-panel');
+  if (simPanel) simPanel.remove();
+  _simUnlocked = false;
   STATE.currentSection='classifiche';
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
   const btn=document.querySelector('[data-section="classifiche"]'); if(btn)btn.classList.add('active');
@@ -2324,4 +2301,279 @@ function _tvStartAutoscroll() {
       _tvShowCat(nextIdx);
     }
   }, TICK);
+}
+
+// ============================================================
+//  🎮 MODALITÀ SIMULAZIONE — Protetta da password
+//  Password: 19880204
+// ============================================================
+
+const _SIM_PWD = '19880204';
+let _simUnlocked = false;
+
+function toggleSimulazione() {
+  if (_simUnlocked) {
+    _renderSimPanel();
+    return;
+  }
+  const pwd = prompt('🔐 Inserisci la password per la modalità simulazione:');
+  if (!pwd) return;
+  if (pwd !== _SIM_PWD) {
+    alert('❌ Password errata');
+    return;
+  }
+  _simUnlocked = true;
+  toast('✅ Modalità simulazione attivata!');
+  _renderSimPanel();
+}
+
+function _renderSimPanel() {
+  // Rimuovi panel esistente
+  const existing = document.getElementById('sim-panel');
+  if (existing) { existing.remove(); return; }
+
+  const panel = document.createElement('div');
+  panel.id = 'sim-panel';
+  panel.style.cssText = `
+    position: fixed; bottom: 80px; right: 16px; z-index: 8000;
+    background: #0f172a; border: 2px solid #f59e0b;
+    border-radius: 14px; padding: 16px; width: 280px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    font-family: var(--font-display, sans-serif);
+  `;
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">
+        🎮 SIMULAZIONE
+      </div>
+      <button onclick="document.getElementById('sim-panel').remove()"
+        style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);
+               color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;
+               font-size:12px;font-family:inherit;">✕</button>
+    </div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">
+      Genera risultati casuali per testare il sistema. Solo per sviluppo!
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button onclick="simulaRisultati()"
+        style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;
+               color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;
+               cursor:pointer;font-family:inherit;letter-spacing:.04em;">
+        ⚽ SIMULA RISULTATI
+      </button>
+
+      <button onclick="simulaRisultatiGirone()"
+        style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);
+               color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;
+               cursor:pointer;font-family:inherit;">
+        ⚽ Simula solo girone attivo
+      </button>
+
+      <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
+
+      <button onclick="resetRisultati()"
+        style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);
+               color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;
+               cursor:pointer;font-family:inherit;">
+        🔄 RESET — Azzera tutti i risultati
+      </button>
+
+      <button onclick="resetRisultatiGirone()"
+        style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);
+               color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;
+               cursor:pointer;font-family:inherit;">
+        🔄 Reset solo girone attivo
+      </button>
+    </div>
+
+    <div id="sim-log" style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.4);
+      max-height:80px;overflow-y:auto;line-height:1.6;"></div>
+  `;
+
+  document.body.appendChild(panel);
+}
+
+function _simLog(msg) {
+  const log = document.getElementById('sim-log');
+  if (log) { log.innerHTML += msg + '<br>'; log.scrollTop = log.scrollHeight; }
+}
+
+function _golCasuale() {
+  // Distribuzione realistica: molti pareggi bassi, rari risultati alti
+  const r = Math.random();
+  if (r < 0.15) return 0;
+  if (r < 0.35) return 1;
+  if (r < 0.55) return 2;
+  if (r < 0.70) return 3;
+  if (r < 0.82) return 4;
+  if (r < 0.91) return 5;
+  if (r < 0.96) return 6;
+  return 7;
+}
+
+async function simulaRisultati() {
+  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
+  const log = document.getElementById('sim-log');
+  if (log) log.innerHTML = '';
+  _simLog('⏳ Avvio simulazione...');
+
+  try {
+    const gironi = await getGironiWithData(STATE.activeCat || STATE.categorie[0]?.id);
+    let totale = 0;
+
+    for (const g of gironi) {
+      const daGiocare = g.partite.filter(p => !p.giocata);
+      _simLog(`📋 ${g.nome}: ${daGiocare.length} partite`);
+
+      for (const p of daGiocare) {
+        // Salta partite senza squadre reali
+        if (!p.home_id || !p.away_id) continue;
+
+        const gh = _golCasuale();
+        const ga = _golCasuale();
+
+        await dbSavePartita({
+          id: p.id,
+          girone_id: p.girone_id,
+          gol_home: gh,
+          gol_away: ga,
+          giocata: true,
+          inserito_da: '🤖 Simulazione'
+        });
+        totale++;
+        _simLog(`✓ ${p.home?.nome||'?'} ${gh}–${ga} ${p.away?.nome||'?'}`);
+      }
+    }
+
+    _simLog(`\n✅ ${totale} risultati simulati!`);
+    toast(`✅ ${totale} risultati simulati!`);
+
+    // Risolvi accoppiamenti automaticamente
+    if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+    await renderCurrentSection();
+
+  } catch(e) {
+    console.error(e);
+    _simLog(`❌ Errore: ${e.message}`);
+    toast('Errore simulazione: ' + e.message);
+  }
+}
+
+async function simulaRisultatiGirone() {
+  if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
+  const log = document.getElementById('sim-log');
+  if (log) log.innerHTML = '';
+
+  try {
+    const gironi = await getGironiWithData(STATE.activeCat);
+    // Prende solo il primo girone con partite da giocare
+    let totale = 0;
+
+    for (const g of gironi) {
+      const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
+      if (!daGiocare.length) continue;
+
+      _simLog(`📋 Simulo ${g.nome} (${daGiocare.length} partite)...`);
+      for (const p of daGiocare) {
+        const gh = _golCasuale();
+        const ga = _golCasuale();
+        await dbSavePartita({
+          id: p.id, girone_id: p.girone_id,
+          gol_home: gh, gol_away: ga, giocata: true,
+          inserito_da: '🤖 Simulazione'
+        });
+        totale++;
+      }
+      break; // solo primo girone
+    }
+
+    _simLog(`✅ ${totale} risultati simulati!`);
+    toast(`✅ ${totale} risultati simulati!`);
+    if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+    await renderCurrentSection();
+  } catch(e) {
+    _simLog(`❌ ${e.message}`);
+  }
+}
+
+async function resetRisultati() {
+  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
+  if (!confirm('⚠️ Azzerare TUTTI i risultati del torneo? Questa operazione non può essere annullata.')) return;
+
+  const log = document.getElementById('sim-log');
+  if (log) log.innerHTML = '';
+  _simLog('⏳ Reset in corso...');
+
+  try {
+    // Reset tutte le partite della categoria attiva
+    const cats = STATE.activeCat ? [STATE.activeCat] : STATE.categorie.map(c => c.id);
+    let totale = 0;
+
+    for (const catId of cats) {
+      const gironi = await dbGetGironi(catId);
+      for (const g of gironi) {
+        const { error } = await db.from('partite')
+          .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
+          .eq('girone_id', g.id);
+        if (!error) totale++;
+      }
+      // Reset knockout
+      await db.from('knockout')
+        .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
+        .eq('categoria_id', catId);
+      // Reset marcatori
+      const gironiIds = gironi.map(g => g.id);
+      if (gironiIds.length) {
+        const { data: partite } = await db.from('partite')
+          .select('id').in('girone_id', gironiIds);
+        if (partite?.length) {
+          await db.from('marcatori')
+            .delete()
+            .in('partita_id', partite.map(p => p.id));
+        }
+      }
+    }
+
+    // Invalida cache
+    if (typeof _cacheClear === 'function') _cacheClear();
+
+    _simLog(`✅ Reset completato!`);
+    toast('✅ Tutti i risultati azzerati!');
+    await renderCurrentSection();
+
+  } catch(e) {
+    console.error(e);
+    _simLog(`❌ Errore: ${e.message}`);
+    toast('Errore reset: ' + e.message);
+  }
+}
+
+async function resetRisultatiGirone() {
+  if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
+  if (!confirm('⚠️ Azzerare i risultati della categoria attiva?')) return;
+
+  const log = document.getElementById('sim-log');
+  if (log) log.innerHTML = '';
+
+  try {
+    const gironi = await dbGetGironi(STATE.activeCat);
+    for (const g of gironi) {
+      await db.from('partite')
+        .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
+        .eq('girone_id', g.id);
+    }
+    await db.from('knockout')
+      .update({ gol_home: 0, gol_away: 0, giocata: false })
+      .eq('categoria_id', STATE.activeCat);
+
+    if (typeof _cacheClear === 'function') _cacheClear();
+    _simLog('✅ Reset categoria completato!');
+    toast('✅ Risultati categoria azzerati!');
+    await renderCurrentSection();
+  } catch(e) {
+    _simLog(`❌ ${e.message}`);
+  }
 }
