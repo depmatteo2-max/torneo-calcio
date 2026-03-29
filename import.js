@@ -388,6 +388,8 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       for (let si = 0; si < girone.squadre.length; si++) {
         const nomeSq = girone.squadre[si];
         if (!nomeSq) continue;
+        // NON inserire squadre placeholder in girone_squadre — verranno risolte dopo
+        if (_isPlaceholder(nomeSq)) continue;
         const key = `${torneoId}||${nomeSq}`;
         if (!squadreMap[key]) {
           const { data: sqR, error: sqErr } = await db.from('squadre').insert({
