@@ -836,12 +836,56 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
     return miglioriSecondi[idx]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
-  const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
+  // Gestisce "N° Girone X" o "N° Gruppo X" — es. "1° Girone A", "2° Gruppo B", "1° Girone Unico"
+  const m = s.match(/(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
-    const nomeGirone = `Girone ${m[2].trim()}`;
-    const cl = classificheGironi[nomeGirone];
+    const tipo = m[2]; // "Girone" o "Gruppo"
+    const resto = m[3].trim();
+
+    // Prova prima con il tipo originale (es. "Gruppo A"), poi con l'alternativo (es. "Girone A")
+    const candidati = [
+      `${tipo} ${resto}`,
+      `${tipo === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
+    ];
+
+    for (const nomeGirone of candidati) {
+      // 1. Match esatto
+      let cl = classificheGironi[nomeGirone];
+
+      // 2. Case-insensitive
+      if (!cl) {
+        const k = Object.keys(classificheGironi).find(k =>
+          k.toLowerCase() === nomeGirone.toLowerCase()
+        );
+        if (k) cl = classificheGironi[k];
+      }
+
+      // 3. Suffisso (es. "A" dentro "Girone A" o "Gruppo A")
+      if (!cl) {
+        const k = Object.keys(classificheGironi).find(k =>
+          k.toLowerCase().endsWith(' ' + resto.toLowerCase())
+        );
+        if (k) cl = classificheGironi[k];
+      }
+
+      if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+    }
+    return null;
+  }
+
+  // Formato breve "1A", "2B"
+  const mShort = s.match(/^(\d+)[°º*]?([A-Za-z]+\d*)$/);
+  if (mShort) {
+    const pos = parseInt(mShort[1]);
+    const gir = mShort[2].toUpperCase();
+    const k = Object.keys(classificheGironi).find(k =>
+      k.toUpperCase().endsWith(` ${gir}`) ||
+      k.toUpperCase() === `GIRONE ${gir}` ||
+      k.toUpperCase() === `GRUPPO ${gir}`
+    );
+    if (!k) return null;
+    const cl = classificheGironi[k];
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
