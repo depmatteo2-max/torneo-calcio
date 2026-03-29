@@ -2423,47 +2423,49 @@ async function simulaRisultati() {
   if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
-  _simLog('⏳ Avvio simulazione...');
+  _simLog('⏳ Avvio simulazione multi-passaggio...');
 
   try {
-    const gironi = await getGironiWithData(STATE.activeCat || STATE.categorie[0]?.id);
+    const catId = STATE.activeCat || STATE.categorie[0]?.id;
     let totale = 0;
+    const MAX = 6;
 
-    for (const g of gironi) {
-      const daGiocare = g.partite.filter(p => !p.giocata);
-      _simLog(`📋 ${g.nome}: ${daGiocare.length} partite`);
-
-      for (const p of daGiocare) {
-        // Salta partite senza squadre reali
-        if (!p.home_id || !p.away_id) continue;
-
-        const gh = _golCasuale();
-        const ga = _golCasuale();
-
-        await dbSavePartita({
-          id: p.id,
-          girone_id: p.girone_id,
-          gol_home: gh,
-          gol_away: ga,
-          giocata: true,
-          inserito_da: '🤖 Simulazione'
-        });
-        totale++;
-        _simLog(`✓ ${p.home?.nome||'?'} ${gh}–${ga} ${p.away?.nome||'?'}`);
+    for (let pass = 1; pass <= MAX; pass++) {
+      // 1. Risolvi placeholder
+      if (catId) {
+        await verificaEGeneraTriangolari(catId);
+        if (typeof _cacheClear === 'function') _cacheClear();
       }
+
+      // 2. Carica gironi aggiornati
+      const gironi = await getGironiWithData(catId);
+      let nuovi = 0;
+
+      for (const g of gironi) {
+        const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
+        if (!daGiocare.length) continue;
+        _simLog(`Pass ${pass} — ${g.nome}: ${daGiocare.length} partite`);
+        for (const p of daGiocare) {
+          const gh = _golCasuale(), ga = _golCasuale();
+          await dbSavePartita({ id:p.id, girone_id:p.girone_id, gol_home:gh, gol_away:ga, giocata:true, inserito_da:'🤖 Simulazione' });
+          nuovi++; totale++;
+          _simLog(`✓ ${p.home?.nome||'?'} ${gh}–${ga} ${p.away?.nome||'?'}`);
+        }
+      }
+
+      if (nuovi === 0) { _simLog(`✓ Completato in ${pass} passaggi!`); break; }
     }
 
+    // Risolvi knockout finale
+    if (catId) await verificaEGeneraTriangolari(catId);
     _simLog(`\n✅ ${totale} risultati simulati!`);
     toast(`✅ ${totale} risultati simulati!`);
-
-    // Risolvi accoppiamenti automaticamente
-    if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
     await renderCurrentSection();
 
   } catch(e) {
     console.error(e);
     _simLog(`❌ Errore: ${e.message}`);
-    toast('Errore simulazione: ' + e.message);
+    toast('Errore: ' + e.message);
   }
 }
 
