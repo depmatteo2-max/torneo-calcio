@@ -433,7 +433,7 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       const p   = fase2Cat[mi];
       const hId = squadreMap[`${torneoId}||${p.sq1raw}`] || null;
       const aId = squadreMap[`${torneoId}||${p.sq2raw}`] || null;
-      await db.from('knockout').insert({
+      const koRow = {
         categoria_id   : catId,
         round_name     : p.roundLabel,
         round_order    : p.roundOrder,
@@ -444,9 +444,12 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         is_consolazione: p.consolazione,
         note_home      : p.sq1raw,
         note_away      : p.sq2raw,
-        orario         : p.orario || null,
-        campo          : p.campo  || null,
-      });
+      };
+      // Aggiungi orario e campo solo se la colonna esiste
+      if (p.orario) koRow.orario = p.orario;
+      if (p.campo) koRow.campo = p.campo;
+      const { error: koErr } = await db.from('knockout').insert(koRow);
+      if (koErr) console.warn('Knockout insert warning:', koErr.message);
     }
   }
 
