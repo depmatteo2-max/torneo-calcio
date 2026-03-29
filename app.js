@@ -712,8 +712,10 @@ async function verificaEGeneraTriangolari(categoriaId) {
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
       if (!partite||partite.length===0) continue;
-      // Girone completo solo se ha almeno una partita e tutte giocate
-      if (partite.some(p=>!p.giocata)) continue;
+      // Usa il girone se ALMENO UNA partita è giocata (non richiede girone completo)
+      // Questo permette accoppiamenti parziali durante il torneo
+      const giocate = partite.filter(p=>p.giocata);
+      if (giocate.length === 0) continue;
       const { data: gsRows } = await db.from('girone_squadre')
         .select('squadra_id,squadre(id,nome,logo)')
         .eq('girone_id', g.id);
@@ -785,12 +787,47 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
     return miglioriSecondi[idx]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
+  // Gestisce "N° Girone X" — es. "1° Girone A", "2° Girone B", "3° Girone 1" ecc.
   const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
-    const nomeGirone = `Girone ${m[2].trim()}`;
-    const cl = classificheGironi[nomeGirone];
+    const gironePart = m[2].trim();
+
+    // Prova prima match esatto: "Girone A", poi varianti
+    const candidati = [
+      `Girone ${gironePart}`,
+      `Girone ${gironePart.toUpperCase()}`,
+      `girone ${gironePart.toLowerCase()}`,
+    ];
+
+    // Cerca anche match parziale (es. "Girone A" dentro "Girone A - Gold")
+    let cl = null;
+    for (const nome of candidati) {
+      if (classificheGironi[nome]) { cl = classificheGironi[nome]; break; }
+    }
+    // Fallback: cerca per lettera finale (es. "A" dentro qualsiasi chiave che finisce con " A")
+    if (!cl) {
+      const chiaveMatch = Object.keys(classificheGironi).find(k =>
+        k.toUpperCase().endsWith(` ${gironePart.toUpperCase()}`) ||
+        k.toUpperCase() === `GIRONE ${gironePart.toUpperCase()}`
+      );
+      if (chiaveMatch) cl = classificheGironi[chiaveMatch];
+    }
+
+    if (!cl || cl.length < pos) return null;
+    return cl[pos-1]?.sq?.id || null;
+  }
+
+  // Gestisce formato breve tipo "1A", "2B" (senza la parola "Girone")
+  const mShort = s.match(/^(\d+)[°º]?([A-Za-z]+)$/);
+  if (mShort) {
+    const pos = parseInt(mShort[1]);
+    const gir = mShort[2].toUpperCase();
+    const chiaveMatch = Object.keys(classificheGironi).find(k =>
+      k.toUpperCase().endsWith(` ${gir}`) || k.toUpperCase() === `GIRONE ${gir}`
+    );
+    if (!chiaveMatch) return null;
+    const cl = classificheGironi[chiaveMatch];
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
