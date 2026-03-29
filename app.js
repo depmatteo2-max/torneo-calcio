@@ -532,7 +532,6 @@ function _renderGiornataBar() {
 }
 
 function _labelGiornata(g) {
-  // Abbrevia "4 Aprile 2026" → "Sab 4 Apr"
   const giorni = {'sabato':'Sab','domenica':'Dom','lunedì':'Lun','martedì':'Mar','mercoledì':'Mer','giovedì':'Gio','venerdì':'Ven'};
   const mesi = {'gennaio':'Gen','febbraio':'Feb','marzo':'Mar','aprile':'Apr','maggio':'Mag','giugno':'Giu',
                  'luglio':'Lug','agosto':'Ago','settembre':'Set','ottobre':'Ott','novembre':'Nov','dicembre':'Dic'};
@@ -540,13 +539,11 @@ function _labelGiornata(g) {
   for (const [full, short] of Object.entries(mesi)) {
     label = label.toLowerCase().replace(full, short);
   }
-  // Rimuovi anno
   label = label.replace(/20\d\d/,'').trim().replace(/\s+/g,' ');
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function _trovaGiornataOggi(giornate) {
-  // Confronta ogni giornata con la data di oggi
   const ora = new Date();
   const mesiMap = {'gennaio':0,'febbraio':1,'marzo':2,'aprile':3,'maggio':4,'giugno':5,
                    'luglio':6,'agosto':7,'settembre':8,'ottobre':9,'novembre':10,'dicembre':11};
@@ -565,7 +562,6 @@ function _trovaGiornataOggi(giornate) {
 }
 
 function _abbreviaNomeCat(nome) {
-  // Abbrevia nomi lunghi per la pill bar
   const abbr = {
     'Girone Silver 1': 'Silver 1', 'Girone Silver 2': 'Silver 2',
     'Girone Gold 1': 'Gold 1', 'Girone Gold 2': 'Gold 2',
@@ -573,7 +569,6 @@ function _abbreviaNomeCat(nome) {
     'Esordienti 2014': 'Esord. 2014', 'Girone Unico': 'Girone Unico',
   };
   if (abbr[nome]) return abbr[nome];
-  // Tronca se troppo lungo
   return nome.length > 14 ? nome.substring(0, 13) + '…' : nome;
 }
 
@@ -582,7 +577,6 @@ async function selectCat(id) {
   _saveSavedCat(id);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
-  // Carica giornate disponibili per questa categoria
   await _caricaGiornate();
   renderCatBar();
   renderCurrentSection();
@@ -598,7 +592,6 @@ async function _caricaGiornate() {
   if (!STATE.activeCat) return;
   try {
     const dateSet = new Set();
-    // Legge solo dalla categoria attiva
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
@@ -615,7 +608,6 @@ async function _caricaGiornate() {
     };
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
 
-    // Auto-seleziona OGGI se disponibile, altrimenti 'tutte'
     const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
     STATE.activeGiornata = oggi || 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
@@ -697,74 +689,85 @@ function _risolviGruppi(lista, giocate) {
 
 // ============================================================
 //  RISOLUZIONE PLACEHOLDER FASE FINALE
-//  Funziona girone per girone — non aspetta tutti i gironi
+//  FIX: cerca gironi in TUTTO il torneo, non solo nella categoria
+//  del tabellone. Questo risolve il caso in cui il file finali
+//  viene importato come categoria separata (es. "Finali 19 Aprile")
+//  ma i gironi appartengono ad altre categorie dello stesso torneo.
 // ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
-    const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
-    if (!gironi||!gironi.length) return;
+    // ── STEP 1: Carica i gironi di TUTTE le categorie del torneo ──
+    // Non solo della categoria del knockout — fondamentale per il formato calendario
+    const { data: tutteCategorie } = await db.from('categorie')
+      .select('id').eq('torneo_id', STATE.activeTorneo);
+
+    if (!tutteCategorie || !tutteCategorie.length) return;
 
     const classificheGironi = {};
 
-    // Calcola classifica solo per gironi COMPLETI (tutte partite giocate)
-    for (const g of gironi) {
-      const { data: partite } = await db.from('partite')
-        .select('id,home_id,away_id,gol_home,gol_away,giocata')
-        .eq('girone_id', g.id);
-      if (!partite||partite.length===0) continue;
-      // Usa il girone se ALMENO UNA partita è giocata (non richiede girone completo)
-      // Questo permette accoppiamenti parziali durante il torneo
-      const giocate = partite.filter(p=>p.giocata);
-      if (giocate.length === 0) continue;
-      const { data: gsRows } = await db.from('girone_squadre')
-        .select('squadra_id,squadre(id,nome,logo)')
-        .eq('girone_id', g.id);
-      const squadre = (gsRows||[]).map(r=>({
-        id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
-      }));
-      classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
+    for (const cat of tutteCategorie) {
+      const { data: gironi } = await db.from('gironi')
+        .select('id,nome').eq('categoria_id', cat.id);
+      if (!gironi || !gironi.length) continue;
+
+      for (const g of gironi) {
+        const { data: partite } = await db.from('partite')
+          .select('id,home_id,away_id,gol_home,gol_away,giocata')
+          .eq('girone_id', g.id);
+        if (!partite || !partite.length) continue;
+
+        const giocate = partite.filter(p => p.giocata);
+        if (giocate.length === 0) continue;
+
+        const { data: gsRows } = await db.from('girone_squadre')
+          .select('squadra_id,squadre(id,nome,logo)')
+          .eq('girone_id', g.id);
+        const squadre = (gsRows || []).map(r => ({
+          id: r.squadra_id, nome: r.squadre?.nome || '', logo: r.squadre?.logo || null
+        }));
+
+        classificheGironi[g.nome] = calcGironeClassifica({ squadre, partite });
+      }
     }
 
-    // Se nessun girone è completo non fare nulla
     if (!Object.keys(classificheGironi).length) return;
 
-    // Calcola anche "miglior 2°" tra tutti i gironi completi
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
 
+    // ── STEP 2: Risolvi i placeholder del knockout di questa categoria ──
     const { data: matches } = await db.from('knockout')
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
-    if (!matches||!matches.length) return;
+    if (!matches || !matches.length) return;
 
-    let risolti=0;
+    let risolti = 0;
     for (const match of matches) {
       const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
       const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
-      const upd={};
-      if (newH && newH!==match.home_id) upd.home_id=newH;
-      if (newA && newA!==match.away_id) upd.away_id=newA;
+      const upd = {};
+      if (newH && newH !== match.home_id) upd.home_id = newH;
+      if (newA && newA !== match.away_id) upd.away_id = newA;
       if (Object.keys(upd).length) {
-        await db.from('knockout').update(upd).eq('id',match.id);
+        await db.from('knockout').update(upd).eq('id', match.id);
         risolti++;
       }
     }
 
-    if (risolti>0) {
+    if (risolti > 0) {
       _mostraNotificaTriangolari();
-      if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
-      if (STATE.currentSection==='tabellone') await renderTabellone();
+      if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
+      if (STATE.currentSection === 'tabellone') await renderTabellone();
     }
-  } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
+  } catch(e) { console.error('verificaEGeneraTriangolari:', e); }
 }
 
 function _calcolaMiglioriSecondi(classificheGironi) {
-  // Raccoglie tutti i 2° classificati e li ordina per punti/DR/GF
   const secondi = [];
   for (const [nome, cl] of Object.entries(classificheGironi)) {
     if (cl.length >= 2) secondi.push({ girone: nome, sq: cl[1].sq, stat: cl[1] });
   }
   secondi.sort((a,b) => {
-    if (b.stat.pt !== a.stat.pt) return b.stat.pt - a.stat.pt;
+    if (b.stat.pts !== a.stat.pts) return b.stat.pts - a.stat.pts;
     const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
     if (drB !== drA) return drB - drA;
     return b.stat.gf - a.stat.gf;
@@ -780,54 +783,53 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
   if (/miglior\s*2[°º]?/i.test(s)) {
     return miglioriSecondi[0]?.sq?.id || null;
   }
-  // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
   const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
   if (mMig) {
     const idx = parseInt(mMig[1]) - 1;
     return miglioriSecondi[idx]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" — es. "1° Girone A", "2° Girone B", "3° Girone 1" ecc.
+  // Gestisce "N° Girone X" — es. "1° Girone A", "2° Girone B"
   const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
-    const gironePart = m[2].trim();
+    const gironePart = m[2].trim().toUpperCase();
 
-    // Prova prima match esatto: "Girone A", poi varianti
-    const candidati = [
-      `Girone ${gironePart}`,
-      `Girone ${gironePart.toUpperCase()}`,
-      `girone ${gironePart.toLowerCase()}`,
-    ];
-
-    // Cerca anche match parziale (es. "Girone A" dentro "Girone A - Gold")
     let cl = null;
-    for (const nome of candidati) {
-      if (classificheGironi[nome]) { cl = classificheGironi[nome]; break; }
+    for (const [nome, classifica] of Object.entries(classificheGironi)) {
+      const nomeUp = nome.trim().toUpperCase();
+      // Match esatto
+      if (nomeUp === `GIRONE ${gironePart}`) { cl = classifica; break; }
+      // Finisce con la lettera (es. "Girone A" finisce con " A")
+      if (nomeUp.endsWith(` ${gironePart}`)) { cl = classifica; break; }
+      // Senza spazi (es. "GironeA")
+      if (nomeUp.replace(/\s/g,'') === `GIRONE${gironePart}`) { cl = classifica; break; }
     }
-    // Fallback: cerca per lettera finale (es. "A" dentro qualsiasi chiave che finisce con " A")
+
+    // Fallback: cerca per ultima parola del nome girone
     if (!cl) {
-      const chiaveMatch = Object.keys(classificheGironi).find(k =>
-        k.toUpperCase().endsWith(` ${gironePart.toUpperCase()}`) ||
-        k.toUpperCase() === `GIRONE ${gironePart.toUpperCase()}`
-      );
-      if (chiaveMatch) cl = classificheGironi[chiaveMatch];
+      for (const [nome, classifica] of Object.entries(classificheGironi)) {
+        const parts = nome.trim().split(/\s+/);
+        const lastPart = parts[parts.length - 1].toUpperCase();
+        if (lastPart === gironePart) { cl = classifica; break; }
+      }
     }
 
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
 
-  // Gestisce formato breve tipo "1A", "2B" (senza la parola "Girone")
+  // Gestisce formato breve "1A", "2B" (senza la parola "Girone")
   const mShort = s.match(/^(\d+)[°º]?([A-Za-z]+)$/);
   if (mShort) {
     const pos = parseInt(mShort[1]);
     const gir = mShort[2].toUpperCase();
-    const chiaveMatch = Object.keys(classificheGironi).find(k =>
-      k.toUpperCase().endsWith(` ${gir}`) || k.toUpperCase() === `GIRONE ${gir}`
-    );
-    if (!chiaveMatch) return null;
-    const cl = classificheGironi[chiaveMatch];
+    let cl = null;
+    for (const [nome, classifica] of Object.entries(classificheGironi)) {
+      const parts = nome.trim().split(/\s+/);
+      const lastPart = parts[parts.length - 1].toUpperCase();
+      if (lastPart === gir) { cl = classifica; break; }
+    }
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
@@ -870,8 +872,6 @@ function _orarioToMinuti(orario) {
 //  BATCH LOADER — carica tutte le categorie in parallelo
 // ============================================================
 async function _caricaTutteCategorie() {
-  const key = '_all_cats_' + STATE.activeTorneo;
-  // Carica tutti i gironi di tutte le categorie in parallelo
   const results = await Promise.all(
     STATE.categorie.map(cat => getGironiWithData(cat.id).then(gironi => ({ cat, gironi })))
   );
@@ -943,7 +943,7 @@ async function renderClassifiche() {
 }
 
 // ============================================================
-//  PUBLIC: RISULTATI — ordinati per orario, con chi ha inserito
+//  PUBLIC: RISULTATI
 // ============================================================
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
@@ -961,13 +961,11 @@ async function renderRisultati() {
     }
   }
 
-  // Filtra per giornata se selezionata
   const filtroAttivo = STATE.activeGiornata && STATE.activeGiornata !== 'tutte';
   if (filtroAttivo) {
     tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
 
-  // Ordina per orario
   tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
 
   const giocate = tuttePartite.filter(p => p.giocata);
@@ -975,7 +973,6 @@ async function renderRisultati() {
 
   let html = '';
 
-  // ── Header giornata in cima ──
   if (filtroAttivo) {
     html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
       color:white;border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;
@@ -984,7 +981,6 @@ async function renderRisultati() {
       <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
     </div>`;
   } else {
-    // Riepilogo: mostra giorni disponibili come chip cliccabili
     const giornate = STATE._giornateDisponibili || [];
     if (giornate.length > 1) {
       html += `<div style="background:white;border:1px solid var(--bordo);border-radius:var(--radius);
@@ -1007,7 +1003,6 @@ async function renderRisultati() {
     }
   }
 
-  // Funzione per renderizzare una partita
   const renderPartita = (p, showCat) => {
     const mH = (p.marcatori||[]).filter(m=>m.squadra_id===p.home_id);
     const mA = (p.marcatori||[]).filter(m=>m.squadra_id===p.away_id);
@@ -1038,10 +1033,8 @@ async function renderRisultati() {
     return r;
   };
 
-  // ── Risultati ──
   if (giocate.length) {
     html += `<div class="section-label">✅ Risultati <span style="color:var(--verde);font-weight:800;">(${giocate.length})</span></div>`;
-    // Raggruppa per giorno se riepilogo
     if (!filtroAttivo) {
       const perGiorno = {};
       giocate.forEach(p => {
@@ -1062,7 +1055,6 @@ async function renderRisultati() {
     }
   }
 
-  // ── Programma ──
   if (daFare.length) {
     html += `<div class="section-label">🕐 Programma <span style="color:var(--testo-xs);font-weight:600;">(${daFare.length})</span></div>`;
     if (!filtroAttivo) {
@@ -1239,7 +1231,6 @@ async function renderAdminSetup() {
     <div id="import-preview" style="margin-top:14px;"></div>
   </div>`;
   el.innerHTML = html;
-  // Aggiungi prima riga automaticamente se lista vuota
   setTimeout(() => {
     if (document.getElementById('cat-import-list') &&
         document.getElementById('cat-import-list').children.length === 0) {
@@ -1270,8 +1261,6 @@ async function addCategoria() {
   }
   renderCatBar(); toast('Categoria aggiunta!'); await renderAdminSetup();
 }
-
-
 
 // ============================================================
 //  RIGHE CATEGORIA + EXCEL
@@ -1332,15 +1321,13 @@ function _rimuoviRiga(idx) {
   if (el) el.remove();
 }
 
-let _fileRighe = {}; // idx -> dati excel parsati
+let _fileRighe = {};
 
 function _fileSelezionato(event, idx) {
   const file = event.target.files[0];
   if (!file) return;
   const label = document.getElementById(`cat-file-label-${idx}`);
   if (label) label.textContent = `📄 ${file.name}`;
-
-  // Preview immediato
   _parseExcelRiga(file, idx);
 }
 
@@ -1369,13 +1356,11 @@ async function _parseExcelRiga(file, idx) {
 
     _fileRighe[idx] = dati;
 
-    // Mostra riepilogo
     const totGironi = dati.gironi.length;
     const totPartite = dati.partite.length;
     const totFinali = dati.fase2.length;
     const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
 
-    // Auto-compila nome categoria dal file se vuoto
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
       nomeCatInput.value = dati.categorie[0].nome;
     }
@@ -1411,11 +1396,9 @@ async function _importaRiga(idx) {
 
   if (!dati) { toast('Carica prima un file Excel'); return; }
 
-  // Sovrascrivi il nome categoria con quello scritto dall'utente
   if (nomeScritto && dati.categorie.length) {
     dati.categorie[0].nome = nomeScritto;
     dati.categorie[0].codice = nomeScritto;
-    // Aggiorna anche i riferimenti nelle partite e gironi
     const vecchioNome = dati.gironi[0]?.categoria;
     if (vecchioNome) {
       dati.gironi.forEach(g => { if(g.categoria === vecchioNome) g.categoria = nomeScritto; });
@@ -1434,11 +1417,9 @@ async function _importaRiga(idx) {
     if (!tornei.data?.length) throw new Error('Nessun torneo attivo');
     const torneoId = STATE.activeTorneo || tornei.data[0].id;
 
-    // Usa la funzione di importazione esistente
     window._importDati = dati;
     await eseguiImportazioneConTorneo(torneoId, dati, btn);
 
-    // Feedback sulla riga
     const riga = document.getElementById(`cat-riga-${idx}`);
     if (riga) {
       riga.style.background = 'var(--verde-bg)';
@@ -1448,7 +1429,6 @@ async function _importaRiga(idx) {
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
 
-    // Aggiorna stato
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
     renderCatBar();
 
@@ -1487,7 +1467,7 @@ async function deleteCat(id) {
 // ============================================================
 async function renderAdminLoghi() {
   const el=document.getElementById('sec-a-loghi');
-  const squadre=await dbGetSquadreFull(STATE.activeTorneo); // con logo
+  const squadre=await dbGetSquadreFull(STATE.activeTorneo);
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
   let html='<div class="section-label">Loghi squadre</div><div class="card">';
   html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
@@ -1499,7 +1479,6 @@ async function renderAdminLoghi() {
       📁 Carica loghi da cartella
       <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
     </label>
-
     <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">
       📦 Comprimi loghi grandi
     </button>
@@ -1521,9 +1500,7 @@ async function renderAdminLoghi() {
   }
   html+='</div>'; el.innerHTML=html;
 }
-// ============================================================
-//  CARICA LOGHI DA CARTELLA — abbinamento intelligente v2
-// ============================================================
+
 async function caricaLoghiDaCartella(event) {
   const files = Array.from(event.target.files);
   const log = document.getElementById('loghi-auto-log');
@@ -1534,15 +1511,13 @@ async function caricaLoghiDaCartella(event) {
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
 
-  // Prefissi da rimuovere all'inizio
   const PREFISSI = /^(a\.s\.d\.|asd|ssd|acd|usd|a\.c\.|ac|a\.s\.|as|u\.s\.|us|s\.s\.|ss|ssc|asc|fc|f\.c\.|gc|gc|pd|pol|polisportiva|unione|sporting|real|atletico|athletic|pro|new|calcio|football|club|team)\s*/gi;
-  // Suffissi da rimuovere alla fine
   const SUFFISSI = /\s*(calcio|football|club|sport|city|united|1972|1908|1919|1973|2016|2024|verde|bianco|blu|grigio|srl|spa|s\.p\.a\.|f\.c\.)\s*$/gi;
 
   const norm = (s) => {
     if (!s) return '';
     let r = s.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // togli accenti
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[''`]/g, '')
       .replace(PREFISSI, '')
       .replace(SUFFISSI, '')
@@ -1552,29 +1527,20 @@ async function caricaLoghiDaCartella(event) {
     return r;
   };
 
-  // Token principali (parole >= 3 lettere)
   const tokens = (s) => norm(s).split(' ').filter(w => w.length >= 3);
 
   const similarita = (fileStr, sqStr) => {
     const fn = norm(fileStr);
     const sn = norm(sqStr);
     if (!fn || !sn) return 0;
-
-    // 1. Corrispondenza esatta dopo normalizzazione
     if (fn === sn) return 1.0;
-
-    // 2. Uno contiene l'altro
     if (sn.includes(fn) || fn.includes(sn)) {
       return Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
     }
-
-    // 3. Inizia con (es. "rho" → "rhodense", "luc" → "luciano manara")
     if (sn.startsWith(fn) || fn.startsWith(sn)) {
       const ratio = Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
       return ratio * 0.95;
     }
-
-    // 4. Token in comune
     const tf = tokens(fileStr);
     const ts = tokens(sqStr);
     if (!tf.length || !ts.length) return 0;
@@ -1584,18 +1550,12 @@ async function caricaLoghiDaCartella(event) {
       else if (ts.some(t => t.startsWith(w) || w.startsWith(t))) parziali++;
     }
     if (comuni > 0) return (comuni + parziali * 0.5) / Math.max(tf.length, ts.length) * 0.9;
-
-    // 5. Il file è un'abbreviazione (prima lettera di ogni parola)
     const iniziali = ts.map(t => t[0]).join('');
     if (fn === iniziali) return 0.75;
-    // Abbreviazione parziale
     if (iniziali.startsWith(fn) || fn.startsWith(iniziali)) return 0.6;
-
     return 0;
   };
 
-  // Raggruppa squadre per gestire doppioni (stessa squadra in gironi diversi)
-  // Usa Map per tenere solo una per nome normalizzato
   const sqUniche = new Map();
   for (const sq of squadre) {
     const key = norm(sq.nome);
@@ -1624,7 +1584,6 @@ async function caricaLoghiDaCartella(event) {
 
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
-        // Carica logo per TUTTE le squadre con lo stesso nome (doppioni)
         for (const sq of targets) {
           await dbUpdateLogo(sq.id, compressed);
         }
@@ -1648,8 +1607,6 @@ async function caricaLoghiDaCartella(event) {
   event.target.value = '';
 }
 
-
-// ── COMPRIMI LOGHI ESISTENTI ────────────────────────────────
 async function comprimiloghiEsistenti() {
   const btn = document.getElementById('btn-comprimi-loghi');
   const log = document.getElementById('loghi-auto-log');
@@ -1681,7 +1638,7 @@ async function comprimiloghiEsistenti() {
           return arr.buffer;
         }},
         120, 0.75,
-        sq.logo // passa direttamente
+        sq.logo
       );
       const newKb = Math.round(compressed.length * 0.75 / 1024);
       await dbUpdateLogo(sq.id, compressed);
@@ -1740,7 +1697,7 @@ function _comprimiImmagine(file, maxSize = 120, quality = 0.75, dataUrl = null) 
 async function removeLogo(squadra_id) { await dbUpdateLogo(squadra_id,null); toast('Logo rimosso'); await renderAdminLoghi(); }
 
 // ============================================================
-//  ADMIN: RISULTATI — ordinati per orario, con chi ha inserito
+//  ADMIN: RISULTATI
 // ============================================================
 let openScorers={};
 
@@ -1750,12 +1707,10 @@ async function renderAdminRisultati() {
   el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const gironi=await getGironiWithData(STATE.activeCat);
 
-  // Raccoglie tutte le partite e ordina per orario
   let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id });
   }
-  // Filtra per giornata se selezionata
   if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') {
     tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
@@ -1860,7 +1815,6 @@ async function saveMarcatori(partita_id, girone_id) {
 async function renderAdminKnockout() {
   const el=document.getElementById('sec-a-knockout');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  // Risolvi automaticamente i placeholder prima di mostrare
   await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
@@ -1931,27 +1885,10 @@ async function saveKO(match_id) {
 
 async function risolviManuale() {
   if (!STATE.activeCat) return;
-  const {data:gironi}=await db.from('gironi').select('id,nome').eq('categoria_id',STATE.activeCat);
-  if (!gironi||!gironi.length) { toast('Nessun girone trovato'); return; }
-  const classificheGironi={};
-  for (const g of gironi) {
-    const {data:partite}=await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id',g.id);
-    const {data:gsRows}=await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id',g.id);
-    const squadre=(gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
-    classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:partite||[]});
-  }
-  const {data:matches}=await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id',STATE.activeCat);
-  let risolti=0;
-  for (const match of (matches||[])) {
-    const newH=_resolvePlaceholder(match.note_home,classificheGironi);
-    const newA=_resolvePlaceholder(match.note_away,classificheGironi);
-    if ((newH&&newH!==match.home_id)||(newA&&newA!==match.away_id)) {
-      const upd={}; if(newH)upd.home_id=newH; if(newA)upd.away_id=newA;
-      await db.from('knockout').update(upd).eq('id',match.id); risolti++;
-    }
-  }
-  if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
-  else toast('ℹ️ Nessun accoppiamento da aggiornare');
+  toast('⏳ Risoluzione accoppiamenti in corso...');
+  await verificaEGeneraTriangolari(STATE.activeCat);
+  await renderAdminKnockout();
+  toast('✅ Accoppiamenti aggiornati!');
 }
 
 // ============================================================
@@ -2051,11 +1988,11 @@ function loadScript(src) {
 window.addEventListener('DOMContentLoaded', init);
 
 // ============================================================
-//  TV MODE — scorre tutte le categorie, filtra per oggi
+//  TV MODE
 // ============================================================
 let _tvState = {
   active: false,
-  section: 'classifiche', // classifiche | risultati
+  section: 'classifiche',
   catIndex: 0,
   scrollTimer: null,
   catTimer: null,
@@ -2081,13 +2018,11 @@ function closeTV() {
   clearInterval(_tvState.scrollTimer);
   clearInterval(_tvState.catTimer);
   clearInterval(_tvState.clockTimer);
-  // Reset scroll progress
   const prog = document.getElementById('tv-scroll-progress');
   if (prog) prog.style.width = '0%';
 }
 
 function _tvCategorieFiltrate() {
-  // Usa tutte le categorie disponibili
   return STATE.categorie;
 }
 
@@ -2109,7 +2044,6 @@ async function _tvShowCat(idx) {
   if (!cats[idx]) return;
   const cat = cats[idx];
 
-  // Carica dati con filtro giorno
   const oggi = _tvGetOggi();
   const content = document.getElementById('tv-content');
   if (!content) return;
@@ -2126,7 +2060,6 @@ async function _tvShowCat(idx) {
 }
 
 function _tvGetOggi() {
-  // Restituisce la giornata di oggi se disponibile
   const giornate = STATE._giornateDisponibili || [];
   return _trovaGiornataOggi(giornate);
 }
@@ -2154,7 +2087,6 @@ async function _tvRenderClassifiche(cat, oggi, container) {
         <tbody>`;
     cl.forEach((row, idx) => {
       const q = idx < (cat.qualificate || 1);
-      const diff = row.gf - row.gs;
       html += `<tr class="${q ? 'qualifies' : ''}">
         <td><span class="${q ? 'q-dot' : 'nq-dot'}"></span></td>
         <td>${logoHTML(row.sq, 'sm')}</td>
@@ -2176,7 +2108,6 @@ async function _tvRenderRisultati(cat, oggi, container) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome });
   }
 
-  // Filtra per oggi se disponibile
   if (oggi) {
     const filtrateOggi = tuttePartite.filter(p => p.giorno === oggi);
     if (filtrateOggi.length) tuttePartite = filtrateOggi;
@@ -2283,7 +2214,7 @@ function _tvStartClock() {
 }
 
 function _tvStartAutoscroll() {
-  const SCROLL_INTERVAL = 30000; // 30s per categoria
+  const SCROLL_INTERVAL = 30000;
   let elapsed = 0;
   const TICK = 200;
 
@@ -2294,13 +2225,11 @@ function _tvStartAutoscroll() {
     const prog = document.getElementById('tv-scroll-progress');
     if (prog) prog.style.width = Math.min(pct, 100) + '%';
 
-    // Scrolla il contenuto
     const content = document.getElementById('tv-content');
     if (content) {
       content.scrollTop += 2;
-      // Se arrivato in fondo, passa alla categoria successiva
       if (content.scrollTop + content.clientHeight >= content.scrollHeight - 10) {
-        elapsed = SCROLL_INTERVAL; // forza cambio
+        elapsed = SCROLL_INTERVAL;
       }
     }
 
