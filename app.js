@@ -1832,9 +1832,17 @@ async function renderAdminKnockout() {
   let html='';
   if (pending.length) {
     html+=`<div class="card" style="border-left:4px solid #e67e22;margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;color:#e67e22;">⏳ ${pending.length} accoppiamenti in attesa dei gironi</div>
-      <button class="btn btn-p btn-sm" style="margin-top:10px;" onclick="risolviManuale()">🔄 Risolvi ora</button>
-    </div>`;
+      <div style="font-size:13px;font-weight:700;color:#e67e22;margin-bottom:8px;">⏳ ${pending.length} accoppiamenti in attesa</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px;">
+        Se hai già i risultati dei gironi, clicca "Risolvi automatico".<br>
+        Se vuoi assegnare le squadre manualmente, usa "Assegna manualmente".
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-p btn-sm" onclick="risolviManuale()">🔄 Risolvi automatico</button>
+        <button class="btn btn-accent btn-sm" onclick="mostraAssegnazioneManuale()">✏️ Assegna manualmente</button>
+      </div>
+    </div>
+    <div id="assegnazione-manuale-panel" style="display:none;"></div>`;
   }
   if (!ko.length) { el.innerHTML=html+'<div class="empty-state">Nessuna partita. Importa un Excel con FASE_FINALE.</div>'; return; }
   const rounds={}; ko.forEach(m=>{ if(!rounds[m.round_name])rounds[m.round_name]=[]; rounds[m.round_name].push(m); });
@@ -1901,7 +1909,9 @@ async function risolviManuale() {
     const {data:partite}=await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id',g.id);
     const {data:gsRows}=await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id',g.id);
     const squadre=(gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
-    classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:partite||[]});
+    // Usa tutte le partite (anche parziali)
+    const giocate=(partite||[]).filter(p=>p.giocata);
+    if(giocate.length>0) classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:giocate});
   }
   const {data:matches}=await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id',STATE.activeCat);
   let risolti=0;
@@ -1914,7 +1924,94 @@ async function risolviManuale() {
     }
   }
   if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
-  else toast('ℹ️ Nessun accoppiamento da aggiornare');
+  else toast('ℹ️ Nessun accoppiamento da aggiornare — inserisci prima i risultati dei gironi');
+}
+
+// ── ASSEGNAZIONE MANUALE ─────────────────────────────────────
+async function mostraAssegnazioneManuale() {
+  const panel = document.getElementById('assegnazione-manuale-panel');
+  if (!panel) return;
+  if (panel.style.display !== 'none') { panel.style.display='none'; return; }
+
+  const ko = await dbGetKnockout(STATE.activeCat);
+  const squadre = await dbGetSquadre(STATE.activeTorneo);
+  const sqMap = {}; squadre.forEach(s=>sqMap[s.id]=s);
+  const pending = ko.filter(k=>!k.home_id||!k.away_id);
+
+  if (!pending.length) { toast('Nessun accoppiamento da assegnare'); return; }
+
+  const optsSq = squadre.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
+
+  let html = `<div class="card" style="border:2px solid var(--arancio,#E85C00);margin-bottom:14px;">
+    <div class="card-title" style="margin-bottom:12px;">✏️ Assegnazione manuale squadre</div>
+    <div style="font-size:12px;color:#888;margin-bottom:14px;">
+      Assegna manualmente le squadre alle partite in attesa. Usa questa opzione se i gironi non sono ancora stati giocati.
+    </div>`;
+
+  for (const m of pending) {
+    const rname = m.round_name || 'Partita';
+    html += `<div style="background:var(--sfondo,#f5f5f5);border-radius:8px;padding:12px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:#E85C00;margin-bottom:8px;">${rname}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;">
+          <div style="font-size:10px;color:#888;margin-bottom:3px;">${m.note_home||'Casa'}</div>
+          <select id="man_h_${m.id}" class="form-input" style="font-size:12px;padding:6px 8px;">
+            <option value="">-- Seleziona --</option>
+            ${optsSq}
+          </select>
+        </div>
+        <span style="font-weight:700;color:#888;">vs</span>
+        <div style="flex:1;min-width:120px;">
+          <div style="font-size:10px;color:#888;margin-bottom:3px;">${m.note_away||'Ospite'}</div>
+          <select id="man_a_${m.id}" class="form-input" style="font-size:12px;padding:6px 8px;">
+            <option value="">-- Seleziona --</option>
+            ${optsSq}
+          </select>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="salvaAssegnazioneManuale(${m.id})">✓ Salva</button>
+      </div>
+    </div>`;
+  }
+
+  html += `<button class="btn btn-p" style="width:100%;margin-top:4px;" onclick="salvaAssegnazioniTutte()">
+    ✓ Salva tutte le assegnazioni
+  </button></div>`;
+
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+  panel.scrollIntoView({behavior:'smooth'});
+}
+
+async function salvaAssegnazioneManuale(matchId) {
+  const hSel = document.getElementById(`man_h_${matchId}`);
+  const aSel = document.getElementById(`man_a_${matchId}`);
+  const hId = hSel?.value ? parseInt(hSel.value) : null;
+  const aId = aSel?.value ? parseInt(aSel.value) : null;
+  if (!hId || !aId) { toast('Seleziona entrambe le squadre'); return; }
+  if (hId === aId) { toast('Le due squadre devono essere diverse'); return; }
+  const upd = {};
+  if (hId) upd.home_id = hId;
+  if (aId) upd.away_id = aId;
+  await db.from('knockout').update(upd).eq('id', matchId);
+  toast('✓ Squadre assegnate!');
+  await renderAdminKnockout();
+}
+
+async function salvaAssegnazioniTutte() {
+  const ko = await dbGetKnockout(STATE.activeCat);
+  const pending = ko.filter(k=>!k.home_id||!k.away_id);
+  let salvati = 0;
+  for (const m of pending) {
+    const hSel = document.getElementById(`man_h_${m.id}`);
+    const aSel = document.getElementById(`man_a_${m.id}`);
+    const hId = hSel?.value ? parseInt(hSel.value) : null;
+    const aId = aSel?.value ? parseInt(aSel.value) : null;
+    if (!hId || !aId || hId===aId) continue;
+    await db.from('knockout').update({home_id:hId, away_id:aId}).eq('id', m.id);
+    salvati++;
+  }
+  if (salvati > 0) { toast(`✓ ${salvati} partite aggiornate!`); await renderAdminKnockout(); }
+  else toast('Nessuna assegnazione completata — seleziona le squadre prima');
 }
 
 // ============================================================
