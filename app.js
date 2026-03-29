@@ -712,15 +712,16 @@ async function verificaEGeneraTriangolari(categoriaId) {
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
       if (!partite||partite.length===0) continue;
-      // Girone completo solo se ha almeno una partita e tutte giocate
-      if (partite.some(p=>!p.giocata)) continue;
+      // Usa girone se almeno UNA partita è giocata (non richiede girone completo)
+      const giocate = partite.filter(p=>p.giocata);
+      if (giocate.length === 0) continue;
       const { data: gsRows } = await db.from('girone_squadre')
         .select('squadra_id,squadre(id,nome,logo)')
         .eq('girone_id', g.id);
       const squadre = (gsRows||[]).map(r=>({
         id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
       }));
-      classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
+      classificheGironi[g.nome] = calcGironeClassifica({squadre,partite:giocate});
     }
 
     // Se nessun girone è completo non fare nulla
@@ -786,30 +787,29 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
   }
 
   // Gestisce "N° Girone X" — supporta nomi composti tipo "Girone Silver 1", "Girone Gold 2"
-  // Pattern: numero + "Girone" + tutto il resto del nome
   const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
     const gironePart = m[2].trim();
-
-    // Cerca prima match esatto, poi case-insensitive
     const nomeGirone = `Girone ${gironePart}`;
+
+    // 1. Match esatto
     let cl = classificheGironi[nomeGirone];
 
-    // Fallback: cerca case-insensitive tra tutte le chiavi
+    // 2. Case-insensitive
     if (!cl) {
-      const chiave = Object.keys(classificheGironi).find(k =>
+      const k = Object.keys(classificheGironi).find(k =>
         k.toLowerCase() === nomeGirone.toLowerCase()
       );
-      if (chiave) cl = classificheGironi[chiave];
+      if (k) cl = classificheGironi[k];
     }
 
-    // Fallback 2: cerca per suffisso (es. "Silver 1" dentro "Girone Silver 1")
+    // 3. Suffisso (es. "Silver 1" dentro "Girone Silver 1")
     if (!cl) {
-      const chiave = Object.keys(classificheGironi).find(k =>
+      const k = Object.keys(classificheGironi).find(k =>
         k.toLowerCase().endsWith(gironePart.toLowerCase())
       );
-      if (chiave) cl = classificheGironi[chiave];
+      if (k) cl = classificheGironi[k];
     }
 
     if (!cl || cl.length < pos) return null;
@@ -821,11 +821,11 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
   if (mShort) {
     const pos = parseInt(mShort[1]);
     const gir = mShort[2].toUpperCase();
-    const chiave = Object.keys(classificheGironi).find(k =>
+    const k = Object.keys(classificheGironi).find(k =>
       k.toUpperCase().endsWith(` ${gir}`) || k.toUpperCase() === `GIRONE ${gir}`
     );
-    if (!chiave) return null;
-    const cl = classificheGironi[chiave];
+    if (!k) return null;
+    const cl = classificheGironi[k];
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
