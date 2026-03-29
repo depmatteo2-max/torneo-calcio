@@ -770,6 +770,11 @@ function _calcolaMiglioriSecondi(classificheGironi) {
   return secondi;
 }
 
+function _isPlaceholder(nome) {
+  if (!nome) return false;
+  return /^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(nome.trim());
+}
+
 function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[]) {
   if (!placeholder) return null;
   const s = placeholder.trim();
