@@ -39,12 +39,19 @@ async function importaExcel(event) {
     const buf = await file.arrayBuffer();
     const wb  = XLSX.read(buf, { type: 'array' });
 
-    const dati = {
-      categorie : leggiCategorie(wb),
-      gironi    : leggiGironi(wb),
-      partite   : leggiPartiteFase1(wb),
-      fase2     : leggiPartiteFase2(wb)
-    };
+    // ── Rileva automaticamente il formato del file ──────────
+    const isCalendarioFormat = _isFormatoCalendario(wb);
+    let dati;
+    if (isCalendarioFormat) {
+      dati = leggiFormatoCalendario(wb);
+    } else {
+      dati = {
+        categorie : leggiCategorie(wb),
+        gironi    : leggiGironi(wb),
+        partite   : leggiPartiteFase1(wb),
+        fase2     : leggiPartiteFase2(wb)
+      };
+    }
 
     if (!dati.categorie.length) {
       preview.innerHTML = '<div style="padding:16px;color:#c00;">❌ Nessuna categoria trovata. Controlla il foglio CATEGORIE.</div>';
@@ -479,4 +486,203 @@ async function aggiornaDopoImport() {
       }
     }
   } catch(e) { location.reload(); }
+}
+
+// ============================================================
+//  FORMATO CALENDARIO AUTOMATICO
+//  Riconosce fogli tipo "Finali 19 Aprile" con struttura:
+//  Ora | Campo 1 | Campo 2 | ...
+//  09:30 | 3A - 4B | 1C - 2D | ...
+//  Finale Gold 1°-2° | ...
+// ============================================================
+
+// Determina se il workbook usa il formato calendario (nessun foglio CATEGORIE)
+function _isFormatoCalendario(wb) {
+  const sheetNames = wb.SheetNames.map(s => s.toUpperCase());
+  const hasStandard = sheetNames.includes('CATEGORIE') || sheetNames.includes('GIRONI');
+  if (hasStandard) return false;
+  // Controlla se almeno un foglio ha una struttura tipo orario+campi
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (_hasCalendarioStructure(rows)) return true;
+  }
+  return false;
+}
+
+function _hasCalendarioStructure(rows) {
+  if (!rows || rows.length < 2) return false;
+  // Cerca una riga header con "Campo" oppure una riga con orari tipo HH:MM
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const joined = rows[i].map(c => String(c || '').trim()).join('|');
+    if (/campo/i.test(joined)) return true;
+    // Orario nel primo campo
+    if (/^\d{1,2}:\d{2}/.test(String(rows[i][0] || '').trim())) return true;
+  }
+  return false;
+}
+
+// Parser principale per il formato calendario
+function leggiFormatoCalendario(wb) {
+  const tuttePartite = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (!_hasCalendarioStructure(rows)) continue;
+
+    // Trova riga header (contiene "Campo" o "Ora")
+    let headerIdx = 0;
+    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+      const joined = rows[i].map(c => String(c || '').toUpperCase()).join('|');
+      if (joined.includes('CAMPO') || joined.includes('ORA')) {
+        headerIdx = i; break;
+      }
+    }
+
+    const hdrs = rows[headerIdx].map(c => String(c || '').trim());
+    // hdrs[0] = "Ora", hdrs[1] = "Campo 1", hdrs[2] = "Campo 2", ecc.
+
+    const campi = hdrs.slice(1).filter(h => h);
+
+    for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+      const row = rows[ri];
+      const oraRaw = String(row[0] || '').trim();
+      if (!oraRaw) continue;
+
+      for (let ci = 0; ci < campi.length; ci++) {
+        const campo = campi[ci];
+        const cella = String(row[ci + 1] || '').trim();
+        if (!cella) continue;
+
+        const partita = _parseCellaCalendario(cella, oraRaw, campo, sheetName);
+        if (partita) tuttePartite.push(partita);
+      }
+    }
+  }
+
+  if (!tuttePartite.length) return { categorie: [], gironi: [], partite: [], fase2: [] };
+
+  // Determina automaticamente le categorie dai round trovati
+  // Raggruppa per foglio/round
+  const roundsMap = {};
+  tuttePartite.forEach(p => {
+    const key = p.roundKey;
+    if (!roundsMap[key]) roundsMap[key] = { roundKey: key, roundLabel: p.roundLabel, roundOrder: p.roundOrder, consolazione: p.consolazione, partite: [] };
+    roundsMap[key].partite.push(p);
+  });
+
+  // Crea una categoria unica per il foglio
+  const sheetNomi = [...new Set(tuttePartite.map(p => p.sheetName))];
+  const categorie = sheetNomi.map(nome => ({
+    codice: nome, nome, qualificate: 1, formato: 'triangolare'
+  }));
+
+  // Converti in formato fase2
+  const fase2 = tuttePartite.map((p, idx) => ({
+    categoria  : p.sheetName,
+    round      : p.roundKey,
+    roundLabel : p.roundLabel,
+    roundOrder : p.roundOrder,
+    matchOrder : idx,
+    consolazione: p.consolazione,
+    orario     : p.orario,
+    campo      : p.campo,
+    giorno     : '',
+    sq1raw     : p.sq1raw,  // es. "1° Girone A" o "Finale Gold 1°-2°"
+    sq2raw     : p.sq2raw,
+  }));
+
+  return { categorie, gironi: [], partite: [], fase2 };
+}
+
+// Parsa una singola cella del calendario
+function _parseCellaCalendario(cella, ora, campo, sheetName) {
+  // Caso 1: Finale speciale tipo "Finale Gold 1°-2°", "Finale Silver 3°-4°"
+  const finaleMatch = cella.match(/^(Finale\s+\w+.*)$/i);
+  if (finaleMatch) {
+    // Es: "Finale Gold 1°-2°" → round = GOLD, sq1 = "1° Finale Gold", sq2 = "2° Finale Gold"
+    const label = finaleMatch[1];
+    const roundInfo = _detectRoundFromLabel(label);
+    return {
+      sheetName,
+      orario     : ora,
+      campo,
+      roundKey   : roundInfo.key,
+      roundLabel : roundInfo.label,
+      roundOrder : roundInfo.order,
+      consolazione: roundInfo.consolazione,
+      sq1raw     : label + ' - 1°',
+      sq2raw     : label + ' - 2°',
+      isFinale   : true,
+    };
+  }
+
+  // Caso 2: Partita girone tipo "3A - 4B", "1A - 2B"
+  const giroMatch = cella.match(/^(\d+)([A-Za-z]+)\s*[-–]\s*(\d+)([A-Za-z]+)$/);
+  if (giroMatch) {
+    const pos1 = parseInt(giroMatch[1]);
+    const gir1 = giroMatch[2].toUpperCase();
+    const pos2 = parseInt(giroMatch[3]);
+    const gir2 = giroMatch[4].toUpperCase();
+
+    // Determina round in base alle posizioni (1-2 = GOLD/PLATINO, 3-4 = SILVER, 5+ = BRONZO/WHITE)
+    const roundInfo = _detectRoundFromPositions(pos1, pos2);
+
+    return {
+      sheetName,
+      orario     : ora,
+      campo,
+      roundKey   : roundInfo.key,
+      roundLabel : roundInfo.label,
+      roundOrder : roundInfo.order,
+      consolazione: roundInfo.consolazione,
+      sq1raw     : `${pos1}° Girone ${gir1}`,
+      sq2raw     : `${pos2}° Girone ${gir2}`,
+      isFinale   : false,
+    };
+  }
+
+  return null;
+}
+
+function _detectRoundFromLabel(label) {
+  const l = label.toUpperCase();
+  if (l.includes('PLATINO')) return { key: 'PLATINO', label: `🥇 PLATINO — 1° classificate`, order: 0, consolazione: false };
+  if (l.includes('GOLD'))    return { key: 'GOLD',    label: `🥈 GOLD — 2° classificate`,    order: 1, consolazione: false };
+  if (l.includes('SILVER'))  return { key: 'SILVER',  label: `🥉 SILVER — 3° classificate`,  order: 2, consolazione: true };
+  if (l.includes('BRONZO') || l.includes('BRONZE')) return { key: 'BRONZO', label: `🏅 BRONZO — 4° classificate`, order: 3, consolazione: true };
+  if (l.includes('WHITE'))   return { key: 'WHITE',   label: `⬜ WHITE — 5° classificate`,   order: 4, consolazione: true };
+  // Default: crea un round personalizzato dal testo
+  const clean = label.replace(/finale\s*/i, '').trim().split(/\s+/)[0].toUpperCase() || 'GOLD';
+  return { key: clean, label: label, order: 99, consolazione: false };
+}
+
+function _detectRoundFromPositions(pos1, pos2) {
+  const maxPos = Math.max(pos1, pos2);
+  if (maxPos <= 2) return { key: 'GOLD',   label: `🥈 GOLD — 2° classificate`,   order: 1, consolazione: false };
+  if (maxPos <= 4) return { key: 'SILVER', label: `🥉 SILVER — 3° classificate`, order: 2, consolazione: true };
+  if (maxPos <= 6) return { key: 'BRONZO', label: `🏅 BRONZO — 4° classificate`, order: 3, consolazione: true };
+  return             { key: 'WHITE',  label: `⬜ WHITE — 5° classificate`,  order: 4, consolazione: true };
+}
+
+// ============================================================
+//  OVERRIDE _resolvePlaceholder per supportare il nuovo formato
+//  Aggiunge riconoscimento di "Finale Gold - 1°" ecc.
+// ============================================================
+const _origResolvePlaceholder = typeof _resolvePlaceholder !== 'undefined' ? _resolvePlaceholder : null;
+
+function _resolvePlaceholderExtended(placeholder, classificheGironi, miglioriSecondi = []) {
+  if (!placeholder) return null;
+  const s = placeholder.trim();
+
+  // Formato nuovo: "N° Girone X" (già supportato) — passa al resolver originale
+  if (_origResolvePlaceholder) {
+    const result = _origResolvePlaceholder(s, classificheGironi, miglioriSecondi);
+    if (result) return result;
+  }
+
+  // Formato calendario: "1° Girone A", "2° Girone B" ecc. già gestito sopra
+  // Extra: "Finale Gold - 1°" — non risolvibile automaticamente (finale manuale)
+  return null;
 }
