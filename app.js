@@ -706,36 +706,37 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
     const classificheGironi = {};
 
-    // Calcola classifica solo per gironi COMPLETI (tutte partite giocate)
+    // Calcola classifica per ogni girone che ha almeno una partita giocata
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
       if (!partite||partite.length===0) continue;
-      // Girone completo solo se ha almeno una partita e tutte giocate
-      if (partite.some(p=>!p.giocata)) continue;
+      const giocate = partite.filter(p=>p.giocata);
+      if (giocate.length === 0) continue;
       const { data: gsRows } = await db.from('girone_squadre')
         .select('squadra_id,squadre(id,nome,logo)')
         .eq('girone_id', g.id);
       const squadre = (gsRows||[]).map(r=>({
         id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
       }));
-      classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
+      // Usa solo squadre reali (non placeholder)
+      const squadreReali = squadre.filter(s => !/^\d+[°º*]?\s*(Girone|Gruppo)/i.test(s.nome));
+      if (squadreReali.length > 0) {
+        classificheGironi[g.nome] = calcGironeClassifica({squadre: squadreReali, partite: giocate});
+      }
     }
 
-    // Se nessun girone è completo non fare nulla
     if (!Object.keys(classificheGironi).length) return;
 
-    // Calcola anche "miglior 2°" tra tutti i gironi completi
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
+    let risolti = 0;
 
+    // 1. Risolvi placeholder nel KNOCKOUT
     const { data: matches } = await db.from('knockout')
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
-    if (!matches||!matches.length) return;
-
-    let risolti=0;
-    for (const match of matches) {
+    for (const match of (matches||[])) {
       const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
       const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
       const upd={};
@@ -747,10 +748,30 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
+    // 2. Risolvi placeholder nelle PARTITE normali (triangolari)
+    // Cerca partite con note_home/note_away non nulli
+    const { data: partitePlaceholder } = await db.from('partite')
+      .select('id,note_home,note_away,home_id,away_id,girone_id')
+      .in('girone_id', gironi.map(g=>g.id))
+      .or('note_home.not.is.null,note_away.not.is.null');
+
+    for (const p of (partitePlaceholder||[])) {
+      const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
+      const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi);
+      const upd={};
+      if (newH && newH!==p.home_id) upd.home_id=newH;
+      if (newA && newA!==p.away_id) upd.away_id=newA;
+      if (Object.keys(upd).length) {
+        await db.from('partite').update(upd).eq('id',p.id);
+        risolti++;
+      }
+    }
+
     if (risolti>0) {
       _mostraNotificaTriangolari();
       if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
       if (STATE.currentSection==='tabellone') await renderTabellone();
+      if (STATE.currentSection==='a-risultati') await renderAdminRisultati();
     }
   } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
 }
@@ -775,22 +796,50 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
   const s = placeholder.trim();
 
   // Gestisce "Miglior 2°" o "Miglior secondo"
-  if (/miglior\s*2[°º]?/i.test(s)) {
+  if (/miglior\s*2[°º*]?/i.test(s)) {
     return miglioriSecondi[0]?.sq?.id || null;
   }
   // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
-  const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
+  const mMig = s.match(/(\d+)[°º*]?\s*Miglior/i);
   if (mMig) {
     const idx = parseInt(mMig[1]) - 1;
     return miglioriSecondi[idx]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
-  const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
+  // Gestisce "N° Girone X" o "N* Girone X" — supporta nomi composti
+  const m = s.match(/(\d+)[°º*]?\s*(?:del\s*)?(?:Girone|Gruppo)\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
-    const nomeGirone = `Girone ${m[2].trim()}`;
-    const cl = classificheGironi[nomeGirone];
+    const gironePart = m[2].trim();
+    const nomeGirone = `Girone ${gironePart}`;
+
+    // 1. Match esatto
+    let cl = classificheGironi[nomeGirone];
+
+    // 2. Case-insensitive
+    if (!cl) {
+      const k = Object.keys(classificheGironi).find(k =>
+        k.toLowerCase() === nomeGirone.toLowerCase()
+      );
+      if (k) cl = classificheGironi[k];
+    }
+
+    // 3. Suffisso (es. "Silver 1" dentro "Girone Silver 1")
+    if (!cl) {
+      const k = Object.keys(classificheGironi).find(k =>
+        k.toLowerCase().endsWith(gironePart.toLowerCase())
+      );
+      if (k) cl = classificheGironi[k];
+    }
+
+    // 4. Solo lettera finale (es. "A" → "Girone A")
+    if (!cl && gironePart.length === 1) {
+      const k = Object.keys(classificheGironi).find(k =>
+        k.toUpperCase() === `GIRONE ${gironePart.toUpperCase()}`
+      );
+      if (k) cl = classificheGironi[k];
+    }
+
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
@@ -1832,17 +1881,9 @@ async function renderAdminKnockout() {
   let html='';
   if (pending.length) {
     html+=`<div class="card" style="border-left:4px solid #e67e22;margin-bottom:14px;">
-      <div style="font-size:13px;font-weight:700;color:#e67e22;margin-bottom:8px;">⏳ ${pending.length} accoppiamenti in attesa</div>
-      <div style="font-size:12px;color:#888;margin-bottom:10px;">
-        Se hai già i risultati dei gironi, clicca "Risolvi automatico".<br>
-        Se vuoi assegnare le squadre manualmente, usa "Assegna manualmente".
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-p btn-sm" onclick="risolviManuale()">🔄 Risolvi automatico</button>
-        <button class="btn btn-accent btn-sm" onclick="mostraAssegnazioneManuale()">✏️ Assegna manualmente</button>
-      </div>
-    </div>
-    <div id="assegnazione-manuale-panel" style="display:none;"></div>`;
+      <div style="font-size:13px;font-weight:700;color:#e67e22;">⏳ ${pending.length} accoppiamenti in attesa dei gironi</div>
+      <button class="btn btn-p btn-sm" style="margin-top:10px;" onclick="risolviManuale()">🔄 Risolvi ora</button>
+    </div>`;
   }
   if (!ko.length) { el.innerHTML=html+'<div class="empty-state">Nessuna partita. Importa un Excel con FASE_FINALE.</div>'; return; }
   const rounds={}; ko.forEach(m=>{ if(!rounds[m.round_name])rounds[m.round_name]=[]; rounds[m.round_name].push(m); });
@@ -1909,9 +1950,7 @@ async function risolviManuale() {
     const {data:partite}=await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id',g.id);
     const {data:gsRows}=await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id',g.id);
     const squadre=(gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
-    // Usa tutte le partite (anche parziali)
-    const giocate=(partite||[]).filter(p=>p.giocata);
-    if(giocate.length>0) classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:giocate});
+    classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:partite||[]});
   }
   const {data:matches}=await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id',STATE.activeCat);
   let risolti=0;
@@ -1924,94 +1963,7 @@ async function risolviManuale() {
     }
   }
   if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
-  else toast('ℹ️ Nessun accoppiamento da aggiornare — inserisci prima i risultati dei gironi');
-}
-
-// ── ASSEGNAZIONE MANUALE ─────────────────────────────────────
-async function mostraAssegnazioneManuale() {
-  const panel = document.getElementById('assegnazione-manuale-panel');
-  if (!panel) return;
-  if (panel.style.display !== 'none') { panel.style.display='none'; return; }
-
-  const ko = await dbGetKnockout(STATE.activeCat);
-  const squadre = await dbGetSquadre(STATE.activeTorneo);
-  const sqMap = {}; squadre.forEach(s=>sqMap[s.id]=s);
-  const pending = ko.filter(k=>!k.home_id||!k.away_id);
-
-  if (!pending.length) { toast('Nessun accoppiamento da assegnare'); return; }
-
-  const optsSq = squadre.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
-
-  let html = `<div class="card" style="border:2px solid var(--arancio,#E85C00);margin-bottom:14px;">
-    <div class="card-title" style="margin-bottom:12px;">✏️ Assegnazione manuale squadre</div>
-    <div style="font-size:12px;color:#888;margin-bottom:14px;">
-      Assegna manualmente le squadre alle partite in attesa. Usa questa opzione se i gironi non sono ancora stati giocati.
-    </div>`;
-
-  for (const m of pending) {
-    const rname = m.round_name || 'Partita';
-    html += `<div style="background:var(--sfondo,#f5f5f5);border-radius:8px;padding:12px;margin-bottom:10px;">
-      <div style="font-size:12px;font-weight:700;color:#E85C00;margin-bottom:8px;">${rname}</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:120px;">
-          <div style="font-size:10px;color:#888;margin-bottom:3px;">${m.note_home||'Casa'}</div>
-          <select id="man_h_${m.id}" class="form-input" style="font-size:12px;padding:6px 8px;">
-            <option value="">-- Seleziona --</option>
-            ${optsSq}
-          </select>
-        </div>
-        <span style="font-weight:700;color:#888;">vs</span>
-        <div style="flex:1;min-width:120px;">
-          <div style="font-size:10px;color:#888;margin-bottom:3px;">${m.note_away||'Ospite'}</div>
-          <select id="man_a_${m.id}" class="form-input" style="font-size:12px;padding:6px 8px;">
-            <option value="">-- Seleziona --</option>
-            ${optsSq}
-          </select>
-        </div>
-        <button class="btn btn-p btn-sm" onclick="salvaAssegnazioneManuale(${m.id})">✓ Salva</button>
-      </div>
-    </div>`;
-  }
-
-  html += `<button class="btn btn-p" style="width:100%;margin-top:4px;" onclick="salvaAssegnazioniTutte()">
-    ✓ Salva tutte le assegnazioni
-  </button></div>`;
-
-  panel.innerHTML = html;
-  panel.style.display = 'block';
-  panel.scrollIntoView({behavior:'smooth'});
-}
-
-async function salvaAssegnazioneManuale(matchId) {
-  const hSel = document.getElementById(`man_h_${matchId}`);
-  const aSel = document.getElementById(`man_a_${matchId}`);
-  const hId = hSel?.value ? parseInt(hSel.value) : null;
-  const aId = aSel?.value ? parseInt(aSel.value) : null;
-  if (!hId || !aId) { toast('Seleziona entrambe le squadre'); return; }
-  if (hId === aId) { toast('Le due squadre devono essere diverse'); return; }
-  const upd = {};
-  if (hId) upd.home_id = hId;
-  if (aId) upd.away_id = aId;
-  await db.from('knockout').update(upd).eq('id', matchId);
-  toast('✓ Squadre assegnate!');
-  await renderAdminKnockout();
-}
-
-async function salvaAssegnazioniTutte() {
-  const ko = await dbGetKnockout(STATE.activeCat);
-  const pending = ko.filter(k=>!k.home_id||!k.away_id);
-  let salvati = 0;
-  for (const m of pending) {
-    const hSel = document.getElementById(`man_h_${m.id}`);
-    const aSel = document.getElementById(`man_a_${m.id}`);
-    const hId = hSel?.value ? parseInt(hSel.value) : null;
-    const aId = aSel?.value ? parseInt(aSel.value) : null;
-    if (!hId || !aId || hId===aId) continue;
-    await db.from('knockout').update({home_id:hId, away_id:aId}).eq('id', m.id);
-    salvati++;
-  }
-  if (salvati > 0) { toast(`✓ ${salvati} partite aggiornate!`); await renderAdminKnockout(); }
-  else toast('Nessuna assegnazione completata — seleziona le squadre prima');
+  else toast('ℹ️ Nessun accoppiamento da aggiornare');
 }
 
 // ============================================================
