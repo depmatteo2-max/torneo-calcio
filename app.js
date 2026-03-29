@@ -706,36 +706,37 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
     const classificheGironi = {};
 
-    // Calcola classifica solo per gironi COMPLETI (tutte partite giocate)
+    // Calcola classifica per ogni girone con almeno una partita giocata
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
       if (!partite||partite.length===0) continue;
-      // Girone completo solo se ha almeno una partita e tutte giocate
-      if (partite.some(p=>!p.giocata)) continue;
+      const giocate = partite.filter(p=>p.giocata);
+      if (giocate.length===0) continue;
       const { data: gsRows } = await db.from('girone_squadre')
         .select('squadra_id,squadre(id,nome,logo)')
         .eq('girone_id', g.id);
       const squadre = (gsRows||[]).map(r=>({
         id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
       }));
-      classificheGironi[g.nome] = calcGironeClassifica({squadre,partite});
+      // Escludi squadre placeholder dalla classifica
+      const squadreReali = squadre.filter(s => !_isPlaceholder(s.nome));
+      if (squadreReali.length > 0) {
+        classificheGironi[g.nome] = calcGironeClassifica({squadre:squadreReali, partite:giocate});
+      }
     }
 
-    // Se nessun girone è completo non fare nulla
     if (!Object.keys(classificheGironi).length) return;
 
-    // Calcola anche "miglior 2°" tra tutti i gironi completi
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
+    let risolti = 0;
 
+    // 1. Risolvi placeholder nel KNOCKOUT
     const { data: matches } = await db.from('knockout')
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
-    if (!matches||!matches.length) return;
-
-    let risolti=0;
-    for (const match of matches) {
+    for (const match of (matches||[])) {
       const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
       const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
       const upd={};
@@ -747,10 +748,49 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
+    // 2. Risolvi placeholder nelle PARTITE normali (triangolari)
+    // Cerca tutte le partite con home_id o away_id null nei gironi di questa categoria
+    for (const g of gironi) {
+      const { data: partiteNull } = await db.from('partite')
+        .select('id,note_home,note_away,home_id,away_id')
+        .eq('girone_id', g.id)
+        .is('home_id', null);
+      for (const p of (partiteNull||[])) {
+        if (!p.note_home && !p.note_away) continue;
+        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
+        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi);
+        const upd={};
+        if (newH) upd.home_id=newH;
+        if (newA) upd.away_id=newA;
+        if (Object.keys(upd).length) {
+          await db.from('partite').update(upd).eq('id',p.id);
+          risolti++;
+        }
+      }
+      // Cerca anche partite con away_id null
+      const { data: partiteNullAway } = await db.from('partite')
+        .select('id,note_home,note_away,home_id,away_id')
+        .eq('girone_id', g.id)
+        .is('away_id', null);
+      for (const p of (partiteNullAway||[])) {
+        if (!p.note_home && !p.note_away) continue;
+        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
+        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi);
+        const upd={};
+        if (newH && newH!==p.home_id) upd.home_id=newH;
+        if (newA && newA!==p.away_id) upd.away_id=newA;
+        if (Object.keys(upd).length) {
+          await db.from('partite').update(upd).eq('id',p.id);
+          risolti++;
+        }
+      }
+    }
+
     if (risolti>0) {
       _mostraNotificaTriangolari();
       if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
       if (STATE.currentSection==='tabellone') await renderTabellone();
+      if (STATE.currentSection==='a-risultati') await renderAdminRisultati();
     }
   } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
 }
