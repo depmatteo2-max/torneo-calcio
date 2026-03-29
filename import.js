@@ -406,11 +406,19 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         (p.categoria === cat.codice || p.categoria === cat.nome) && p.girone === girone.nome
       );
       for (const p of pGir) {
-        const hId = squadreMap[`${torneoId}||${p.home}`];
-        const aId = squadreMap[`${torneoId}||${p.away}`];
-        if (!hId || !aId) { console.warn('Squadra mancante:', p.home, '/', p.away); continue; }
+        // Controlla se home/away sono placeholder tipo "3° Girone A", "1* Girone B"
+        const hIsPlaceholder = _isPlaceholder(p.home);
+        const aIsPlaceholder = _isPlaceholder(p.away);
+        const hId = hIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.home}`] || null);
+        const aId = aIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.away}`] || null);
+        if (!hIsPlaceholder && !hId) { console.warn('Squadra home mancante:', p.home); }
+        if (!aIsPlaceholder && !aId) { console.warn('Squadra away mancante:', p.away); }
         await db.from('partite').insert({
-          girone_id: girId, home_id: hId, away_id: aId,
+          girone_id: girId,
+          home_id: hId,
+          away_id: aId,
+          note_home: hIsPlaceholder ? p.home : null,
+          note_away: aIsPlaceholder ? p.away : null,
           orario: p.orario||null, giorno: p.giorno||null,
           campo: p.campo||null, giornata: p.giornata||null, giocata: false
         });
