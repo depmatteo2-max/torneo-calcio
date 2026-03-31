@@ -1123,12 +1123,12 @@ async function renderRisultati() {
           Clicca per aggiungere indirizzo
         </div>`}
       </div>
-      ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${giorno}')"
+      <button onclick="mostraEditCampoGiornata('${giorno}')"
         style="background:${isOggi?'rgba(255,255,255,0.2)':'white'};border:1px solid ${isOggi?'rgba(255,255,255,0.3)':'var(--bordo)'};
                color:${isOggi?'white':'var(--testo-lt)'};border-radius:6px;padding:4px 10px;
                font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
-        ✏️ ${campo ? 'Modifica' : 'Aggiungi'} luogo
-      </button>` : ''}
+        ✏️ ${campo ? 'Modifica' : 'Aggiungi'}
+      </button>
       <div id="edit-campo-${keyId}" style="display:none;width:100%;margin-top:8px;"></div>
     </div>`;
   };
