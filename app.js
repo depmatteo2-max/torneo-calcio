@@ -1096,6 +1096,16 @@ async function renderRisultati() {
     return r;
   };
 
+  // ── Carica campi giornate ──
+  if (!STATE._campiGiornate) {
+    try {
+      const cg = await dbGetCampiGiornate(STATE.activeTorneo);
+      const _cm = {}; cg.forEach(c => _cm[c.giorno] = c);
+      STATE._campiGiornate = _cm;
+    } catch(e) { STATE._campiGiornate = {}; }
+  }
+  const campiMap = STATE._campiGiornate || {};
+
   // ── Helper: banner giornata con campo ──
   const _bannerGiornata = (giorno, isOggi) => {
     const campo = campiMap[giorno];
@@ -2740,6 +2750,7 @@ async function salvaCampoGiornata(giorno) {
     if (!STATE._campiGiornate) STATE._campiGiornate = {};
     STATE._campiGiornate[giorno] = { nome_campo: nomeCampo, indirizzo };
     toast('✅ Luogo salvato!');
+    if (STATE.currentSection === 'risultati') await renderRisultati();
     await renderAdminRisultati();
   } catch(e) {
     toast('❌ Errore: ' + e.message);
