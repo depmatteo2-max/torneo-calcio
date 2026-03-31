@@ -216,3 +216,22 @@ async function preloadCategoria(categoriaId) {
   getGironiWithData(categoriaId).catch(()=>{});
   dbGetKnockout(categoriaId).catch(()=>{});
 }
+
+// ── CAMPI GIORNATE ─────────────────────────────────────────
+async function dbGetCampiGiornate(torneoId) {
+  if (!torneoId) return [];
+  const k = `campi_${torneoId}`;
+  const c = _cacheGet(k); if (c) return c;
+  const { data } = await db.from('campi_giornate')
+    .select('*').eq('torneo_id', torneoId).order('giorno');
+  _cacheSet(k, data || []);
+  return data || [];
+}
+
+async function dbSaveCampoGiornata(torneoId, giorno, nomeCampo, indirizzo) {
+  const { error } = await db.from('campi_giornate')
+    .upsert({ torneo_id: torneoId, giorno, nome_campo: nomeCampo, indirizzo },
+             { onConflict: 'torneo_id,giorno' });
+  if (error) throw error;
+  _cacheInvalid('campi_');
+}

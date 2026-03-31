@@ -836,12 +836,56 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
     return miglioriSecondi[idx]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" — es. "1° Girone 1", "3° Girone A"
-  const m = s.match(/(\d+)[°º]?\s*(?:del\s*)?Girone\s+(.+)/i);
+  // Gestisce "N° Girone X" o "N° Gruppo X" — es. "1° Girone A", "2° Gruppo B", "1° Girone Unico"
+  const m = s.match(/(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
-    const nomeGirone = `Girone ${m[2].trim()}`;
-    const cl = classificheGironi[nomeGirone];
+    const tipo = m[2]; // "Girone" o "Gruppo"
+    const resto = m[3].trim();
+
+    // Prova prima con il tipo originale (es. "Gruppo A"), poi con l'alternativo (es. "Girone A")
+    const candidati = [
+      `${tipo} ${resto}`,
+      `${tipo === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
+    ];
+
+    for (const nomeGirone of candidati) {
+      // 1. Match esatto
+      let cl = classificheGironi[nomeGirone];
+
+      // 2. Case-insensitive
+      if (!cl) {
+        const k = Object.keys(classificheGironi).find(k =>
+          k.toLowerCase() === nomeGirone.toLowerCase()
+        );
+        if (k) cl = classificheGironi[k];
+      }
+
+      // 3. Suffisso (es. "A" dentro "Girone A" o "Gruppo A")
+      if (!cl) {
+        const k = Object.keys(classificheGironi).find(k =>
+          k.toLowerCase().endsWith(' ' + resto.toLowerCase())
+        );
+        if (k) cl = classificheGironi[k];
+      }
+
+      if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+    }
+    return null;
+  }
+
+  // Formato breve "1A", "2B"
+  const mShort = s.match(/^(\d+)[°º*]?([A-Za-z]+\d*)$/);
+  if (mShort) {
+    const pos = parseInt(mShort[1]);
+    const gir = mShort[2].toUpperCase();
+    const k = Object.keys(classificheGironi).find(k =>
+      k.toUpperCase().endsWith(` ${gir}`) ||
+      k.toUpperCase() === `GIRONE ${gir}` ||
+      k.toUpperCase() === `GRUPPO ${gir}`
+    );
+    if (!k) return null;
+    const cl = classificheGironi[k];
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
@@ -1052,6 +1096,33 @@ async function renderRisultati() {
     return r;
   };
 
+  // ── Helper: banner giornata con campo ──
+  const _bannerGiornata = (giorno, isOggi) => {
+    const campo = campiMap[giorno];
+    const colore = isOggi ? 'var(--blu)' : 'var(--sfondo)';
+    const testocolore = isOggi ? 'white' : 'var(--testo-lt)';
+    const bordocolore = isOggi ? 'var(--blu)' : 'var(--bordo)';
+    const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+    return `<div style="background:${colore};border:1px solid ${bordocolore};border-radius:var(--radius);
+      padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:${testocolore};">📅 ${giorno}</div>
+        ${campo ? `<div style="font-size:12px;color:${isOggi?'rgba(255,255,255,0.8)':'var(--testo-xs)'};margin-top:2px;">
+          📍 <strong>${campo.nome_campo||''}</strong>${campo.nome_campo&&campo.indirizzo?' — ':''}${campo.indirizzo||''}
+        </div>` : `<div style="font-size:11px;color:${isOggi?'rgba(255,255,255,0.5)':'var(--testo-xs)'};margin-top:2px;font-style:italic;">
+          Clicca per aggiungere indirizzo
+        </div>`}
+      </div>
+      ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${giorno}')"
+        style="background:${isOggi?'rgba(255,255,255,0.2)':'white'};border:1px solid ${isOggi?'rgba(255,255,255,0.3)':'var(--bordo)'};
+               color:${isOggi?'white':'var(--testo-lt)'};border-radius:6px;padding:4px 10px;
+               font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+        ✏️ ${campo ? 'Modifica' : 'Aggiungi'} luogo
+      </button>` : ''}
+      <div id="edit-campo-${keyId}" style="display:none;width:100%;margin-top:8px;"></div>
+    </div>`;
+  };
+
   // ── Risultati ──
   if (giocate.length) {
     html += `<div class="section-label">✅ Risultati <span style="color:var(--verde);font-weight:800;">(${giocate.length})</span></div>`;
@@ -1064,7 +1135,8 @@ async function renderRisultati() {
         perGiorno[g].push(p);
       });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
-        html += `<div class="day-header">📅 ${giorno}</div>`;
+        const _oggi = _trovaGiornataOggi(STATE._giornateDisponibili||[]);
+        html += _bannerGiornata(giorno, giorno===_oggi);
         html += `<div class="card">`;
         partite.forEach(p => { html += renderPartita(p, true); });
         html += `</div>`;
@@ -1087,9 +1159,9 @@ async function renderRisultati() {
         perGiorno[g].push(p);
       });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
-        html += `<div class="day-header" style="background:var(--sfondo);color:var(--testo-lt);border:1px solid var(--bordo);">📅 ${giorno}</div>`;
+        html += _bannerGiornata(giorno, false);
         html += `<div class="card">`;
-        partite.forEach(p => { html += renderPartita(p, true); });
+        partite.forEach(p => { html += renderPartita(p, false); });
         html += `</div>`;
       }
     } else {
@@ -1763,6 +1835,9 @@ async function renderAdminRisultati() {
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const gironi=await getGironiWithData(STATE.activeCat);
+  const campiGiornate = await dbGetCampiGiornate(STATE.activeTorneo);
+  const campiMap = {}; campiGiornate.forEach(c => campiMap[c.giorno] = c);
+  STATE._campiGiornate = campiMap;
 
   // Raccoglie tutte le partite e ordina per orario
   let tuttePartite = [];
@@ -2628,5 +2703,45 @@ async function resetRisultatiGirone() {
     await renderCurrentSection();
   } catch(e) {
     _simLog(`❌ ${e.message}`);
+  }
+}
+
+// ── MODIFICA CAMPO GIORNATA ──────────────────────────────────
+function mostraEditCampoGiornata(giorno) {
+  const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+  const div = document.getElementById('edit-campo-' + keyId);
+  if (!div) return;
+  if (div.style.display !== 'none') { div.style.display='none'; return; }
+  const esistente = (STATE._campiGiornate||{})[giorno] || {};
+  div.innerHTML = `
+    <div style="background:white;border:1px solid var(--bordo);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">📍 Luogo partite — ${giorno}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="edit-nome-${keyId}" class="form-input" style="flex:1;min-width:120px;font-size:13px;"
+          placeholder="Nome campo (es. Campo Comunale)" value="${esistente.nome_campo||''}">
+        <input id="edit-addr-${keyId}" class="form-input" style="flex:2;min-width:200px;font-size:13px;"
+          placeholder="Indirizzo (es. Via Roma 1, Massa)" value="${esistente.indirizzo||''}">
+        <button onclick="salvaCampoGiornata('${giorno}')"
+          style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 14px;
+                 font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          ✓ Salva
+        </button>
+      </div>
+    </div>`;
+  div.style.display = 'block';
+}
+
+async function salvaCampoGiornata(giorno) {
+  const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+  const nomeCampo = document.getElementById(`edit-nome-${keyId}`)?.value?.trim() || '';
+  const indirizzo = document.getElementById(`edit-addr-${keyId}`)?.value?.trim() || '';
+  try {
+    await dbSaveCampoGiornata(STATE.activeTorneo, giorno, nomeCampo, indirizzo);
+    if (!STATE._campiGiornate) STATE._campiGiornate = {};
+    STATE._campiGiornate[giorno] = { nome_campo: nomeCampo, indirizzo };
+    toast('✅ Luogo salvato!');
+    await renderAdminRisultati();
+  } catch(e) {
+    toast('❌ Errore: ' + e.message);
   }
 }
