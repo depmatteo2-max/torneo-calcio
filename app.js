@@ -1035,11 +1035,24 @@ async function renderRisultati() {
 
   // ── Header giornata in cima ──
   if (filtroAttivo) {
+    const _campoOggi = campiMap[STATE.activeGiornata];
+    const _keyIdOggi = STATE.activeGiornata.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
     html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
-      color:white;border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;
-      font-size:14px;font-weight:700;display:flex;align-items:center;gap:10px;">
-      📅 ${STATE.activeGiornata}
-      <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
+      color:white;border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:700;">📅 ${STATE.activeGiornata}</span>
+        <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
+        <button onclick="mostraEditCampoGiornata('${STATE.activeGiornata}')"
+          style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);
+                 color:white;border-radius:6px;padding:3px 10px;
+                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          ✏️ ${_campoOggi ? 'Modifica' : 'Aggiungi'}
+        </button>
+      </div>
+      ${_campoOggi ? `<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:4px;">
+        📍 <strong>${_campoOggi.nome_campo||''}</strong>${_campoOggi.nome_campo&&_campoOggi.indirizzo?' — ':''}${_campoOggi.indirizzo||''}
+      </div>` : ''}
+      <div id="edit-campo-${_keyIdOggi}" style="display:none;margin-top:8px;"></div>
     </div>`;
   } else {
     // Riepilogo: mostra giorni disponibili come chip cliccabili
