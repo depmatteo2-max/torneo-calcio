@@ -1033,6 +1033,16 @@ async function renderRisultati() {
 
   let html = '';
 
+  // ── Carica campi giornate ──
+  if (!STATE._campiGiornate) {
+    try {
+      const cg = await dbGetCampiGiornate(STATE.activeTorneo);
+      const _cm = {}; cg.forEach(c => _cm[c.giorno] = c);
+      STATE._campiGiornate = _cm;
+    } catch(e) { STATE._campiGiornate = {}; }
+  }
+  const campiMap = STATE._campiGiornate || {};
+
   // ── Header giornata in cima ──
   if (filtroAttivo) {
     const _campoOggi = campiMap[STATE.activeGiornata];
@@ -1108,16 +1118,6 @@ async function renderRisultati() {
     r += `</div>`;
     return r;
   };
-
-  // ── Carica campi giornate ──
-  if (!STATE._campiGiornate) {
-    try {
-      const cg = await dbGetCampiGiornate(STATE.activeTorneo);
-      const _cm = {}; cg.forEach(c => _cm[c.giorno] = c);
-      STATE._campiGiornate = _cm;
-    } catch(e) { STATE._campiGiornate = {}; }
-  }
-  const campiMap = STATE._campiGiornate || {};
 
   // ── Helper: banner giornata con campo ──
   const _bannerGiornata = (giorno, isOggi) => {
