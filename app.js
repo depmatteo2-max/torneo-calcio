@@ -1871,6 +1871,15 @@ async function renderAdminRisultati() {
   }
   tuttePartite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
 
+  // ── Raggruppa per giorno e mostra banner ──
+  const perGiornoAdmin = {};
+  tuttePartite.forEach(p => {
+    const g = p.giorno || '—';
+    if (!perGiornoAdmin[g]) perGiornoAdmin[g] = [];
+    perGiornoAdmin[g].push(p);
+  });
+  const mostraBannerAdmin = Object.keys(perGiornoAdmin).length > 1 || STATE.activeGiornata === 'tutte';
+
   let html='';
   for (const p of tuttePartite) {
     const key='p'+p.id; const open=!!openScorers[key];
@@ -1886,6 +1895,32 @@ async function renderAdminRisultati() {
       <span style="font-size:11px;color:#bbb;">${p._girone}</span>
       ${p.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${p.inserito_da}</span>`:''}
     </div>`;
+    // Banner giornata — mostra solo alla prima partita del giorno
+    const _pgIdx = tuttePartite.indexOf(p);
+    const _prevGiorno = _pgIdx > 0 ? tuttePartite[_pgIdx-1].giorno : null;
+    if (p.giorno && p.giorno !== _prevGiorno) {
+      const _campoG = campiMap[p.giorno] || {};
+      const _keyG = (p.giorno).replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+      html += `<div style="background:var(--blu);color:white;border-radius:var(--radius);
+        padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:13px;font-weight:700;">📅 ${p.giorno}</span>
+            ${_campoG.nome_campo||_campoG.indirizzo ? `<span style="font-size:12px;color:rgba(255,255,255,0.85);">
+              📍 <strong>${_campoG.nome_campo||''}</strong>${_campoG.nome_campo&&_campoG.indirizzo?' — ':''}${_campoG.indirizzo||''}
+            </span>` : ''}
+          </div>
+        </div>
+        <button onclick="mostraEditCampoGiornata('${p.giorno}')"
+          style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);
+                 color:white;border-radius:6px;padding:3px 10px;
+                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          ✏️ ${_campoG.nome_campo ? 'Modifica' : 'Aggiungi'} luogo
+        </button>
+        <div id="edit-campo-${_keyG}" style="display:none;width:100%;margin-top:8px;"></div>
+      </div>`;
+    }
+
     html+=`<div class="admin-match"><div class="admin-match-header">
       ${orInfo}
       <div style="display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;">
