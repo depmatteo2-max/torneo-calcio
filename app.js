@@ -1,3 +1,9 @@
+// ============================================================
+//  SOCCER PRO EXPERIENCE - App principale completa
+//  Include: classifica con spareggio + risoluzione automatica triangolari
+//  + Risultati ordinati per orario + chi ha inserito
+// ============================================================
+
 let STATE = {
   tornei: [],
   activeTorneo: null,
@@ -9,8 +15,10 @@ let STATE = {
   userRole: null,
   userName: null,
 };
+
 async function init() {
   initDB();
+  // Aumenta TTL cache per ridurre chiamate ripetute
   if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
   try {
     STATE.tornei = await dbGetTornei();
@@ -21,14 +29,17 @@ async function init() {
     else if (STATE.tornei.length) STATE.activeTorneo = STATE.tornei[0].id;
     subscribeRealtime(() => { if (!STATE.isAdmin) renderCurrentSection(); });
   } catch (e) { console.error(e); }
+
   document.getElementById('loading-screen').style.display = 'none';
   document.getElementById('main-app').style.display = 'block';
+
   const attivi = STATE.tornei.filter(t => t.attivo);
   if (!attivi.length) { await loadTorneo(); tryAutoLogin(); return; }
   if (attivi.length > 1 && !STATE.activeTorneo) { mostraSelezioneTeorneo(); tryAutoLogin(); return; }
   await loadTorneo();
   tryAutoLogin();
 }
+
 function mostraSelezioneTeorneo() {
   const attivi = STATE.tornei.filter(t => t.attivo);
   document.getElementById('pub-nav').style.display = 'none';
@@ -54,33 +65,44 @@ function mostraSelezioneTeorneo() {
     </div>`;
   if (typeof getLogo === 'function') { const l = getLogo(); if (l) { const img = document.getElementById('sel-logo'); if (img) img.src = l; } }
 }
+
 async function selezionaTorneoPublic(id) {
   STATE.activeTorneo = id;
   _saveSavedTorneo(id);
+
+  // Ricrea le sezioni
   document.getElementById('main-content').innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
+  // Mostra nav pubblica, resetta bottoni attivi
   document.getElementById('pub-nav').style.display = 'flex';
   document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
   const btnClass = document.querySelector('[data-section="classifiche"]');
   if (btnClass) btnClass.classList.add('active');
+
   STATE.currentSection = 'classifiche';
   STATE.activeCat = null; // reset categoria per mostrare selezione
   await loadTorneo();
 }
+
 function _saveSavedTorneo(id) { try { localStorage.setItem('spe_torneo', String(id)); } catch(e) {} }
 function _loadSavedTorneo() { try { const v = localStorage.getItem('spe_torneo'); return v ? parseInt(v) : null; } catch(e) { return null; } }
+
 function _saveSavedCat(id) { try { localStorage.setItem('spe_cat', String(id)); } catch(e) {} }
 function _loadSavedCat() { try { const v = localStorage.getItem('spe_cat'); return v ? parseInt(v) : null; } catch(e) { return null; } }
 function _clearSavedCat() { try { localStorage.removeItem('spe_cat'); } catch(e) {} }
+
 async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   _saveSavedTorneo(STATE.activeTorneo);
   STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+
+  // 1. Controlla link condiviso nell'URL (#cat=X&tab=Y)
   const hashParams = _leggiHash();
   if (hashParams.cat) {
     const catId = parseInt(hashParams.cat);
@@ -93,8 +115,11 @@ async function loadTorneo() {
       return;
     }
   }
+
+  // 2. Ripristina categoria salvata in localStorage
   const savedCatId = _loadSavedCat();
   const catSalvata = savedCatId && STATE.categorie.find(c => c.id === savedCatId);
+
   if (catSalvata) {
     STATE.activeCat = catSalvata.id;
     preloadCategoria(catSalvata.id);
@@ -110,6 +135,7 @@ async function loadTorneo() {
   if (STATE.activeCat) await _caricaGiornate();
   renderTorneoBar(); renderCatBar(); await renderCurrentSection();
 }
+
 function mostraSelezioneCat() {
   const main = document.getElementById('main-content');
   main.innerHTML =
@@ -117,12 +143,14 @@ function mostraSelezioneCat() {
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
   const el = document.getElementById('sec-classifiche');
   el.classList.add('active');
   const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
   const oggiLabel = STATE._giornateDisponibili?.length ? _trovaGiornataOggi(STATE._giornateDisponibili) : null;
   const icons = ['⚽','🏅','🎯','🏆','⭐','🔥'];
   const colors = ['var(--blu-bg)','var(--verde-bg)','var(--arancio-bg)','#fef9c3','#f0fdf4','var(--blu-bg)'];
+
   const catFiltrate = STATE.categorie.filter(c => {
     const n = (c.nome || '').trim();
     if (n.length > 35) return false;
@@ -130,9 +158,12 @@ function mostraSelezioneCat() {
     if (/accedono|vince|finali|spareggio|semifinal|classific|punti|→|=|vs /i.test(n)) return false;
     return true;
   });
+
   const firstId = catFiltrate[0]?.id || 0;
+
   el.innerHTML = `
     <div style="padding-bottom:32px;">
+
       <!-- HERO -->
       <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1a56db 100%);
                   border-radius:16px;padding:24px 20px;margin-bottom:22px;
@@ -153,6 +184,7 @@ function mostraSelezioneCat() {
           </div>` : ''}
         </div>
       </div>
+
       <!-- 3 TASTI PRINCIPALI -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:22px;">
         <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('classifiche',document.querySelector('[data-section=classifiche]'))},150)"
@@ -186,6 +218,7 @@ function mostraSelezioneCat() {
           <span style="font-size:12px;font-weight:800;color:var(--testo);">Tabellone</span>
         </button>
       </div>
+
       <!-- CATEGORIE -->
       <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;
                   letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
@@ -209,6 +242,7 @@ function mostraSelezioneCat() {
             <span style="font-size:18px;color:var(--testo-xs);">›</span>
           </button>`).join('')}
       </div>
+
       ${catFiltrate.length > 1 ? `
       <button onclick="mostraTutteLCategorie()"
         style="width:100%;margin-top:12px;padding:12px;background:var(--sfondo);
@@ -220,14 +254,20 @@ function mostraSelezioneCat() {
         📊 Vedi tutte le categorie insieme
       </button>` : ''}
     </div>`;
+
+  // Logo hero
   if (typeof getLogo === 'function') {
     const l = getLogo();
     if (l) { const img = el.querySelector('#hero-logo'); if(img){img.src=l;img.style.display='block';} }
   }
+
+  // Nascondi nav nella home — più pulita
   document.getElementById('pub-nav').style.display = 'none';
   document.getElementById('cat-bar').style.display = 'none';
   STATE.currentSection = 'classifiche';
 }
+
+
 async function selezionaCategoriaPublic(catId) {
   STATE.activeCat = catId;
   _saveSavedCat(catId);
@@ -241,6 +281,7 @@ async function selezionaCategoriaPublic(catId) {
   _scriviHash(catId, STATE.currentSection); // aggiorna URL
   await renderCurrentSection();
 }
+
 async function mostraTutteLCategorie() {
   _clearSavedCat(); // non salvare — mostra tutto senza filtro
   STATE.activeCat = STATE.categorie[0]?.id || null;
@@ -249,15 +290,19 @@ async function mostraTutteLCategorie() {
   document.getElementById('cat-bar').style.display = '';
   await renderCurrentSection();
 }
+
 function renderTorneoBar() {
   const bar = document.getElementById('torneo-bar'); if (!bar) return;
   const t = STATE.tornei.find(x => x.id === STATE.activeTorneo);
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const multiCat = STATE.categorie.length > 1;
   const multiTorneo = STATE.tornei.filter(x => x.attivo).length > 1;
+
   bar.style.display = '';
+
   bar.innerHTML = `<div style="max-width:700px;margin:0 auto;display:flex;align-items:center;
     gap:6px;padding:6px 12px;min-height:50px;">
+
     <!-- 🏠 Home compatto -->
     <button onclick="${multiTorneo ? 'cambiaTorneo()' : 'cambiaCategoria()'}"
       style="flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;
@@ -267,6 +312,7 @@ function renderTorneoBar() {
       title="Home"
       onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
       onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">🏠</button>
+
     ${cat ? `
       <!-- Categoria — prende tutto lo spazio -->
       <div style="flex:1;min-width:0;">
@@ -277,6 +323,7 @@ function renderTorneoBar() {
           ${cat.nome}
         </div>
       </div>
+
       <!-- Azioni -->
       <div style="display:flex;gap:5px;flex-shrink:0;">
         <button onclick="mostraLinkCondivisibile()"
@@ -299,12 +346,15 @@ function renderTorneoBar() {
     ` : `<div style="flex:1;"></div>`}
   </div>`;
 }
+
+
 async function cambiaCategoria() {
   STATE.activeCat = null;
   _clearSavedCat();
   _cancellaHash(); // rimuove il link dall'URL
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+
   document.getElementById('cat-bar').style.display = 'none';
   document.getElementById('cat-bar').innerHTML = '';
   document.getElementById('main-content').innerHTML =
@@ -312,13 +362,16 @@ async function cambiaCategoria() {
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
   STATE.currentSection = 'classifiche';
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector('[data-section="classifiche"]');
   if (btn) btn.classList.add('active');
+
   renderTorneoBar(); // ridisegna subito la barra con 🏠
   mostraSelezioneCat();
 }
+
 async function cambiaTorneo() {
   STATE.activeTorneo = null;
   STATE.categorie = [];
@@ -327,21 +380,30 @@ async function cambiaTorneo() {
   STATE._giornateDisponibili = [];
   try { localStorage.removeItem('spe_torneo'); } catch(e) {}
   _clearSavedCat();
+
+  // Ricarica lista tornei
   STATE.tornei = await dbGetTornei();
+
+  // Nascondi navigazione
   document.getElementById('pub-nav').style.display = 'none';
   if (document.getElementById('admin-nav')) document.getElementById('admin-nav').style.display = 'none';
   const catBar = document.getElementById('cat-bar');
   if (catBar) catBar.innerHTML = '';
   const torneoBar = document.getElementById('torneo-bar');
   if (torneoBar) torneoBar.style.display = 'none';
+
+  // Ricrea le sezioni nel main-content
   document.getElementById('main-content').innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
+
   mostraSelezioneTeorneo();
 }
+
 async function selectTorneo(id) { STATE.activeTorneo = id; _saveSavedTorneo(id); await loadTorneo(); }
+
 function updateHeader() {
   const t = STATE.tornei.find(t => t.id === STATE.activeTorneo);
   const titleEl = document.getElementById('header-title');
@@ -349,6 +411,7 @@ function updateHeader() {
   if (titleEl) titleEl.textContent = t ? t.nome : 'Soccer Pro Experience';
   if (dateEl) dateEl.textContent = t ? t.data || '' : '';
 }
+
 function showSection(name, btn) {
   STATE.currentSection = name;
   document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
@@ -358,6 +421,7 @@ function showSection(name, btn) {
   document.getElementById('cat-bar').style.display = ['a-setup','a-tornei'].includes(name) ? 'none' : '';
   renderCurrentSection();
 }
+
 async function renderCurrentSection() {
   updateHeader();
   const s = STATE.currentSection;
@@ -371,6 +435,10 @@ async function renderCurrentSection() {
   else if (s === 'a-knockout') await renderAdminKnockout();
   _renderFooter();
 }
+
+// ============================================================
+//  LINK CONDIVISIBILE — Hash URL
+// ============================================================
 function _leggiHash() {
   const hash = window.location.hash.replace('#', '');
   const params = {};
@@ -380,32 +448,40 @@ function _leggiHash() {
   });
   return params;
 }
+
 function _scriviHash(catId, tab) {
   const t = STATE.activeTorneo || '';
   const parts = [`cat=${catId}`];
   if (tab && tab !== 'classifiche') parts.push(`tab=${tab}`);
   window.location.hash = parts.join('&');
 }
+
 function _cancellaHash() {
   history.replaceState(null, '', window.location.pathname + window.location.search);
 }
+
 function _getLinkCondivisibile(catId, tab) {
   const base = window.location.href.split('#')[0];
   const parts = [`cat=${catId}`];
   if (tab && tab !== 'classifiche') parts.push(`tab=${tab}`);
   return `${base}#${parts.join('&')}`;
 }
+
 function mostraLinkCondivisibile() {
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   if (!cat) return;
   const tab = STATE.currentSection || 'classifiche';
   const link = _getLinkCondivisibile(STATE.activeCat, tab);
+
+  // Copia negli appunti
   navigator.clipboard.writeText(link).then(() => {
     toast('🔗 Link copiato! Incollalo su WhatsApp o Telegram');
   }).catch(() => {
+    // Fallback: mostra il link
     prompt('Copia questo link:', link);
   });
 }
+
 function _renderFooter() {
   let footer = document.getElementById('app-footer');
   if (!footer) {
@@ -422,18 +498,25 @@ function _renderFooter() {
     </div>
   `;
 }
+
 function renderCatBar() {
   const bar = document.getElementById('cat-bar');
   if (!STATE.categorie.length) { bar.innerHTML = ''; return; }
+
+  // Mostra solo barra giornate (le categorie si vedono in cascata)
   bar.innerHTML = `<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;"></div>`;
   _renderGiornataBar();
 }
+
 function _renderGiornataBar() {
   const bar = document.getElementById('giornata-bar');
   if (!bar) return;
   const giornate = STATE._giornateDisponibili || [];
   if (giornate.length <= 1) { bar.innerHTML = ''; return; }
+
+  // Rileva la giornata di oggi
   const oggi = _trovaGiornataOggi(giornate);
+
   bar.innerHTML = [
     { id: 'tutte', label: '📅 Tutte', oggi: false },
     ...giornate.map(g => ({ id: g, label: _labelGiornata(g), oggi: g === oggi }))
@@ -447,7 +530,9 @@ function _renderGiornataBar() {
     </button>`;
   }).join('');
 }
+
 function _labelGiornata(g) {
+  // Abbrevia "4 Aprile 2026" → "Sab 4 Apr"
   const giorni = {'sabato':'Sab','domenica':'Dom','lunedì':'Lun','martedì':'Mar','mercoledì':'Mer','giovedì':'Gio','venerdì':'Ven'};
   const mesi = {'gennaio':'Gen','febbraio':'Feb','marzo':'Mar','aprile':'Apr','maggio':'Mag','giugno':'Giu',
                  'luglio':'Lug','agosto':'Ago','settembre':'Set','ottobre':'Ott','novembre':'Nov','dicembre':'Dic'};
@@ -455,10 +540,13 @@ function _labelGiornata(g) {
   for (const [full, short] of Object.entries(mesi)) {
     label = label.toLowerCase().replace(full, short);
   }
+  // Rimuovi anno
   label = label.replace(/20\d\d/,'').trim().replace(/\s+/g,' ');
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
+
 function _trovaGiornataOggi(giornate) {
+  // Confronta ogni giornata con la data di oggi
   const ora = new Date();
   const mesiMap = {'gennaio':0,'febbraio':1,'marzo':2,'aprile':3,'maggio':4,'giugno':5,
                    'luglio':6,'agosto':7,'settembre':8,'ottobre':9,'novembre':10,'dicembre':11};
@@ -475,7 +563,9 @@ function _trovaGiornataOggi(giornate) {
   }
   return null;
 }
+
 function _abbreviaNomeCat(nome) {
+  // Abbrevia nomi lunghi per la pill bar
   const abbr = {
     'Girone Silver 1': 'Silver 1', 'Girone Silver 2': 'Silver 2',
     'Girone Gold 1': 'Gold 1', 'Girone Gold 2': 'Gold 2',
@@ -483,26 +573,32 @@ function _abbreviaNomeCat(nome) {
     'Esordienti 2014': 'Esord. 2014', 'Girone Unico': 'Girone Unico',
   };
   if (abbr[nome]) return abbr[nome];
+  // Tronca se troppo lungo
   return nome.length > 14 ? nome.substring(0, 13) + '…' : nome;
 }
+
 async function selectCat(id) {
   STATE.activeCat = id;
   _saveSavedCat(id);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+  // Carica giornate disponibili per questa categoria
   await _caricaGiornate();
   renderCatBar();
   renderCurrentSection();
 }
+
 async function selectGiornata(g) {
   STATE.activeGiornata = g;
   _renderGiornataBar();
   renderCurrentSection();
 }
+
 async function _caricaGiornate() {
   if (!STATE.activeCat) return;
   try {
     const dateSet = new Set();
+    // Legge solo dalla categoria attiva
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
@@ -518,10 +614,13 @@ async function _caricaGiornate() {
       return (meseEntry ? meseEntry[1] : 0) * 100 + giorno;
     };
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
+
+    // Auto-seleziona OGGI se disponibile, altrimenti 'tutte'
     const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
     STATE.activeGiornata = oggi || 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
 }
+
 function logoHTML(sq, size = 'md') {
   const cls = size === 'sm' ? 'team-logo-sm' : 'team-logo';
   const avcls = size === 'sm' ? 'team-avatar-sm' : 'team-avatar';
@@ -530,6 +629,11 @@ function logoHTML(sq, size = 'md') {
   const ini = name.split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase();
   return `<div class="${avcls}">${ini}</div>`;
 }
+
+
+// ============================================================
+//  CLASSIFICA
+// ============================================================
 function calcGironeClassifica(girone) {
   const map = {};
   for (const sq of girone.squadre) map[sq.id] = { sq, g:0, v:0, p:0, s:0, gf:0, gs:0, pts:0, rigori:0 };
@@ -551,6 +655,7 @@ function calcGironeClassifica(girone) {
   });
   return _risolviGruppi(lista, giocate);
 }
+
 function _scontroDir2(idA, idB, giocate) {
   let ptA=0,ptB=0,drA=0,drB=0,gfA=0,gfB=0;
   for (const p of giocate) {
@@ -563,6 +668,7 @@ function _scontroDir2(idA, idB, giocate) {
   }
   if (ptB!==ptA) return ptB-ptA; if (drB!==drA) return drB-drA; if (gfB!==gfA) return gfB-gfA; return 0;
 }
+
 function _risolviGruppi(lista, giocate) {
   const out = []; let i=0;
   while (i < lista.length) {
@@ -588,11 +694,19 @@ function _risolviGruppi(lista, giocate) {
   }
   return out;
 }
+
+// ============================================================
+//  RISOLUZIONE PLACEHOLDER FASE FINALE
+//  Funziona girone per girone — non aspetta tutti i gironi
+// ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     if (!gironi||!gironi.length) return;
+
     const classificheGironi = {};
+
+    // Calcola classifica per ogni girone con almeno una partita giocata
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
@@ -606,14 +720,19 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const squadre = (gsRows||[]).map(r=>({
         id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
       }));
+      // Escludi squadre placeholder dalla classifica
       const squadreReali = squadre.filter(s => !_isPlaceholder(s.nome));
       if (squadreReali.length > 0) {
         classificheGironi[g.nome] = calcGironeClassifica({squadre:squadreReali, partite:giocate});
       }
     }
+
     if (!Object.keys(classificheGironi).length) return;
+
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
     let risolti = 0;
+
+    // 1. Risolvi placeholder nel KNOCKOUT
     const { data: matches } = await db.from('knockout')
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
@@ -628,10 +747,13 @@ async function verificaEGeneraTriangolari(categoriaId) {
         risolti++;
       }
     }
+
+    // 2. Risolvi placeholder nelle PARTITE normali + aggiorna girone_squadre
     for (const g of gironi) {
       const { data: tuttePartite } = await db.from('partite')
         .select('id,note_home,note_away,home_id,away_id')
         .eq('girone_id', g.id);
+
       for (const p of (tuttePartite||[])) {
         if (!p.note_home && !p.note_away) continue;
         const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
@@ -644,6 +766,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
           risolti++;
         }
       }
+
+      // Aggiorna girone_squadre con le squadre reali risolte
       const sqIds = new Set();
       for (const p of (tuttePartite||[])) {
         const newH = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi) : p.home_id;
@@ -652,9 +776,11 @@ async function verificaEGeneraTriangolari(categoriaId) {
         if (newA) sqIds.add(newA);
       }
       if (sqIds.size > 0) {
+        // Leggi girone_squadre esistenti
         const { data: gsEsist } = await db.from('girone_squadre')
           .select('squadra_id').eq('girone_id', g.id);
         const gsIds = new Set((gsEsist||[]).map(r=>r.squadra_id));
+        // Inserisci solo le squadre mancanti
         for (const sqId of sqIds) {
           if (!gsIds.has(sqId)) {
             await db.from('girone_squadre').insert({
@@ -665,6 +791,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
         }
       }
     }
+
     if (risolti>0) {
       _mostraNotificaTriangolari();
       if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
@@ -673,7 +800,9 @@ async function verificaEGeneraTriangolari(categoriaId) {
     }
   } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
 }
+
 function _calcolaMiglioriSecondi(classificheGironi) {
+  // Raccoglie tutti i 2° classificati e li ordina per punti/DR/GF
   const secondi = [];
   for (const [nome, cl] of Object.entries(classificheGironi)) {
     if (cl.length >= 2) secondi.push({ girone: nome, sq: cl[1].sq, stat: cl[1] });
@@ -686,48 +815,66 @@ function _calcolaMiglioriSecondi(classificheGironi) {
   });
   return secondi;
 }
+
 function _isPlaceholder(nome) {
   if (!nome) return false;
   return /^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(nome.trim());
 }
+
 function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[]) {
   if (!placeholder) return null;
   const s = placeholder.trim();
+
+  // Gestisce "Miglior 2°" o "Miglior secondo"
   if (/miglior\s*2[°º]?/i.test(s)) {
     return miglioriSecondi[0]?.sq?.id || null;
   }
+  // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
   const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
   if (mMig) {
     const idx = parseInt(mMig[1]) - 1;
     return miglioriSecondi[idx]?.sq?.id || null;
   }
+
+  // Gestisce "N° Girone X" o "N° Gruppo X" — es. "1° Girone A", "2° Gruppo B", "1° Girone Unico"
   const m = s.match(/(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
   if (m) {
     const pos = parseInt(m[1]);
     const tipo = m[2]; // "Girone" o "Gruppo"
     const resto = m[3].trim();
+
+    // Prova prima con il tipo originale (es. "Gruppo A"), poi con l'alternativo (es. "Girone A")
     const candidati = [
       `${tipo} ${resto}`,
       `${tipo === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
     ];
+
     for (const nomeGirone of candidati) {
+      // 1. Match esatto
       let cl = classificheGironi[nomeGirone];
+
+      // 2. Case-insensitive
       if (!cl) {
         const k = Object.keys(classificheGironi).find(k =>
           k.toLowerCase() === nomeGirone.toLowerCase()
         );
         if (k) cl = classificheGironi[k];
       }
+
+      // 3. Suffisso (es. "A" dentro "Girone A" o "Gruppo A")
       if (!cl) {
         const k = Object.keys(classificheGironi).find(k =>
           k.toLowerCase().endsWith(' ' + resto.toLowerCase())
         );
         if (k) cl = classificheGironi[k];
       }
+
       if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
     }
     return null;
   }
+
+  // Formato breve "1A", "2B"
   const mShort = s.match(/^(\d+)[°º*]?([A-Za-z]+\d*)$/);
   if (mShort) {
     const pos = parseInt(mShort[1]);
@@ -742,8 +889,10 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[])
     if (!cl || cl.length < pos) return null;
     return cl[pos-1]?.sq?.id || null;
   }
+
   return null;
 }
+
 async function forzaRisoluzioneAccoppiamenti() {
   if (!STATE.activeCat) return;
   toast('⏳ Risoluzione accoppiamenti...');
@@ -752,6 +901,7 @@ async function forzaRisoluzioneAccoppiamenti() {
   await renderTabellone();
   toast('✅ Accoppiamenti aggiornati!');
 }
+
 function _mostraNotificaTriangolari() {
   const old=document.getElementById('notifica-triangolari'); if(old)old.remove();
   const div=document.createElement('div'); div.id='notifica-triangolari';
@@ -759,6 +909,10 @@ function _mostraNotificaTriangolari() {
   document.body.appendChild(div);
   setTimeout(()=>{ if(div.parentNode)div.remove(); },6000);
 }
+
+// ============================================================
+//  HELPER: ordina partite per orario
+// ============================================================
 function _orarioToMinuti(orario) {
   if (!orario) return 9999;
   const clean = String(orario).replace(',', '.').trim();
@@ -768,13 +922,23 @@ function _orarioToMinuti(orario) {
   if (!isNaN(num)) return Math.floor(num) * 60 + Math.round((num % 1) * 100);
   return 9999;
 }
+
+
+// ============================================================
+//  BATCH LOADER — carica tutte le categorie in parallelo
+// ============================================================
 async function _caricaTutteCategorie() {
   const key = '_all_cats_' + STATE.activeTorneo;
+  // Carica tutti i gironi di tutte le categorie in parallelo
   const results = await Promise.all(
     STATE.categorie.map(cat => getGironiWithData(cat.id).then(gironi => ({ cat, gironi })))
   );
   return results;
 }
+
+// ============================================================
+//  RIEPILOGO TORNEO (tutte le giornate)
+// ============================================================
 function _riepilogoBanner(section) {
   if (!STATE._giornateDisponibili || STATE._giornateDisponibili.length <= 1) return '';
   const isRiepilogo = STATE.activeGiornata === 'tutte';
@@ -791,13 +955,21 @@ function _riepilogoBanner(section) {
       <div class="riepilogo-banner-arrow">→</div>
     </button>`;
 }
+
+// ============================================================
+//  PUBLIC: CLASSIFICHE
+// ============================================================
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
+
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
+
   let html = '';
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
@@ -827,26 +999,41 @@ async function renderClassifiche() {
   }
   el.innerHTML = html;
 }
+
+// ============================================================
+//  PUBLIC: RISULTATI — ordinati per orario, con chi ha inserito
+// ============================================================
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
+
   let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) {
       tuttePartite.push({ ...p, _girone: g.nome, _cat: cat?.nome || '' });
     }
   }
+
+  // Filtra per giornata se selezionata
   const filtroAttivo = STATE.activeGiornata && STATE.activeGiornata !== 'tutte';
   if (filtroAttivo) {
     tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
+
+  // Ordina per orario
   tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
+
   const giocate = tuttePartite.filter(p => p.giocata);
   const daFare  = tuttePartite.filter(p => !p.giocata);
+
   let html = '';
+
+  // ── Header giornata in cima ──
   if (filtroAttivo) {
     html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
       color:white;border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;
@@ -855,6 +1042,7 @@ async function renderRisultati() {
       <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
     </div>`;
   } else {
+    // Riepilogo: mostra giorni disponibili come chip cliccabili
     const giornate = STATE._giornateDisponibili || [];
     if (giornate.length > 1) {
       html += `<div style="background:white;border:1px solid var(--bordo);border-radius:var(--radius);
@@ -876,6 +1064,8 @@ async function renderRisultati() {
       </div>`;
     }
   }
+
+  // Funzione per renderizzare una partita
   const renderPartita = (p, showCat) => {
     const mH = (p.marcatori||[]).filter(m=>m.squadra_id===p.home_id);
     const mA = (p.marcatori||[]).filter(m=>m.squadra_id===p.away_id);
@@ -905,8 +1095,51 @@ async function renderRisultati() {
     r += `</div>`;
     return r;
   };
+
+  // ── Carica campi giornate (FIX: deve essere qui, non in renderAdminRisultati) ──
+  if (!STATE._campiGiornate) {
+    try {
+      const cg = await dbGetCampiGiornate(STATE.activeTorneo);
+      const campiObj = {};
+      cg.forEach(c => campiObj[c.giorno] = c);
+      STATE._campiGiornate = campiObj;
+    } catch(e) { STATE._campiGiornate = {}; }
+  }
+  const campiMap = STATE._campiGiornate || {};
+
+  // ── Helper: banner giornata con campo ──
+  const _bannerGiornata = (giorno, isOggi) => {
+    const campo = campiMap[giorno];
+    const colore = isOggi ? 'var(--blu)' : 'var(--sfondo)';
+    const testocolore = isOggi ? 'white' : 'var(--testo-lt)';
+    const bordocolore = isOggi ? 'var(--blu)' : 'var(--bordo)';
+    const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+    return `<div style="background:${colore};border:1px solid ${bordocolore};border-radius:var(--radius);
+      padding:10px 14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:700;color:${testocolore};white-space:nowrap;">📅 ${giorno}</span>
+        ${campo
+          ? `<span style="font-size:12px;color:${isOggi?'rgba(255,255,255,0.85)':'var(--testo-xs)'};flex:1;">
+              📍 <strong>${campo.nome_campo||''}</strong>${campo.nome_campo&&campo.indirizzo?' — ':''}${campo.indirizzo||''}
+             </span>`
+          : `<span style="font-size:11px;color:${isOggi?'rgba(255,255,255,0.45)':'var(--testo-xs)'};font-style:italic;flex:1;">
+              ${STATE.isAdmin ? 'Clicca per aggiungere indirizzo' : ''}
+             </span>`}
+        ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${giorno}')"
+          style="background:${isOggi?'rgba(255,255,255,0.2)':'white'};border:1px solid ${isOggi?'rgba(255,255,255,0.3)':'var(--bordo)'};
+                 color:${isOggi?'white':'var(--testo-lt)'};border-radius:6px;padding:3px 10px;
+                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          ✏️ ${campo ? 'Modifica' : 'Aggiungi'}
+        </button>` : ''}
+      </div>
+      <div id="edit-campo-${keyId}" style="display:none;margin-top:8px;"></div>
+    </div>`;
+  };
+
+  // ── Risultati ──
   if (giocate.length) {
     html += `<div class="section-label">✅ Risultati <span style="color:var(--verde);font-weight:800;">(${giocate.length})</span></div>`;
+    // Raggruppa per giorno se riepilogo
     if (!filtroAttivo) {
       const perGiorno = {};
       giocate.forEach(p => {
@@ -915,7 +1148,8 @@ async function renderRisultati() {
         perGiorno[g].push(p);
       });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
-        html += `<div class="day-header">📅 ${giorno}</div>`;
+        const _oggi = _trovaGiornataOggi(STATE._giornateDisponibili||[]);
+        html += _bannerGiornata(giorno, giorno===_oggi);
         html += `<div class="card">`;
         partite.forEach(p => { html += renderPartita(p, true); });
         html += `</div>`;
@@ -926,6 +1160,8 @@ async function renderRisultati() {
       html += `</div>`;
     }
   }
+
+  // ── Programma ──
   if (daFare.length) {
     html += `<div class="section-label">🕐 Programma <span style="color:var(--testo-xs);font-weight:600;">(${daFare.length})</span></div>`;
     if (!filtroAttivo) {
@@ -936,9 +1172,9 @@ async function renderRisultati() {
         perGiorno[g].push(p);
       });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
-        html += `<div class="day-header" style="background:var(--sfondo);color:var(--testo-lt);border:1px solid var(--bordo);">📅 ${giorno}</div>`;
+        html += _bannerGiornata(giorno, false);
         html += `<div class="card">`;
-        partite.forEach(p => { html += renderPartita(p, true); });
+        partite.forEach(p => { html += renderPartita(p, false); });
         html += `</div>`;
       }
     } else {
@@ -947,8 +1183,13 @@ async function renderRisultati() {
       html += `</div>`;
     }
   }
+
   el.innerHTML = html || '<div class="empty-state">Nessun risultato per questa giornata.</div>';
 }
+
+// ============================================================
+//  PUBLIC: TABELLONE
+// ============================================================
 async function renderTabellone() {
   const el=document.getElementById('sec-tabellone');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
@@ -992,6 +1233,10 @@ async function renderTabellone() {
   };
   el.innerHTML=renderRounds(ko.filter(m=>!m.is_consolazione),'🏆 Tabellone')+renderRounds(ko.filter(m=>m.is_consolazione),'🥉 Consolazione');
 }
+
+// ============================================================
+//  ADMIN: TORNEI
+// ============================================================
 async function renderAdminTornei() {
   const el=document.getElementById('sec-a-tornei'); STATE.tornei=await dbGetTornei();
   let html=`<div class="section-label">Tornei</div>`;
@@ -1016,6 +1261,7 @@ async function renderAdminTornei() {
   </div>`;
   el.innerHTML=html;
 }
+
 async function createTorneo() {
   const nome=document.getElementById('new-t-nome').value.trim();
   const data=document.getElementById('new-t-data').value.trim();
@@ -1038,6 +1284,10 @@ async function editTorneo(id) {
   await dbUpdateTorneo(id,{nome,data}); STATE.tornei=await dbGetTornei();
   updateHeader(); renderTorneoBar(); await renderAdminTornei(); toast('Torneo aggiornato');
 }
+
+// ============================================================
+//  ADMIN: CATEGORIE
+// ============================================================
 async function renderAdminSetup() {
   const el=document.getElementById('sec-a-setup');
   if (!STATE.activeTorneo) { el.innerHTML='<div class="empty-state">Crea prima un torneo.</div>'; return; }
@@ -1088,6 +1338,7 @@ async function renderAdminSetup() {
     <div id="import-preview" style="margin-top:14px;"></div>
   </div>`;
   el.innerHTML = html;
+  // Aggiungi prima riga automaticamente se lista vuota
   setTimeout(() => {
     if (document.getElementById('cat-import-list') &&
         document.getElementById('cat-import-list').children.length === 0) {
@@ -1095,6 +1346,7 @@ async function renderAdminSetup() {
     }
   }, 50);
 }
+
 async function addCategoria() {
   const nome=document.getElementById('cname').value.trim();
   const qualificate=parseInt(document.getElementById('cqualify').value);
@@ -1117,7 +1369,14 @@ async function addCategoria() {
   }
   renderCatBar(); toast('Categoria aggiunta!'); await renderAdminSetup();
 }
+
+
+
+// ============================================================
+//  RIGHE CATEGORIA + EXCEL
+// ============================================================
 let _catRigheCount = 0;
+
 function aggiungiRigaCategoria() {
   const list = document.getElementById('cat-import-list');
   if (!list) return;
@@ -1157,6 +1416,7 @@ function aggiungiRigaCategoria() {
   `;
   list.appendChild(div);
 }
+
 function _aggiornaNomeRiga(idx) {
   const nome = document.getElementById(`cat-nome-${idx}`)?.value || 'categoria';
   const btnDiv = document.getElementById(`cat-btn-${idx}`);
@@ -1165,22 +1425,29 @@ function _aggiornaNomeRiga(idx) {
     if (btn) btn.textContent = `✓ Importa "${nome}"`;
   }
 }
+
 function _rimuoviRiga(idx) {
   const el = document.getElementById(`cat-riga-${idx}`);
   if (el) el.remove();
 }
+
 let _fileRighe = {}; // idx -> dati excel parsati
+
 function _fileSelezionato(event, idx) {
   const file = event.target.files[0];
   if (!file) return;
   const label = document.getElementById(`cat-file-label-${idx}`);
   if (label) label.textContent = `📄 ${file.name}`;
+
+  // Preview immediato
   _parseExcelRiga(file, idx);
 }
+
 async function _parseExcelRiga(file, idx) {
   const preview = document.getElementById(`cat-preview-${idx}`);
   const btnDiv = document.getElementById(`cat-btn-${idx}`);
   if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
+
   try {
     if (typeof XLSX === 'undefined') {
       await new Promise((res, rej) => {
@@ -1198,14 +1465,20 @@ async function _parseExcelRiga(file, idx) {
       partite:   leggiPartiteFase1(wb),
       fase2:     leggiPartiteFase2(wb)
     };
+
     _fileRighe[idx] = dati;
+
+    // Mostra riepilogo
     const totGironi = dati.gironi.length;
     const totPartite = dati.partite.length;
     const totFinali = dati.fase2.length;
     const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
+
+    // Auto-compila nome categoria dal file se vuoto
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
       nomeCatInput.value = dati.categorie[0].nome;
     }
+
     if (preview) {
       preview.innerHTML = `
         <div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;">
@@ -1217,6 +1490,7 @@ async function _parseExcelRiga(file, idx) {
           </div>
         </div>`;
     }
+
     if (btnDiv) {
       btnDiv.style.display = 'block';
       const nome = nomeCatInput?.value || 'categoria';
@@ -1227,15 +1501,20 @@ async function _parseExcelRiga(file, idx) {
     if (preview) preview.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
   }
 }
+
 async function _importaRiga(idx) {
   const dati = _fileRighe[idx];
   const nomeInput = document.getElementById(`cat-nome-${idx}`);
   const nomeScritto = nomeInput?.value?.trim();
   const btn = document.querySelector(`#cat-btn-${idx} button`);
+
   if (!dati) { toast('Carica prima un file Excel'); return; }
+
+  // Sovrascrivi il nome categoria con quello scritto dall'utente
   if (nomeScritto && dati.categorie.length) {
     dati.categorie[0].nome = nomeScritto;
     dati.categorie[0].codice = nomeScritto;
+    // Aggiorna anche i riferimenti nelle partite e gironi
     const vecchioNome = dati.gironi[0]?.categoria;
     if (vecchioNome) {
       dati.gironi.forEach(g => { if(g.categoria === vecchioNome) g.categoria = nomeScritto; });
@@ -1243,15 +1522,22 @@ async function _importaRiga(idx) {
       dati.fase2.forEach(p => { if(p.categoria === vecchioNome) p.categoria = nomeScritto; });
     }
   }
+
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Importazione...'; }
+
   try {
     const tornei = await db.from('tornei').select('id,nome')
       .eq('cliente', CONFIG.CLIENTE || 'spe').eq('attivo', true)
       .order('created_at', { ascending: false });
+
     if (!tornei.data?.length) throw new Error('Nessun torneo attivo');
     const torneoId = STATE.activeTorneo || tornei.data[0].id;
+
+    // Usa la funzione di importazione esistente
     window._importDati = dati;
     await eseguiImportazioneConTorneo(torneoId, dati, btn);
+
+    // Feedback sulla riga
     const riga = document.getElementById(`cat-riga-${idx}`);
     if (riga) {
       riga.style.background = 'var(--verde-bg)';
@@ -1260,14 +1546,18 @@ async function _importaRiga(idx) {
       if (preview) preview.innerHTML = `<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>`;
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
+
+    // Aggiorna stato
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
     renderCatBar();
+
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
     toast('❌ Errore: ' + e.message);
     console.error(e);
   }
 }
+
 async function rinominaCat(id) {
   const cat = STATE.categorie.find(c => c.id === id);
   const nomeAttuale = cat ? cat.nome : '';
@@ -1284,11 +1574,16 @@ async function rinominaCat(id) {
     toast('❌ Errore: ' + e.message);
   }
 }
+
 async function deleteCat(id) {
   if (!confirm('Eliminare questa categoria?')) return;
   await dbDeleteCategoria(id); STATE.categorie=await dbGetCategorie(STATE.activeTorneo);
   STATE.activeCat=STATE.categorie[0]?.id||null; renderCatBar(); await renderAdminSetup();
 }
+
+// ============================================================
+//  ADMIN: LOGHI
+// ============================================================
 async function renderAdminLoghi() {
   const el=document.getElementById('sec-a-loghi');
   const squadre=await dbGetSquadreFull(STATE.activeTorneo); // con logo
@@ -1303,6 +1598,7 @@ async function renderAdminLoghi() {
       📁 Carica loghi da cartella
       <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
     </label>
+
     <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">
       📦 Comprimi loghi grandi
     </button>
@@ -1324,15 +1620,24 @@ async function renderAdminLoghi() {
   }
   html+='</div>'; el.innerHTML=html;
 }
+// ============================================================
+//  CARICA LOGHI DA CARTELLA — abbinamento intelligente v2
+// ============================================================
 async function caricaLoghiDaCartella(event) {
   const files = Array.from(event.target.files);
   const log = document.getElementById('loghi-auto-log');
   if (!files.length || !log) return;
+
   log.style.display = 'block';
   log.innerHTML = `📁 ${files.length} file selezionati — abbinamento in corso...<br>`;
+
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
+
+  // Prefissi da rimuovere all'inizio
   const PREFISSI = /^(a\.s\.d\.|asd|ssd|acd|usd|a\.c\.|ac|a\.s\.|as|u\.s\.|us|s\.s\.|ss|ssc|asc|fc|f\.c\.|gc|gc|pd|pol|polisportiva|unione|sporting|real|atletico|athletic|pro|new|calcio|football|club|team)\s*/gi;
+  // Suffissi da rimuovere alla fine
   const SUFFISSI = /\s*(calcio|football|club|sport|city|united|1972|1908|1919|1973|2016|2024|verde|bianco|blu|grigio|srl|spa|s\.p\.a\.|f\.c\.)\s*$/gi;
+
   const norm = (s) => {
     if (!s) return '';
     let r = s.toLowerCase()
@@ -1345,19 +1650,30 @@ async function caricaLoghiDaCartella(event) {
       .trim();
     return r;
   };
+
+  // Token principali (parole >= 3 lettere)
   const tokens = (s) => norm(s).split(' ').filter(w => w.length >= 3);
+
   const similarita = (fileStr, sqStr) => {
     const fn = norm(fileStr);
     const sn = norm(sqStr);
     if (!fn || !sn) return 0;
+
+    // 1. Corrispondenza esatta dopo normalizzazione
     if (fn === sn) return 1.0;
+
+    // 2. Uno contiene l'altro
     if (sn.includes(fn) || fn.includes(sn)) {
       return Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
     }
+
+    // 3. Inizia con (es. "rho" → "rhodense", "luc" → "luciano manara")
     if (sn.startsWith(fn) || fn.startsWith(sn)) {
       const ratio = Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
       return ratio * 0.95;
     }
+
+    // 4. Token in comune
     const tf = tokens(fileStr);
     const ts = tokens(sqStr);
     if (!tf.length || !ts.length) return 0;
@@ -1367,34 +1683,47 @@ async function caricaLoghiDaCartella(event) {
       else if (ts.some(t => t.startsWith(w) || w.startsWith(t))) parziali++;
     }
     if (comuni > 0) return (comuni + parziali * 0.5) / Math.max(tf.length, ts.length) * 0.9;
+
+    // 5. Il file è un'abbreviazione (prima lettera di ogni parola)
     const iniziali = ts.map(t => t[0]).join('');
     if (fn === iniziali) return 0.75;
+    // Abbreviazione parziale
     if (iniziali.startsWith(fn) || fn.startsWith(iniziali)) return 0.6;
+
     return 0;
   };
+
+  // Raggruppa squadre per gestire doppioni (stessa squadra in gironi diversi)
+  // Usa Map per tenere solo una per nome normalizzato
   const sqUniche = new Map();
   for (const sq of squadre) {
     const key = norm(sq.nome);
     if (!sqUniche.has(key)) sqUniche.set(key, []);
     sqUniche.get(key).push(sq);
   }
+
   let abbinati = 0, nonAbbinati = [];
+
   for (const file of files) {
     const nomeFilePulito = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
     const nomeFileNorm = norm(nomeFilePulito);
     if (!nomeFileNorm) continue;
+
     let bestKey = null, bestScore = 0;
     for (const [key, _] of sqUniche) {
       const score = similarita(nomeFilePulito, key);
       if (score > bestScore) { bestScore = score; bestKey = key; }
     }
+
     if (bestKey && bestScore >= 0.3) {
       const targets = sqUniche.get(bestKey);
       const conf = bestScore >= 0.85 ? '✅' : bestScore >= 0.55 ? '🟡' : '🟠';
       const nomiTarget = targets.map(s => s.nome).join(' + ');
       log.innerHTML += `${conf} <strong>${file.name}</strong> → ${nomiTarget} (${Math.round(bestScore*100)}%) `;
+
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
+        // Carica logo per TUTTE le squadre con lo stesso nome (doppioni)
         for (const sq of targets) {
           await dbUpdateLogo(sq.id, compressed);
         }
@@ -1407,30 +1736,40 @@ async function caricaLoghiDaCartella(event) {
     }
     log.scrollTop = log.scrollHeight;
   }
+
   log.innerHTML += `<br>🏁 <strong>${abbinati} file abbinati</strong>`;
   if (nonAbbinati.length) {
     log.innerHTML += `<br>⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
     log.innerHTML += `<br><small>💡 Usa parte del nome senza prefissi (es. "vercelli.png" per Pro Vercelli)</small>`;
   }
+
   if (abbinati > 0) { await renderAdminLoghi(); toast(`✅ ${abbinati} loghi caricati!`); }
   event.target.value = '';
 }
+
+
+// ── COMPRIMI LOGHI ESISTENTI ────────────────────────────────
 async function comprimiloghiEsistenti() {
   const btn = document.getElementById('btn-comprimi-loghi');
   const log = document.getElementById('loghi-auto-log');
   if (!btn || !log) return;
+
   btn.disabled = true;
   btn.textContent = '⏳ Compressione...';
   log.style.display = 'block';
   log.innerHTML = '📦 Avvio compressione loghi...<br>';
+
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
   const conLogo = squadre.filter(s => s.logo?.startsWith('data:'));
+
   let compressi = 0, saltati = 0;
   for (const sq of conLogo) {
     const kb = Math.round(sq.logo.length * 0.75 / 1024);
     if (kb < 15) { saltati++; continue; }
+
     log.innerHTML += `📦 ${sq.nome} (${kb}KB)... `;
     log.scrollTop = log.scrollHeight;
+
     try {
       const compressed = await _comprimiImmagine(
         { arrayBuffer: async () => {
@@ -1453,11 +1792,13 @@ async function comprimiloghiEsistenti() {
     log.scrollTop = log.scrollHeight;
     await new Promise(r => setTimeout(r, 100));
   }
+
   log.innerHTML += `<br>🏁 <strong>${compressi} compressi, ${saltati} già piccoli</strong>`;
   btn.disabled = false;
   btn.textContent = '📦 Comprimi loghi grandi';
   if (compressi > 0) { await renderAdminLoghi(); toast(`✅ ${compressi} loghi compressi!`); }
 }
+
 async function uploadLogo(event, squadra_id) {
   const file = event.target.files[0]; if (!file) return;
   toast('⏳ Compressione logo...');
@@ -1471,6 +1812,7 @@ async function uploadLogo(event, squadra_id) {
     toast('Errore caricamento logo');
   }
 }
+
 function _comprimiImmagine(file, maxSize = 120, quality = 0.75, dataUrl = null) {
   return new Promise((resolve, reject) => {
     const processUrl = (src) => {
@@ -1495,20 +1837,32 @@ function _comprimiImmagine(file, maxSize = 120, quality = 0.75, dataUrl = null) 
   });
 }
 async function removeLogo(squadra_id) { await dbUpdateLogo(squadra_id,null); toast('Logo rimosso'); await renderAdminLoghi(); }
+
+// ============================================================
+//  ADMIN: RISULTATI — ordinati per orario, con chi ha inserito
+// ============================================================
 let openScorers={};
+
 async function renderAdminRisultati() {
   const el=document.getElementById('sec-a-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const gironi=await getGironiWithData(STATE.activeCat);
+  const campiGiornate = await dbGetCampiGiornate(STATE.activeTorneo);
+  const campiMap = {}; campiGiornate.forEach(c => campiMap[c.giorno] = c);
+  STATE._campiGiornate = campiMap;
+
+  // Raccoglie tutte le partite e ordina per orario
   let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id });
   }
+  // Filtra per giornata se selezionata
   if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') {
     tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
   tuttePartite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
+
   let html='';
   for (const p of tuttePartite) {
     const key='p'+p.id; const open=!!openScorers[key];
@@ -1560,6 +1914,7 @@ async function renderAdminRisultati() {
   }
   el.innerHTML=html||'<div class="empty-state">Nessuna partita.</div>';
 }
+
 async function saveRisultato(partita_id, girone_id) {
   const sh=document.getElementById('sh_'+partita_id).value;
   const sa=document.getElementById('sa_'+partita_id).value;
@@ -1578,10 +1933,12 @@ async function saveRisultato(partita_id, girone_id) {
     } else { toast('Errore nel salvataggio'); }
   } catch(e) { console.error(e); toast('Errore: '+(e.message||'sconosciuto')); }
 }
+
 function toggleScorers(key) { openScorers[key]=!openScorers[key]; renderAdminRisultati(); }
 let tempMarcatori={};
 function addMarcatore(pid) { if(!tempMarcatori[pid])tempMarcatori[pid]=[]; tempMarcatori[pid].push({}); renderAdminRisultati(); }
 function removeMarcatore(pid,idx) { if(!tempMarcatori[pid])tempMarcatori[pid]=[]; tempMarcatori[pid].splice(idx,1); renderAdminRisultati(); }
+
 async function saveMarcatori(partita_id, girone_id) {
   const gironi=await getGironiWithData(STATE.activeCat);
   let partita=null;
@@ -1598,9 +1955,14 @@ async function saveMarcatori(partita_id, girone_id) {
   delete tempMarcatori[partita_id]; openScorers['p'+partita_id]=false;
   toast('Marcatori salvati'); await renderAdminRisultati();
 }
+
+// ============================================================
+//  ADMIN: KNOCKOUT
+// ============================================================
 async function renderAdminKnockout() {
   const el=document.getElementById('sec-a-knockout');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  // Risolvi automaticamente i placeholder prima di mostrare
   await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
@@ -1658,6 +2020,7 @@ async function renderAdminKnockout() {
   }
   el.innerHTML=html;
 }
+
 async function saveKO(match_id) {
   const sh=document.getElementById('ksh_'+match_id).value;
   const sa=document.getElementById('ksa_'+match_id).value;
@@ -1667,6 +2030,7 @@ async function saveKO(match_id) {
   await dbSaveKnockoutMatch({...m, gol_home:parseInt(sh), gol_away:parseInt(sa), giocata:true, inserito_da: STATE.userName||null});
   toast('✓ Risultato salvato'); await renderAdminKnockout();
 }
+
 async function risolviManuale() {
   if (!STATE.activeCat) return;
   const {data:gironi}=await db.from('gironi').select('id,nome').eq('categoria_id',STATE.activeCat);
@@ -1691,6 +2055,10 @@ async function risolviManuale() {
   if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
   else toast('ℹ️ Nessun accoppiamento da aggiornare');
 }
+
+// ============================================================
+//  AUTH
+// ============================================================
 function toggleAdmin() {
   if (STATE.isAdmin) { exitAdmin(); return; }
   const modal=document.getElementById('admin-modal'); if (!modal) return;
@@ -1702,6 +2070,7 @@ function toggleAdmin() {
   else { if(userEl)userEl.value=''; if(pwEl)pwEl.value=''; }
   setTimeout(()=>{ if(userEl&&userEl.value){if(pwEl)pwEl.focus();}else if(userEl)userEl.focus(); },100);
 }
+
 function checkPw() {
   const userEl=document.getElementById('admin-user'); const pwEl=document.getElementById('admin-pw'); const errEl=document.getElementById('pw-error');
   if (!userEl||!pwEl) { if(errEl)errEl.textContent='Errore tecnico'; return; }
@@ -1714,6 +2083,7 @@ function checkPw() {
   pwEl.value=''; userEl.value=''; if (errEl) errEl.textContent='';
   enterAdmin(user);
 }
+
 function enterAdmin(user) {
   STATE.isAdmin=true; STATE.userRole=user.ruolo; STATE.userName=user.nome;
   document.getElementById('pub-nav').style.display='none';
@@ -1733,7 +2103,9 @@ function enterAdmin(user) {
     _addSimBtn();
   }
 }
+
 function _addSimBtn() {
+  // Aggiungi tasto simulazione nell'header (solo per admin, non arbitri)
   if (document.getElementById('sim-toggle-btn')) return;
   const btn = document.createElement('button');
   btn.id = 'sim-toggle-btn';
@@ -1750,6 +2122,7 @@ function _addSimBtn() {
   const headerRight = document.querySelector('.header-right');
   if (headerRight) headerRight.insertBefore(btn, headerRight.firstChild);
 }
+
 function _mostraNavArbitro() {
   const nav=document.getElementById('admin-nav'); if(!nav)return;
   nav.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(btn=>{
@@ -1760,12 +2133,14 @@ function _mostraNavArbitro() {
   const btnRis=nav.querySelector('[data-section="a-risultati"]');
   if (btnRis) { btnRis.style.display=''; btnRis.classList.add('active'); }
 }
+
 function exitAdmin() {
   STATE.isAdmin=false; STATE.userRole=null; STATE.userName=null;
   document.getElementById('admin-nav').querySelectorAll('.nav-btn').forEach(b=>b.style.display='');
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('admin-btn').textContent='Admin';
+  // Rimuovi tasto simulazione e pannello
   const simBtn = document.getElementById('sim-toggle-btn');
   if (simBtn) simBtn.remove();
   const simPanel = document.getElementById('sim-panel');
@@ -1777,26 +2152,35 @@ function exitAdmin() {
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.getElementById('sec-classifiche').classList.add('active'); renderClassifiche();
 }
+
 function _saveLogin(u,p) { try { localStorage.setItem('spe_login',JSON.stringify({username:u,password:p})); } catch(e){} }
 function _loadSavedLogin() { try { const v=localStorage.getItem('spe_login'); return v?JSON.parse(v):null; } catch(e){return null;} }
 function _clearLogin() { try { localStorage.removeItem('spe_login'); } catch(e){} }
+
 function tryAutoLogin() {
   const saved=_loadSavedLogin(); if(!saved)return;
   const user=(CONFIG.USERS||[]).find(u=>u.username.toLowerCase()===saved.username.toLowerCase()&&u.password===saved.password);
   if (user) enterAdmin(user);
 }
+
 function toast(msg) {
   let t=document.getElementById('toast');
   if (!t) { t=document.createElement('div'); t.id='toast'; document.body.appendChild(t); }
   t.textContent=msg; t.style.display='block';
   clearTimeout(t._timer); t._timer=setTimeout(()=>t.style.display='none',2500);
 }
+
 function loadScript(src) {
   return new Promise((resolve,reject)=>{
     const s=document.createElement('script'); s.src=src; s.onload=resolve; s.onerror=reject; document.head.appendChild(s);
   });
 }
+
 window.addEventListener('DOMContentLoaded', init);
+
+// ============================================================
+//  TV MODE — scorre tutte le categorie, filtra per oggi
+// ============================================================
 let _tvState = {
   active: false,
   section: 'classifiche', // classifiche | risultati
@@ -1805,6 +2189,7 @@ let _tvState = {
   catTimer: null,
   clockTimer: null,
 };
+
 function openTV() {
   const tv = document.getElementById('tv-mode');
   if (!tv) return;
@@ -1816,6 +2201,7 @@ function openTV() {
   _tvStartClock();
   _tvStartAutoscroll();
 }
+
 function closeTV() {
   _tvState.active = false;
   const tv = document.getElementById('tv-mode');
@@ -1823,12 +2209,16 @@ function closeTV() {
   clearInterval(_tvState.scrollTimer);
   clearInterval(_tvState.catTimer);
   clearInterval(_tvState.clockTimer);
+  // Reset scroll progress
   const prog = document.getElementById('tv-scroll-progress');
   if (prog) prog.style.width = '0%';
 }
+
 function _tvCategorieFiltrate() {
+  // Usa tutte le categorie disponibili
   return STATE.categorie;
 }
+
 function _tvRenderCatBar() {
   const bar = document.getElementById('tv-cat-bar');
   if (!bar) return;
@@ -1838,16 +2228,21 @@ function _tvRenderCatBar() {
       onclick="_tvShowCat(${i})">${_abbreviaNomeCat(c.nome)}</button>`
   ).join('');
 }
+
 async function _tvShowCat(idx) {
   _tvState.catIndex = idx;
   _tvRenderCatBar();
+
   const cats = _tvCategorieFiltrate();
   if (!cats[idx]) return;
   const cat = cats[idx];
+
+  // Carica dati con filtro giorno
   const oggi = _tvGetOggi();
   const content = document.getElementById('tv-content');
   if (!content) return;
   content.innerHTML = '<div style="color:rgba(255,255,255,0.3);padding:40px;text-align:center;">Caricamento...</div>';
+
   try {
     if (_tvState.section === 'classifiche') {
       await _tvRenderClassifiche(cat, oggi, content);
@@ -1857,19 +2252,24 @@ async function _tvShowCat(idx) {
     content.scrollTop = 0;
   } catch(e) { console.error(e); }
 }
+
 function _tvGetOggi() {
+  // Restituisce la giornata di oggi se disponibile
   const giornate = STATE._giornateDisponibili || [];
   return _trovaGiornataOggi(giornate);
 }
+
 async function _tvRenderClassifiche(cat, oggi, container) {
   const gironi = await getGironiWithData(cat.id);
   let html = '';
+
   if (oggi) {
     html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;
       padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;letter-spacing:.04em;">
       📅 ${oggi} — Classifica in tempo reale
     </div>`;
   }
+
   html += '<div class="tv-gironi-grid">';
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
@@ -1896,19 +2296,25 @@ async function _tvRenderClassifiche(cat, oggi, container) {
   html += '</div>';
   container.innerHTML = html;
 }
+
 async function _tvRenderRisultati(cat, oggi, container) {
   const gironi = await getGironiWithData(cat.id);
   let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome });
   }
+
+  // Filtra per oggi se disponibile
   if (oggi) {
     const filtrateOggi = tuttePartite.filter(p => p.giorno === oggi);
     if (filtrateOggi.length) tuttePartite = filtrateOggi;
   }
+
   tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
+
   const giocate = tuttePartite.filter(p => p.giocata);
   const daFare  = tuttePartite.filter(p => !p.giocata);
+
   let html = '';
   if (oggi) {
     html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;
@@ -1916,6 +2322,7 @@ async function _tvRenderRisultati(cat, oggi, container) {
       📅 ${oggi}
     </div>`;
   }
+
   if (giocate.length) {
     html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;
       letter-spacing:.08em;margin-bottom:12px;">✅ Risultati</div>
@@ -1947,6 +2354,7 @@ async function _tvRenderRisultati(cat, oggi, container) {
     }
     html += '</div>';
   }
+
   if (daFare.length) {
     html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;
       letter-spacing:.08em;margin:20px 0 12px;">🕐 Programma</div>
@@ -1976,17 +2384,20 @@ async function _tvRenderRisultati(cat, oggi, container) {
     }
     html += '</div>';
   }
+
   if (!giocate.length && !daFare.length) {
     html += '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:60px;">Nessuna partita</div>';
   }
   container.innerHTML = html;
 }
+
 function _tvSwitchSection(section, btn) {
   _tvState.section = section;
   document.querySelectorAll('.tv-nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   _tvShowCat(_tvState.catIndex);
 }
+
 function _tvStartClock() {
   const update = () => {
     const now = new Date();
@@ -1998,23 +2409,29 @@ function _tvStartClock() {
   update();
   _tvState.clockTimer = setInterval(update, 1000);
 }
+
 function _tvStartAutoscroll() {
   const SCROLL_INTERVAL = 30000; // 30s per categoria
   let elapsed = 0;
   const TICK = 200;
+
   clearInterval(_tvState.scrollTimer);
   _tvState.scrollTimer = setInterval(() => {
     elapsed += TICK;
     const pct = (elapsed / SCROLL_INTERVAL) * 100;
     const prog = document.getElementById('tv-scroll-progress');
     if (prog) prog.style.width = Math.min(pct, 100) + '%';
+
+    // Scrolla il contenuto
     const content = document.getElementById('tv-content');
     if (content) {
       content.scrollTop += 2;
+      // Se arrivato in fondo, passa alla categoria successiva
       if (content.scrollTop + content.clientHeight >= content.scrollHeight - 10) {
         elapsed = SCROLL_INTERVAL; // forza cambio
       }
     }
+
     if (elapsed >= SCROLL_INTERVAL) {
       elapsed = 0;
       if (prog) prog.style.width = '0%';
@@ -2024,8 +2441,15 @@ function _tvStartAutoscroll() {
     }
   }, TICK);
 }
-const _SIM_PWD=(e=>e.split(',').map((n,i)=>String.fromCharCode(parseInt(n)^'SPE2026xK9mQ'.charCodeAt(i%12))).join(''))(('98,105,125,10,0,0,6,76'));
+
+// ============================================================
+//  🎮 MODALITÀ SIMULAZIONE — Protetta da password
+//  Password: 19880204
+// ============================================================
+
+const _SIM_PWD = '19880204';
 let _simUnlocked = false;
+
 function toggleSimulazione() {
   if (_simUnlocked) {
     _renderSimPanel();
@@ -2041,9 +2465,12 @@ function toggleSimulazione() {
   toast('✅ Modalità simulazione attivata!');
   _renderSimPanel();
 }
+
 function _renderSimPanel() {
+  // Rimuovi panel esistente
   const existing = document.getElementById('sim-panel');
   if (existing) { existing.remove(); return; }
+
   const panel = document.createElement('div');
   panel.id = 'sim-panel';
   panel.style.cssText = `
@@ -2053,6 +2480,7 @@ function _renderSimPanel() {
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     font-family: var(--font-display, sans-serif);
   `;
+
   panel.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">
@@ -2063,9 +2491,11 @@ function _renderSimPanel() {
                color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;
                font-size:12px;font-family:inherit;">✕</button>
     </div>
+
     <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">
       Genera risultati casuali per testare il sistema. Solo per sviluppo!
     </div>
+
     <div style="display:flex;flex-direction:column;gap:8px;">
       <button onclick="simulaRisultati()"
         style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;
@@ -2073,19 +2503,23 @@ function _renderSimPanel() {
                cursor:pointer;font-family:inherit;letter-spacing:.04em;">
         ⚽ SIMULA RISULTATI
       </button>
+
       <button onclick="simulaRisultatiGirone()"
         style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);
                color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;
                cursor:pointer;font-family:inherit;">
         ⚽ Simula solo girone attivo
       </button>
+
       <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
+
       <button onclick="resetRisultati()"
         style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);
                color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;
                cursor:pointer;font-family:inherit;">
         🔄 RESET — Azzera tutti i risultati
       </button>
+
       <button onclick="resetRisultatiGirone()"
         style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);
                color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;
@@ -2093,16 +2527,21 @@ function _renderSimPanel() {
         🔄 Reset solo girone attivo
       </button>
     </div>
+
     <div id="sim-log" style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.4);
       max-height:80px;overflow-y:auto;line-height:1.6;"></div>
   `;
+
   document.body.appendChild(panel);
 }
+
 function _simLog(msg) {
   const log = document.getElementById('sim-log');
   if (log) { log.innerHTML += msg + '<br>'; log.scrollTop = log.scrollHeight; }
 }
+
 function _golCasuale() {
+  // Distribuzione realistica: molti pareggi bassi, rari risultati alti
   const r = Math.random();
   if (r < 0.15) return 0;
   if (r < 0.35) return 1;
@@ -2113,22 +2552,29 @@ function _golCasuale() {
   if (r < 0.96) return 6;
   return 7;
 }
+
 async function simulaRisultati() {
   if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
   _simLog('⏳ Avvio simulazione multi-passaggio...');
+
   try {
     const catId = STATE.activeCat || STATE.categorie[0]?.id;
     let totale = 0;
     const MAX = 6;
+
     for (let pass = 1; pass <= MAX; pass++) {
+      // 1. Risolvi placeholder
       if (catId) {
         await verificaEGeneraTriangolari(catId);
         if (typeof _cacheClear === 'function') _cacheClear();
       }
+
+      // 2. Carica gironi aggiornati
       const gironi = await getGironiWithData(catId);
       let nuovi = 0;
+
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
@@ -2140,28 +2586,37 @@ async function simulaRisultati() {
           _simLog(`✓ ${p.home?.nome||'?'} ${gh}–${ga} ${p.away?.nome||'?'}`);
         }
       }
+
       if (nuovi === 0) { _simLog(`✓ Completato in ${pass} passaggi!`); break; }
     }
+
+    // Risolvi knockout finale
     if (catId) await verificaEGeneraTriangolari(catId);
     _simLog(`\n✅ ${totale} risultati simulati!`);
     toast(`✅ ${totale} risultati simulati!`);
     await renderCurrentSection();
+
   } catch(e) {
     console.error(e);
     _simLog(`❌ Errore: ${e.message}`);
     toast('Errore: ' + e.message);
   }
 }
+
 async function simulaRisultatiGirone() {
   if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
+
   try {
     const gironi = await getGironiWithData(STATE.activeCat);
+    // Prende solo il primo girone con partite da giocare
     let totale = 0;
+
     for (const g of gironi) {
       const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
       if (!daGiocare.length) continue;
+
       _simLog(`📋 Simulo ${g.nome} (${daGiocare.length} partite)...`);
       for (const p of daGiocare) {
         const gh = _golCasuale();
@@ -2175,6 +2630,7 @@ async function simulaRisultatiGirone() {
       }
       break; // solo primo girone
     }
+
     _simLog(`✅ ${totale} risultati simulati!`);
     toast(`✅ ${totale} risultati simulati!`);
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
@@ -2183,15 +2639,20 @@ async function simulaRisultatiGirone() {
     _simLog(`❌ ${e.message}`);
   }
 }
+
 async function resetRisultati() {
   if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
   if (!confirm('⚠️ Azzerare TUTTI i risultati del torneo? Questa operazione non può essere annullata.')) return;
+
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
   _simLog('⏳ Reset in corso...');
+
   try {
+    // Reset tutte le partite della categoria attiva
     const cats = STATE.activeCat ? [STATE.activeCat] : STATE.categorie.map(c => c.id);
     let totale = 0;
+
     for (const catId of cats) {
       const gironi = await dbGetGironi(catId);
       for (const g of gironi) {
@@ -2200,9 +2661,11 @@ async function resetRisultati() {
           .eq('girone_id', g.id);
         if (!error) totale++;
       }
+      // Reset knockout
       await db.from('knockout')
         .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
         .eq('categoria_id', catId);
+      // Reset marcatori
       const gironiIds = gironi.map(g => g.id);
       if (gironiIds.length) {
         const { data: partite } = await db.from('partite')
@@ -2214,21 +2677,28 @@ async function resetRisultati() {
         }
       }
     }
+
+    // Invalida cache
     if (typeof _cacheClear === 'function') _cacheClear();
+
     _simLog(`✅ Reset completato!`);
     toast('✅ Tutti i risultati azzerati!');
     await renderCurrentSection();
+
   } catch(e) {
     console.error(e);
     _simLog(`❌ Errore: ${e.message}`);
     toast('Errore reset: ' + e.message);
   }
 }
+
 async function resetRisultatiGirone() {
   if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
   if (!confirm('⚠️ Azzerare i risultati della categoria attiva?')) return;
+
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
+
   try {
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) {
@@ -2239,11 +2709,54 @@ async function resetRisultatiGirone() {
     await db.from('knockout')
       .update({ gol_home: 0, gol_away: 0, giocata: false })
       .eq('categoria_id', STATE.activeCat);
+
     if (typeof _cacheClear === 'function') _cacheClear();
     _simLog('✅ Reset categoria completato!');
     toast('✅ Risultati categoria azzerati!');
     await renderCurrentSection();
   } catch(e) {
     _simLog(`❌ ${e.message}`);
+  }
+}
+
+// ── MODIFICA CAMPO GIORNATA ──────────────────────────────────
+function mostraEditCampoGiornata(giorno) {
+  const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+  const div = document.getElementById('edit-campo-' + keyId);
+  if (!div) return;
+  if (div.style.display !== 'none') { div.style.display='none'; return; }
+  const esistente = (STATE._campiGiornate||{})[giorno] || {};
+  div.innerHTML = `
+    <div style="background:white;border:1px solid var(--bordo);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">📍 Luogo partite — ${giorno}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="edit-nome-${keyId}" class="form-input" style="flex:1;min-width:120px;font-size:13px;"
+          placeholder="Nome campo (es. Campo Comunale)" value="${esistente.nome_campo||''}">
+        <input id="edit-addr-${keyId}" class="form-input" style="flex:2;min-width:200px;font-size:13px;"
+          placeholder="Indirizzo (es. Via Roma 1, Massa)" value="${esistente.indirizzo||''}">
+        <button onclick="salvaCampoGiornata('${giorno}')"
+          style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 14px;
+                 font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          ✓ Salva
+        </button>
+      </div>
+    </div>`;
+  div.style.display = 'block';
+}
+
+async function salvaCampoGiornata(giorno) {
+  const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
+  const nomeCampo = document.getElementById(`edit-nome-${keyId}`)?.value?.trim() || '';
+  const indirizzo = document.getElementById(`edit-addr-${keyId}`)?.value?.trim() || '';
+  try {
+    await dbSaveCampoGiornata(STATE.activeTorneo, giorno, nomeCampo, indirizzo);
+    if (!STATE._campiGiornate) STATE._campiGiornate = {};
+    STATE._campiGiornate[giorno] = { nome_campo: nomeCampo, indirizzo };
+    toast('✅ Luogo salvato!');
+    // Aggiorna sia la vista admin che quella pubblica
+    if (STATE.currentSection === 'risultati') await renderRisultati();
+    await renderAdminRisultati();
+  } catch(e) {
+    toast('❌ Errore: ' + e.message);
   }
 }

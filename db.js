@@ -1,14 +1,22 @@
+// ============================================================
+//  DB.JS v5 — STABILE E VELOCE — niente query errate
+// ============================================================
+
 let db;
 const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIENTE : 'spe';
+
 const _cache = {};
 const _TTL = 60000;
+
 function _cacheGet(k) { const e=_cache[k]; if(!e||Date.now()-e.ts>_TTL){delete _cache[k];return null;} return e.data; }
 function _cacheSet(k,d) { _cache[k]={data:d,ts:Date.now()}; }
 function _cacheInvalid(p) { Object.keys(_cache).forEach(k=>{if(k.startsWith(p))delete _cache[k];}); }
 function _cacheClear() { Object.keys(_cache).forEach(k=>delete _cache[k]); }
+
 function initDB() {
   db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 }
+
 function subscribeRealtime(cb) {
   try {
     db.channel('rt')
@@ -19,6 +27,7 @@ function subscribeRealtime(cb) {
       .subscribe();
   } catch(e) { console.warn('Realtime:',e); }
 }
+
 async function dbGetTornei() {
   const k=`tornei_${CLIENTE}`; const c=_cacheGet(k); if(c)return c;
   const {data}=await db.from('tornei').select('*').eq('cliente',CLIENTE).order('created_at',{ascending:false});
@@ -36,6 +45,7 @@ async function dbDeleteTorneo(id) {
   const {error}=await db.from('tornei').delete().eq('id',id).eq('cliente',CLIENTE);
   if(error)throw error; _cacheClear();
 }
+
 async function dbGetCategorie(torneoId) {
   if(!torneoId)return[];
   const k=`cat_${torneoId}`; const c=_cacheGet(k); if(c)return c;
@@ -54,6 +64,7 @@ async function dbUpdateCategoria(id,f) {
   const {error}=await db.from('categorie').update(f).eq('id',id);
   if(error)throw error; _cacheInvalid('cat_');
 }
+
 async function dbGetSquadre(torneoId) {
   if(!torneoId)return[];
   const k=`sq_${torneoId}`; const c=_cacheGet(k); if(c)return c;
@@ -73,8 +84,10 @@ async function dbSaveSquadra(s) {
 async function dbUpdateLogo(squadra_id,logo) {
   const {error}=await db.from('squadre').update({logo}).eq('id',squadra_id);
   if(error)throw error;
+  // Invalida TUTTA la cache così i loghi appaiono subito
   _cacheClear();
 }
+
 async function dbGetGironi(categoriaId) {
   const k=`gir_${categoriaId}`; const c=_cacheGet(k); if(c)return c;
   const {data}=await db.from('gironi').select('*').eq('categoria_id',categoriaId).order('nome');
@@ -84,6 +97,7 @@ async function dbSaveGirone(g) {
   const {data,error}=await db.from('gironi').insert(g).select('*').single();
   if(error)throw error; _cacheInvalid('gir_'); return data;
 }
+
 async function dbGetGironeSquadre(gironeId) {
   const k=`gs_${gironeId}`; const c=_cacheGet(k); if(c)return c;
   const {data}=await db.from('girone_squadre').select('*,squadre(id,nome)').eq('girone_id',gironeId).order('posizione');
@@ -95,6 +109,7 @@ async function dbSetGironeSquadre(gironeId,ids) {
   if(rows.length)await db.from('girone_squadre').insert(rows);
   _cacheInvalid('gs_');
 }
+
 async function dbGetPartite(gironeId) {
   const k=`partite_${gironeId}`; const c=_cacheGet(k); if(c)return c;
   const {data}=await db.from('partite')
@@ -118,6 +133,7 @@ async function dbGeneraPartite(gironeId,ids) {
   if(rows.length)await db.from('partite').insert(rows);
   _cacheInvalid('partite_');
 }
+
 async function dbGetMarcatori(partitaId) {
   const k=`marc_${partitaId}`; const c=_cacheGet(k); if(c)return c;
   const {data}=await db.from('marcatori').select('*').eq('partita_id',partitaId);
@@ -129,6 +145,7 @@ async function dbSaveMarcatori(partitaId,marcatori) {
   if(rows.length)await db.from('marcatori').insert(rows);
   _cacheInvalid('marc_'); _cacheInvalid('gwd_');
 }
+
 async function dbGetKnockout(categoriaId) {
   const k=`ko_${categoriaId}`; const c=_cacheGet(k); if(c)return c;
   const {data}=await db.from('knockout').select('*').eq('categoria_id',categoriaId)
@@ -146,12 +163,19 @@ async function dbSaveKnockoutMatch(m) {
   });
   if(error)throw error; _cacheInvalid('ko_');
 }
+
+// ── BATCH LOADER — 4 query totali ─────────────────────────
 async function getGironiWithData(categoriaId) {
   const k=`gwd_${categoriaId}`; const cached=_cacheGet(k); if(cached)return cached;
+
+  // Query 1: gironi
   const {data:gironi}=await db.from('gironi').select('*')
     .eq('categoria_id',categoriaId).order('nome');
   if(!gironi?.length)return[];
+
   const gironeIds=gironi.map(g=>g.id);
+
+  // Query 2 e 3 in parallelo
   const [r1,r2]=await Promise.all([
     db.from('partite')
       .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
@@ -162,8 +186,11 @@ async function getGironiWithData(categoriaId) {
       .in('girone_id',gironeIds)
       .order('posizione')
   ]);
+
   const tuttePartite=r1.data||[];
   const tutteGs=r2.data||[];
+
+  // Query 4: marcatori solo per giocate
   const giocateIds=tuttePartite.filter(p=>p.giocata).map(p=>p.id);
   let marcatori=[];
   if(giocateIds.length){
@@ -172,17 +199,39 @@ async function getGironiWithData(categoriaId) {
       .in('partita_id',giocateIds);
     marcatori=m||[];
   }
+
   const result=gironi.map(g=>({
     ...g,
     squadre:tutteGs.filter(x=>x.girone_id===g.id).map(x=>x.squadre),
     partite:tuttePartite.filter(p=>p.girone_id===g.id)
       .map(p=>({...p,marcatori:marcatori.filter(m=>m.partita_id===p.id)}))
   }));
+
   _cacheSet(k,result);
   return result;
 }
+
 async function preloadCategoria(categoriaId) {
   if(!categoriaId)return;
   getGironiWithData(categoriaId).catch(()=>{});
   dbGetKnockout(categoriaId).catch(()=>{});
+}
+
+// ── CAMPI GIORNATE ─────────────────────────────────────────
+async function dbGetCampiGiornate(torneoId) {
+  if (!torneoId) return [];
+  const k = `campi_${torneoId}`;
+  const c = _cacheGet(k); if (c) return c;
+  const { data } = await db.from('campi_giornate')
+    .select('*').eq('torneo_id', torneoId).order('giorno');
+  _cacheSet(k, data || []);
+  return data || [];
+}
+
+async function dbSaveCampoGiornata(torneoId, giorno, nomeCampo, indirizzo) {
+  const { error } = await db.from('campi_giornate')
+    .upsert({ torneo_id: torneoId, giorno, nome_campo: nomeCampo, indirizzo },
+             { onConflict: 'torneo_id,giorno' });
+  if (error) throw error;
+  _cacheInvalid('campi_');
 }
