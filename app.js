@@ -1052,12 +1052,12 @@ async function renderRisultati() {
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:14px;font-weight:700;">📅 ${STATE.activeGiornata}</span>
         <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
-        <button onclick="mostraEditCampoGiornata('${STATE.activeGiornata}')"
+        ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${STATE.activeGiornata}')"
           style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);
                  color:white;border-radius:6px;padding:3px 10px;
                  font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
           ✏️ ${_campoOggi ? 'Modifica' : 'Aggiungi'}
-        </button>
+        </button>` : ''}
       </div>
       ${_campoOggi ? `<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:4px;">
         📍 <strong>${_campoOggi.nome_campo||''}</strong>${_campoOggi.nome_campo&&_campoOggi.indirizzo?' — ':''}${_campoOggi.indirizzo||''}
