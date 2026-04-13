@@ -9,12 +9,12 @@
 
 :root {
   /* Colori principali */
-  --blu:        #1a5c2e;
-  --blu-dk:     #0f3d1e;
-  --blu-lt:     #2d8a4e;
-  --blu-bg:     #f0fdf4;
-  --blu-bg-dk:  #dcfce7;
-  --verde:      #1a5c2e;
+  --blu:        #1a56db;
+  --blu-dk:     #1040a8;
+  --blu-lt:     #3b82f6;
+  --blu-bg:     #eff6ff;
+  --blu-bg-dk:  #dbeafe;
+  --verde:      #16a34a;
   --verde-bg:   #f0fdf4;
   --rosso:      #dc2626;
   --rosso-bg:   #fef2f2;
@@ -81,7 +81,7 @@ body {
 
 /* ── HEADER ───────────────────────────────────────────────── */
 header {
-  background: linear-gradient(135deg, #0a2e14 0%, #1a4a2e 60%, #1a5c2e 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1a56db 100%);
   position: sticky; top: 0; z-index: 100;
   box-shadow: 0 2px 20px rgba(15,23,42,0.35);
 }
@@ -797,7 +797,4 @@ input[type="text"], input[type="number"], input[type="password"], select {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bordo); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #c8d0db;
-                                
-                                }
-
+::-webkit-scrollbar-thumb:hover { background: #c8d0db; }
