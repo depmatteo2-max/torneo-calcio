@@ -714,7 +714,12 @@ function _calcolaMiglioriSecondi(classificheGironi) {
 }
 function _isPlaceholder(nome) {
  if (!nome) return false;
- return /^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(nome.trim());
+ const s = nome.trim();
+ if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+ if (/^(Vincente|Perdente)\s+SEMIFINALE\s*\d+/i.test(s)) return true;
+ if (/^(Vincente|Perdente)\s+SEM[-\s]?\d+/i.test(s)) return true;
+ if (/^Miglior\s*2[°º]?/i.test(s)) return true;
+ return false;
 }
 function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[], risultatiKnockout={}) {
  if (!placeholder) return null;
