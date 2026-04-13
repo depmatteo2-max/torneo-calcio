@@ -252,7 +252,13 @@ async function selezionaCategoriaPublic(catId) {
  await _caricaGiornate();
  renderTorneoBar();
  renderCatBar();
+ // Mostra sempre la navbar pubblica quando si seleziona una categoria
+ document.getElementById('pub-nav').style.display = 'flex';
  document.getElementById('cat-bar').style.display = '';
+ // Assicura che il bottone attivo sia quello corretto
+ document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
+ const btnAttivo = document.querySelector(`[data-section="${STATE.currentSection}"]`);
+ if (btnAttivo) btnAttivo.classList.add('active');
  _scriviHash(catId, STATE.currentSection);
  await renderCurrentSection();
 }
@@ -2398,8 +2404,5 @@ async function salvaCampoGiornata(giorno) {
  await renderAdminRisultati();
  } catch(e) {
  toast('❌ Errore: ' + e.message);
-
  }
 }
-
-
