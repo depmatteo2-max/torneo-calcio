@@ -11,6 +11,20 @@ let STATE = {
 };
 async function init() {
  initDB();
+ // Applica nome e logo dal config
+ if (typeof CONFIG !== 'undefined') {
+   if (CONFIG.NOME_SITO) {
+     document.title = CONFIG.NOME_SITO;
+     const ht = document.getElementById('header-title');
+     if (ht) ht.textContent = CONFIG.NOME_SITO;
+   }
+   if (CONFIG.LOGO) {
+     ['header-logo','loading-img','sel-logo'].forEach(id => {
+       const el = document.getElementById(id);
+       if (el) el.src = CONFIG.LOGO;
+     });
+   }
+ }
  if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
  try {
  STATE.tornei = await dbGetTornei();
@@ -38,8 +52,8 @@ function mostraSelezioneTeorneo() {
  const main = document.getElementById('main-content');
  main.innerHTML = `
  <div style="min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;">
- <img id="sel-logo" style="width:90px;height:90px;border-radius:50%;object-fit:cover;box-shadow:0 4px 20px rgba(0,0,0,0.15);margin-bottom:20px;" alt="SPE">
- <div style="font-size:22px;font-weight:800;color:#1a2a3a;margin-bottom:4px;">Soccer Pro Experience</div>
+ <img id="sel-logo" style="width:90px;height:90px;border-radius:50%;object-fit:cover;box-shadow:0 4px 20px rgba(0,0,0,0.15);margin-bottom:20px;" alt="Logo">
+ <div style="font-size:22px;font-weight:800;color:#1a2a3a;margin-bottom:4px;">${typeof CONFIG !== 'undefined' && CONFIG.NOME_SITO ? CONFIG.NOME_SITO : 'Soccer Pro Experience'}</div>
  <div style="font-size:14px;color:#888;margin-bottom:32px;">Seleziona il torneo da seguire</div>
  <div style="width:100%;max-width:400px;display:flex;flex-direction:column;gap:12px;">
  ${attivi.map(t => `
@@ -144,7 +158,7 @@ function mostraSelezioneCat() {
  <div style="position:relative;flex:1;min-width:0;">
  <div style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">⚽ Torneo in corso</div>
  <div style="font-size:20px;font-weight:900;color:white;line-height:1.2;letter-spacing:-.01em;
- white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t?.nome || 'Soccer Pro Experience'}</div>
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t?.nome || (typeof CONFIG !== 'undefined' && CONFIG.NOME_SITO ? CONFIG.NOME_SITO : 'Soccer Pro Experience')}</div>
  <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">${t?.data || ''}</div>
  ${oggiLabel ? `<div style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;
  background:rgba(234,88,12,0.25);border:1px solid rgba(234,88,12,0.5);
@@ -347,7 +361,7 @@ function updateHeader() {
  const t = STATE.tornei.find(t => t.id === STATE.activeTorneo);
  const titleEl = document.getElementById('header-title');
  const dateEl = document.getElementById('header-date');
- if (titleEl) titleEl.textContent = t ? t.nome : 'Soccer Pro Experience';
+ if (titleEl) titleEl.textContent = t ? t.nome : (typeof CONFIG !== 'undefined' && CONFIG.NOME_SITO ? CONFIG.NOME_SITO : 'Soccer Pro Experience');
  if (dateEl) dateEl.textContent = t ? t.data || '' : '';
 }
 function showSection(name, btn) {
