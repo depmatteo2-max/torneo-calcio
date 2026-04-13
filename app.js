@@ -2398,5 +2398,7 @@ async function salvaCampoGiornata(giorno) {
  await renderAdminRisultati();
  } catch(e) {
  toast('❌ Errore: ' + e.message);
+
  }
 }
+
