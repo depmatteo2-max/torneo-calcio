@@ -32,6 +32,7 @@ function _getRoundMeta(round) {
  }
  return null;
 }
+const ROUND_COLORS = {
  'PLATINO': '#FFD700', 'GOLD': '#FFA500',
  'SILVER': '#C0C0C0', 'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5'
 };
