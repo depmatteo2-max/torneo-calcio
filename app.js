@@ -1383,7 +1383,8 @@ async function renderAdminLoghi() {
  font-family:inherit;border:2px solid var(--blu,#1a56db);transition:all .15s;"
  onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
  📁 Carica loghi da cartella
- <input type="file" accept="imagegi;
+ <input type="file" accept="image/*" style="display:none;" multiple id="folder-input" webkitdirectory>
+`;
  const SUFFISSI = /\s*(calcio|football|club|sport|city|united|1972|1908|1919|1973|2016|2024|verde|bianco|blu|grigio|srl|spa|s\.p\.a\.|f\.c\.)\s*$/gi;
  const norm = (s) => {
  if (!s) return '';
