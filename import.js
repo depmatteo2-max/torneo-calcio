@@ -1,3 +1,12 @@
+function _isPlaceholder(nome) {
+ if (!nome) return false;
+ const s = nome.trim();
+ if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+ if (/^(Vincente|Perdente)\s+SEMIFINALE\s*\d+/i.test(s)) return true;
+ if (/^(Vincente|Perdente)\s+SEM[-\s]?\d+/i.test(s)) return true;
+ if (/^Miglior\s*2[°º]?/i.test(s)) return true;
+ return false;
+}
 const ROUND_META = {
  'PLATINO': { order: 0, consolazione: false, emoji: '🥇', desc: '1° classificate' },
  'GOLD' : { order: 1, consolazione: false, emoji: '🥈', desc: '2° classificate' },
