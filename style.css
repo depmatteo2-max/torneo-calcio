@@ -797,4 +797,7 @@ input[type="text"], input[type="number"], input[type="password"], select {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bordo); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #c8d0db; }
+::-webkit-scrollbar-thumb:hover { background: #c8d0db;
+                                
+                                }
+
