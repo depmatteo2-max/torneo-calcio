@@ -1393,7 +1393,8 @@ async function renderAdminLoghi() {
  if (!s) return '';
  let r = s.toLowerCase()
  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .replace(PREFISSI, '')
+ .replace(/[''`]/g, '')
+ .replace(PREFISSI, '')
  .replace(SUFFISSI, '')
  .replace(/[^a-z0-9\s]/g, ' ')
  .replace(/\s+/g, ' ')
