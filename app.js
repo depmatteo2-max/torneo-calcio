@@ -18,6 +18,23 @@ let STATE = {
 
 async function init() {
   initDB();
+  // Applica nome e logo dal config
+  if (typeof CONFIG !== 'undefined') {
+    if (CONFIG.NOME_SITO) {
+      document.title = CONFIG.NOME_SITO;
+      const ht = document.getElementById('header-title');
+      if (ht) ht.textContent = CONFIG.NOME_SITO;
+    }
+    if (typeof getLogo === 'function') {
+      const logo = getLogo();
+      if (logo) {
+        ['header-logo','loading-img'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.src = logo;
+        });
+      }
+    }
+  }
   // Aumenta TTL cache per ridurre chiamate ripetute
   if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
   try {
@@ -165,7 +182,7 @@ function mostraSelezioneCat() {
     <div style="padding-bottom:32px;">
 
       <!-- HERO -->
-      <div style="background:linear-gradient(135deg,#0a2e14 0%,#1a4a2e 60%,#1a5c2e 100%);
+      <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1a56db 100%);
                   border-radius:16px;padding:24px 20px;margin-bottom:22px;
                   display:flex;align-items:center;gap:16px;position:relative;overflow:hidden;">
         <div style="position:absolute;right:-20px;top:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.04);"></div>
@@ -277,12 +294,8 @@ async function selezionaCategoriaPublic(catId) {
   await _caricaGiornate();
   renderTorneoBar();
   renderCatBar();
-  document.getElementById('pub-nav').style.display = 'flex';
   document.getElementById('cat-bar').style.display = '';
-  document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
-  const btnAttivo = document.querySelector(`[data-section="${STATE.currentSection}"]`);
-  if (btnAttivo) btnAttivo.classList.add('active');
-  _scriviHash(catId, STATE.currentSection);
+  _scriviHash(catId, STATE.currentSection); // aggiorna URL
   await renderCurrentSection();
 }
 
