@@ -14,7 +14,7 @@
   --blu-lt:     #2d8a4e;
   --blu-bg:     #f0fdf4;
   --blu-bg-dk:  #dcfce7;
-  --verde:      #16a34a;
+  --verde:      #1a5c2e;
   --verde-bg:   #f0fdf4;
   --rosso:      #dc2626;
   --rosso-bg:   #fef2f2;
@@ -60,7 +60,7 @@ body {
 /* ── LOADING ──────────────────────────────────────────────── */
 #loading-screen {
   position: fixed; inset: 0;
-  background: linear-gradient(160deg, #0f172a 0%, #1e3a8a 100%);
+  background: linear-gradient(160deg, #0a2e14 0%, #1a5c2e 100%);
   display: flex; align-items: center; justify-content: center; z-index: 9999;
 }
 .loading-logo { display: flex; flex-direction: column; align-items: center; gap: 20px; }
