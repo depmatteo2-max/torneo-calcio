@@ -18,22 +18,9 @@ let STATE = {
 
 async function init() {
   initDB();
-  // Applica nome e logo dal config
   if (typeof CONFIG !== 'undefined') {
-    if (CONFIG.NOME_SITO) {
-      document.title = CONFIG.NOME_SITO;
-      const ht = document.getElementById('header-title');
-      if (ht) ht.textContent = CONFIG.NOME_SITO;
-    }
-    if (typeof getLogo === 'function') {
-      const logo = getLogo();
-      if (logo) {
-        ['header-logo','loading-img'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.src = logo;
-        });
-      }
-    }
+    if (CONFIG.NOME_SITO) { document.title = CONFIG.NOME_SITO; var ht=document.getElementById('header-title'); if(ht)ht.textContent=CONFIG.NOME_SITO; }
+    if (typeof getLogo === 'function') { var logo=getLogo(); if(logo){['header-logo','loading-img'].forEach(function(id){var el=document.getElementById(id);if(el)el.src=logo;});} }
   }
   // Aumenta TTL cache per ridurre chiamate ripetute
   if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
@@ -1447,16 +1434,16 @@ function aggiungiRigaCategoria() {
 }
 
 function _aggiornaNomeRiga(idx) {
-  const nome = document.getElementById(`cat-nome-${idx}`)?.value || 'categoria';
-  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  const nome = document.getElementById('cat-nome-' + idx)?.value || 'categoria';
+  const btnDiv = document.getElementById('cat-btn-' + idx);
   if (btnDiv && btnDiv.style.display !== 'none') {
     const btn = btnDiv.querySelector('button');
-    if (btn) btn.textContent = `✓ Importa "${nome}"`;
+    if (btn) btn.textContent = '✓ Importa "' + nome + '"';
   }
 }
 
 function _rimuoviRiga(idx) {
-  const el = document.getElementById(`cat-riga-${idx}`);
+  const el = document.getElementById('cat-riga-' + idx);
   if (el) el.remove();
 }
 
@@ -1465,16 +1452,16 @@ let _fileRighe = {}; // idx -> dati excel parsati
 function _fileSelezionato(event, idx) {
   const file = event.target.files[0];
   if (!file) return;
-  const label = document.getElementById(`cat-file-label-${idx}`);
-  if (label) label.textContent = `📄 ${file.name}`;
+  const label = document.getElementById('cat-file-label-' + idx);
+  if (label) label.textContent = '📄 ' + file.name;
 
   // Preview immediato
   _parseExcelRiga(file, idx);
 }
 
 async function _parseExcelRiga(file, idx) {
-  const preview = document.getElementById(`cat-preview-${idx}`);
-  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  const preview = document.getElementById('cat-preview-' + idx);
+  const btnDiv = document.getElementById('cat-btn-' + idx);
   if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
 
   try {
@@ -1501,7 +1488,7 @@ async function _parseExcelRiga(file, idx) {
     const totGironi = dati.gironi.length;
     const totPartite = dati.partite.length;
     const totFinali = dati.fase2.length;
-    const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
+    const nomeCatInput = document.getElementById('cat-nome-' + idx);
 
     // Auto-compila nome categoria dal file se vuoto
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
@@ -1524,18 +1511,18 @@ async function _parseExcelRiga(file, idx) {
       btnDiv.style.display = 'block';
       const nome = nomeCatInput?.value || 'categoria';
       const btn = btnDiv.querySelector('button');
-      if (btn) btn.textContent = `✓ Importa "${nome}"`;
+      if (btn) btn.textContent = '✓ Importa "' + nome + '"';
     }
   } catch(e) {
-    if (preview) preview.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
+    if (preview) preview.innerHTML = '<div style="color:var(--rosso);font-size:12px;">❌ Errore: ' + e.message + '</div>';
   }
 }
 
 async function _importaRiga(idx) {
   const dati = _fileRighe[idx];
-  const nomeInput = document.getElementById(`cat-nome-${idx}`);
+  const nomeInput = document.getElementById('cat-nome-' + idx);
   const nomeScritto = nomeInput?.value?.trim();
-  const btn = document.querySelector(`#cat-btn-${idx} button`);
+  const btn = document.querySelector('#cat-btn-' + idx + ' button');
 
   if (!dati) { toast('Carica prima un file Excel'); return; }
 
@@ -1567,11 +1554,11 @@ async function _importaRiga(idx) {
     await eseguiImportazioneConTorneo(torneoId, dati, btn);
 
     // Feedback sulla riga
-    const riga = document.getElementById(`cat-riga-${idx}`);
+    const riga = document.getElementById('cat-riga-' + idx);
     if (riga) {
       riga.style.background = 'var(--verde-bg)';
       riga.style.borderColor = 'rgba(22,163,74,0.3)';
-      const preview = document.getElementById(`cat-preview-${idx}`);
+      const preview = document.getElementById('cat-preview-' + idx);
       if (preview) preview.innerHTML = `<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>`;
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
@@ -1581,7 +1568,7 @@ async function _importaRiga(idx) {
     renderCatBar();
 
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Importa "' + (nomeScritto||'categoria') + '"'; }
     toast('❌ Errore: ' + e.message);
     console.error(e);
   }
@@ -1658,7 +1645,7 @@ async function caricaLoghiDaCartella(event) {
   if (!files.length || !log) return;
 
   log.style.display = 'block';
-  log.innerHTML = `📁 ${files.length} file selezionati — abbinamento in corso...<br>`;
+  log.innerHTML = '📁 ' + files.length + ' file selezionati — abbinamento in corso...<br>';
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
 
@@ -1748,7 +1735,7 @@ async function caricaLoghiDaCartella(event) {
       const targets = sqUniche.get(bestKey);
       const conf = bestScore >= 0.85 ? '✅' : bestScore >= 0.55 ? '🟡' : '🟠';
       const nomiTarget = targets.map(s => s.nome).join(' + ');
-      log.innerHTML += `${conf} <strong>${file.name}</strong> → ${nomiTarget} (${Math.round(bestScore*100)}%) `;
+      log.innerHTML += conf + ' <strong>' + file.name + '</strong> → ' + nomiTarget + ' (' + Math.round(bestScore*100) + '%) ';
 
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
@@ -1757,11 +1744,11 @@ async function caricaLoghiDaCartella(event) {
           await dbUpdateLogo(sq.id, compressed);
         }
         abbinati++;
-        log.innerHTML += targets.length > 1 ? `✓ (${targets.length} squadre)<br>` : `✓<br>`;
+        log.innerHTML += targets.length > 1 ? '✓ (' + targets.length + ' squadre)<br>' : '✓<br>';
       } catch(e) { log.innerHTML += `errore<br>`; }
     } else {
       nonAbbinati.push(file.name);
-      log.innerHTML += `❓ <strong>${file.name}</strong> → non trovata<br>`;
+      log.innerHTML += '❓ <strong>' + file.name + '</strong> → non trovata<br>';
     }
     log.scrollTop = log.scrollHeight;
   }
@@ -1772,7 +1759,7 @@ async function caricaLoghiDaCartella(event) {
     log.innerHTML += `<br><small>💡 Usa parte del nome senza prefissi (es. "vercelli.png" per Pro Vercelli)</small>`;
   }
 
-  if (abbinati > 0) { await renderAdminLoghi(); toast(`✅ ${abbinati} loghi caricati!`); }
+  if (abbinati > 0) { await renderAdminLoghi(); toast('✅ ' + abbinati + ' loghi caricati!'); }
   event.target.value = '';
 }
 
@@ -1825,7 +1812,7 @@ async function comprimiloghiEsistenti() {
   log.innerHTML += `<br>🏁 <strong>${compressi} compressi, ${saltati} già piccoli</strong>`;
   btn.disabled = false;
   btn.textContent = '📦 Comprimi loghi grandi';
-  if (compressi > 0) { await renderAdminLoghi(); toast(`✅ ${compressi} loghi compressi!`); }
+  if (compressi > 0) { await renderAdminLoghi(); toast('✅ ' + compressi + ' loghi compressi!'); }
 }
 
 async function uploadLogo(event, squadra_id) {
@@ -2010,9 +1997,9 @@ async function saveMarcatori(partita_id, girone_id) {
   if (!partita) return;
   const all=[];
   for (let i=0;i<(partita.marcatori||[]).length;i++) {
-    const sqEl=document.getElementById(`msq_${partita_id}_${i}`);
-    const nmEl=document.getElementById(`mnm_${partita_id}_${i}`);
-    const mnEl=document.getElementById(`mmin_${partita_id}_${i}`);
+    const sqEl=document.getElementById('msq_' + partita_id + '_' + i);
+    const nmEl=document.getElementById('mnm_' + partita_id + '_' + i);
+    const mnEl=document.getElementById('mmin_' + partita_id + '_' + i);
     if (sqEl&&nmEl&&nmEl.value.trim()) all.push({squadra_id:parseInt(sqEl.value),nome:nmEl.value.trim(),minuto:mnEl?mnEl.value||null:null});
   }
   await dbSaveMarcatori(partita_id,all.filter(m=>m.nome));
@@ -2155,7 +2142,7 @@ function enterAdmin(user) {
   STATE.isAdmin=true; STATE.userRole=user.ruolo; STATE.userName=user.nome;
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
-  document.getElementById('admin-btn').textContent=`Esci (${user.nome})`;
+  document.getElementById('admin-btn').textContent='Esci (' + user.nome + ')';
   if (user.ruolo==='arbitro') {
     _mostraNavArbitro(); STATE.currentSection='a-risultati';
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
@@ -2645,27 +2632,27 @@ async function simulaRisultati() {
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
-        _simLog(`Pass ${pass} — ${g.nome}: ${daGiocare.length} partite`);
+        _simLog('Pass ' + pass + ' — ' + g.nome + ': ' + daGiocare.length + ' partite');
         for (const p of daGiocare) {
           const gh = _golCasuale(), ga = _golCasuale();
           await dbSavePartita({ id:p.id, girone_id:p.girone_id, gol_home:gh, gol_away:ga, giocata:true, inserito_da:'🤖 Simulazione' });
           nuovi++; totale++;
-          _simLog(`✓ ${p.home?.nome||'?'} ${gh}–${ga} ${p.away?.nome||'?'}`);
+          _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
         }
       }
 
-      if (nuovi === 0) { _simLog(`✓ Completato in ${pass} passaggi!`); break; }
+      if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
     }
 
     // Risolvi knockout finale
     if (catId) await verificaEGeneraTriangolari(catId);
-    _simLog(`\n✅ ${totale} risultati simulati!`);
-    toast(`✅ ${totale} risultati simulati!`);
+    _simLog('\n✅ ' + totale + ' risultati simulati!');
+    toast('✅ ' + totale + ' risultati simulati!');
     await renderCurrentSection();
 
   } catch(e) {
     console.error(e);
-    _simLog(`❌ Errore: ${e.message}`);
+    _simLog('❌ Errore: ' + e.message);
     toast('Errore: ' + e.message);
   }
 }
@@ -2684,7 +2671,7 @@ async function simulaRisultatiGirone() {
       const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
       if (!daGiocare.length) continue;
 
-      _simLog(`📋 Simulo ${g.nome} (${daGiocare.length} partite)...`);
+      _simLog('📋 Simulo ' + g.nome + ' (' + daGiocare.length + ' partite)...');
       for (const p of daGiocare) {
         const gh = _golCasuale();
         const ga = _golCasuale();
@@ -2698,12 +2685,12 @@ async function simulaRisultatiGirone() {
       break; // solo primo girone
     }
 
-    _simLog(`✅ ${totale} risultati simulati!`);
-    toast(`✅ ${totale} risultati simulati!`);
+    _simLog('✅ ' + totale + ' risultati simulati!');
+    toast('✅ ' + totale + ' risultati simulati!');
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
     await renderCurrentSection();
   } catch(e) {
-    _simLog(`❌ ${e.message}`);
+    _simLog('❌ ' + e.message);
   }
 }
 
@@ -2754,7 +2741,7 @@ async function resetRisultati() {
 
   } catch(e) {
     console.error(e);
-    _simLog(`❌ Errore: ${e.message}`);
+    _simLog('❌ Errore: ' + e.message);
     toast('Errore reset: ' + e.message);
   }
 }
@@ -2782,7 +2769,7 @@ async function resetRisultatiGirone() {
     toast('✅ Risultati categoria azzerati!');
     await renderCurrentSection();
   } catch(e) {
-    _simLog(`❌ ${e.message}`);
+    _simLog('❌ ' + e.message);
   }
 }
 
@@ -2813,8 +2800,8 @@ function mostraEditCampoGiornata(giorno) {
 
 async function salvaCampoGiornata(giorno) {
   const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-  const nomeCampo = document.getElementById(`edit-nome-${keyId}`)?.value?.trim() || '';
-  const indirizzo = document.getElementById(`edit-addr-${keyId}`)?.value?.trim() || '';
+  const nomeCampo = document.getElementById('edit-nome-' + keyId)?.value?.trim() || '';
+  const indirizzo = document.getElementById('edit-addr-' + keyId)?.value?.trim() || '';
   try {
     await dbSaveCampoGiornata(STATE.activeTorneo, giorno, nomeCampo, indirizzo);
     if (!STATE._campiGiornate) STATE._campiGiornate = {};
