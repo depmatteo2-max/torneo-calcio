@@ -714,6 +714,19 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
     const classificheGironi = {};
 
+    // Carica risultati knockout per risolvere Vincente/Perdente SEMIFINALE
+    const { data: allKo } = await db.from('knockout')
+      .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
+      .eq('categoria_id', categoriaId);
+    const risultatiKnockout = {};
+    for (const ko of (allKo||[])) {
+      const mSem = ko.round_name?.match(/SEMIFINALE\s*(\d+)/i);
+      if (mSem) {
+        const key = 'SEMIFINALE ' + mSem[1].padStart(2,'0');
+        risultatiKnockout[key] = ko;
+      }
+    }
+
     // Calcola classifica per ogni girone con almeno una partita giocata
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
@@ -735,7 +748,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
-    if (!Object.keys(classificheGironi).length) return;
+    if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
 
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
     let risolti = 0;
@@ -745,8 +758,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
     for (const match of (matches||[])) {
-      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
-      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
+      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
+      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
       const upd={};
       if (newH && newH!==match.home_id) upd.home_id=newH;
       if (newA && newA!==match.away_id) upd.away_id=newA;
@@ -764,8 +777,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
       for (const p of (tuttePartite||[])) {
         if (!p.note_home && !p.note_away) continue;
-        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
-        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi);
+        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
+        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
         const upd={};
         if (newH && newH!==p.home_id) upd.home_id=newH;
         if (newA && newA!==p.away_id) upd.away_id=newA;
@@ -778,8 +791,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
       // Aggiorna girone_squadre con le squadre reali risolte
       const sqIds = new Set();
       for (const p of (tuttePartite||[])) {
-        const newH = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi) : p.home_id;
-        const newA = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi) : p.away_id;
+        const newH = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout) : p.home_id;
+        const newA = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout) : p.away_id;
         if (newH) sqIds.add(newH);
         if (newA) sqIds.add(newA);
       }
@@ -829,9 +842,23 @@ function _isPlaceholder(nome) {
   return /^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(nome.trim());
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[]) {
+function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[], risultatiKnockout={}) {
   if (!placeholder) return null;
   const s = placeholder.trim();
+
+  // Gestisce "Vincente SEMIFINALE XX" o "Perdente SEMIFINALE XX"
+  const mSemVP = s.match(/(Vincente|Perdente)\s+SEMIFINALE\s*(\d+)/i);
+  if (mSemVP) {
+    const tipo = mSemVP[1].toLowerCase();
+    const semKey = 'SEMIFINALE ' + mSemVP[2].padStart(2,'0');
+    const sem = risultatiKnockout[semKey];
+    if (!sem || !sem.giocata) return null;
+    if (tipo === 'vincente') {
+      return sem.gol_home >= sem.gol_away ? sem.home_id : sem.away_id;
+    } else {
+      return sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id;
+    }
+  }
 
   // Gestisce "Miglior 2°" o "Miglior secondo"
   if (/miglior\s*2[°º]?/i.test(s)) {
