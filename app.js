@@ -277,12 +277,8 @@ async function selezionaCategoriaPublic(catId) {
   await _caricaGiornate();
   renderTorneoBar();
   renderCatBar();
-  document.getElementById('pub-nav').style.display = 'flex';
   document.getElementById('cat-bar').style.display = '';
-  document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
-  const btnAttivo = document.querySelector('[data-section="' + STATE.currentSection + '"]');
-  if (btnAttivo) btnAttivo.classList.add('active');
-  _scriviHash(catId, STATE.currentSection);
+  _scriviHash(catId, STATE.currentSection); // aggiorna URL
   await renderCurrentSection();
 }
 
@@ -1037,36 +1033,13 @@ async function renderRisultati() {
 
   let html = '';
 
-  // ── Carica campi giornate ──
-  if (!STATE._campiGiornate) {
-    try {
-      const cg = await dbGetCampiGiornate(STATE.activeTorneo);
-      const _cm = {}; cg.forEach(c => _cm[c.giorno] = c);
-      STATE._campiGiornate = _cm;
-    } catch(e) { STATE._campiGiornate = {}; }
-  }
-  const campiMap = STATE._campiGiornate || {};
-
   // ── Header giornata in cima ──
   if (filtroAttivo) {
-    const _campoOggi = campiMap[STATE.activeGiornata];
-    const _keyIdOggi = STATE.activeGiornata.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
     html += `<div style="background:linear-gradient(90deg,var(--blu) 0%,var(--blu-lt) 100%);
-      color:white;border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:14px;font-weight:700;">📅 ${STATE.activeGiornata}</span>
-        <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
-        ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${STATE.activeGiornata}')"
-          style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);
-                 color:white;border-radius:6px;padding:3px 10px;
-                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
-          ✏️ ${_campoOggi ? 'Modifica' : 'Aggiungi'}
-        </button>` : ''}
-      </div>
-      ${_campoOggi ? `<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:4px;">
-        📍 <strong>${_campoOggi.nome_campo||''}</strong>${_campoOggi.nome_campo&&_campoOggi.indirizzo?' — ':''}${_campoOggi.indirizzo||''}
-      </div>` : ''}
-      <div id="edit-campo-${_keyIdOggi}" style="display:none;margin-top:8px;"></div>
+      color:white;border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;
+      font-size:14px;font-weight:700;display:flex;align-items:center;gap:10px;">
+      📅 ${STATE.activeGiornata}
+      <span style="font-size:11px;opacity:.7;margin-left:auto;">${tuttePartite.length} partite</span>
     </div>`;
   } else {
     // Riepilogo: mostra giorni disponibili come chip cliccabili
@@ -1123,6 +1096,17 @@ async function renderRisultati() {
     return r;
   };
 
+  // ── Carica campi giornate (FIX: deve essere qui, non in renderAdminRisultati) ──
+  if (!STATE._campiGiornate) {
+    try {
+      const cg = await dbGetCampiGiornate(STATE.activeTorneo);
+      const campiObj = {};
+      cg.forEach(c => campiObj[c.giorno] = c);
+      STATE._campiGiornate = campiObj;
+    } catch(e) { STATE._campiGiornate = {}; }
+  }
+  const campiMap = STATE._campiGiornate || {};
+
   // ── Helper: banner giornata con campo ──
   const _bannerGiornata = (giorno, isOggi) => {
     const campo = campiMap[giorno];
@@ -1131,20 +1115,24 @@ async function renderRisultati() {
     const bordocolore = isOggi ? 'var(--blu)' : 'var(--bordo)';
     const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
     return `<div style="background:${colore};border:1px solid ${bordocolore};border-radius:var(--radius);
-      padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:700;color:${testocolore};">📅 ${giorno}</div>
-        ${campo ? `<div style="font-size:12px;color:${isOggi?'rgba(255,255,255,0.8)':'var(--testo-xs)'};margin-top:2px;">
-          📍 <strong>${campo.nome_campo||''}</strong>${campo.nome_campo&&campo.indirizzo?' — ':''}${campo.indirizzo||''}
-        </div>` : ''}
+      padding:10px 14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:700;color:${testocolore};white-space:nowrap;">📅 ${giorno}</span>
+        ${campo
+          ? `<span style="font-size:12px;color:${isOggi?'rgba(255,255,255,0.85)':'var(--testo-xs)'};flex:1;">
+              📍 <strong>${campo.nome_campo||''}</strong>${campo.nome_campo&&campo.indirizzo?' — ':''}${campo.indirizzo||''}
+             </span>`
+          : `<span style="font-size:11px;color:${isOggi?'rgba(255,255,255,0.45)':'var(--testo-xs)'};font-style:italic;flex:1;">
+              ${STATE.isAdmin ? 'Clicca per aggiungere indirizzo' : ''}
+             </span>`}
+        ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${giorno}')"
+          style="background:${isOggi?'rgba(255,255,255,0.2)':'white'};border:1px solid ${isOggi?'rgba(255,255,255,0.3)':'var(--bordo)'};
+                 color:${isOggi?'white':'var(--testo-lt)'};border-radius:6px;padding:3px 10px;
+                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          ✏️ ${campo ? 'Modifica' : 'Aggiungi'}
+        </button>` : ''}
       </div>
-      ${STATE.isAdmin ? `<button onclick="mostraEditCampoGiornata('${giorno}')"
-        style="background:${isOggi?'rgba(255,255,255,0.2)':'white'};border:1px solid ${isOggi?'rgba(255,255,255,0.3)':'var(--bordo)'};
-               color:${isOggi?'white':'var(--testo-lt)'};border-radius:6px;padding:4px 10px;
-               font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
-        ✏️ ${campo ? 'Modifica' : 'Aggiungi'} luogo
-      </button>` : ''}
-      <div id="edit-campo-${keyId}" style="display:none;width:100%;margin-top:8px;"></div>
+      <div id="edit-campo-${keyId}" style="display:none;margin-top:8px;"></div>
     </div>`;
   };
 
@@ -1654,7 +1642,7 @@ async function caricaLoghiDaCartella(event) {
     if (!s) return '';
     let r = s.toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // togli accenti
-      
+      .replace(/[''`]/g, '')
       .replace(PREFISSI, '')
       .replace(SUFFISSI, '')
       .replace(/[^a-z0-9\s]/g, ' ')
@@ -1875,15 +1863,6 @@ async function renderAdminRisultati() {
   }
   tuttePartite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
 
-  // ── Raggruppa per giorno e mostra banner ──
-  const perGiornoAdmin = {};
-  tuttePartite.forEach(p => {
-    const g = p.giorno || '—';
-    if (!perGiornoAdmin[g]) perGiornoAdmin[g] = [];
-    perGiornoAdmin[g].push(p);
-  });
-  const mostraBannerAdmin = Object.keys(perGiornoAdmin).length > 1 || STATE.activeGiornata === 'tutte';
-
   let html='';
   for (const p of tuttePartite) {
     const key='p'+p.id; const open=!!openScorers[key];
@@ -1899,32 +1878,6 @@ async function renderAdminRisultati() {
       <span style="font-size:11px;color:#bbb;">${p._girone}</span>
       ${p.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${p.inserito_da}</span>`:''}
     </div>`;
-    // Banner giornata — mostra solo alla prima partita del giorno
-    const _pgIdx = tuttePartite.indexOf(p);
-    const _prevGiorno = _pgIdx > 0 ? tuttePartite[_pgIdx-1].giorno : null;
-    if (p.giorno && p.giorno !== _prevGiorno) {
-      const _campoG = campiMap[p.giorno] || {};
-      const _keyG = (p.giorno).replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-      html += `<div style="background:var(--blu);color:white;border-radius:var(--radius);
-        padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div style="flex:1;">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span style="font-size:13px;font-weight:700;">📅 ${p.giorno}</span>
-            ${_campoG.nome_campo||_campoG.indirizzo ? `<span style="font-size:12px;color:rgba(255,255,255,0.85);">
-              📍 <strong>${_campoG.nome_campo||''}</strong>${_campoG.nome_campo&&_campoG.indirizzo?' — ':''}${_campoG.indirizzo||''}
-            </span>` : ''}
-          </div>
-        </div>
-        <button onclick="mostraEditCampoGiornata('${p.giorno}')"
-          style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);
-                 color:white;border-radius:6px;padding:3px 10px;
-                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
-          ✏️ ${_campoG.nome_campo ? 'Modifica' : 'Aggiungi'} luogo
-        </button>
-        <div id="edit-campo-${_keyG}" style="display:none;width:100%;margin-top:8px;"></div>
-      </div>`;
-    }
-
     html+=`<div class="admin-match"><div class="admin-match-header">
       ${orInfo}
       <div style="display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;">
@@ -2800,6 +2753,7 @@ async function salvaCampoGiornata(giorno) {
     if (!STATE._campiGiornate) STATE._campiGiornate = {};
     STATE._campiGiornate[giorno] = { nome_campo: nomeCampo, indirizzo };
     toast('✅ Luogo salvato!');
+    // Aggiorna sia la vista admin che quella pubblica
     if (STATE.currentSection === 'risultati') await renderRisultati();
     await renderAdminRisultati();
   } catch(e) {
