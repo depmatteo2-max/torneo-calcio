@@ -6,17 +6,84 @@
 // ============================================================
 
 const ROUND_META = {
-  'PLATINO': { order: 0, consolazione: false, emoji: '🥇', desc: '1° classificate' },
-  'GOLD'   : { order: 1, consolazione: false, emoji: '🥈', desc: '2° classificate' },
-  'SILVER' : { order: 2, consolazione: true,  emoji: '🥉', desc: '3° classificate' },
-  'BRONZO' : { order: 3, consolazione: true,  emoji: '🏅', desc: '4° classificate' },
-  'WHITE'  : { order: 4, consolazione: true,  emoji: '⬜', desc: '5° classificate' }
+  'PLATINO'              : { order: 0,  consolazione: false, emoji: '🥇', desc: '1° classificate' },
+  'GOLD'                 : { order: 1,  consolazione: false, emoji: '🥈', desc: 'Fase Gold' },
+  'SILVER'               : { order: 2,  consolazione: true,  emoji: '🥉', desc: 'Fase Silver' },
+  'BRONZO'               : { order: 3,  consolazione: true,  emoji: '🏅', desc: '4° classificate' },
+  'WHITE'                : { order: 4,  consolazione: true,  emoji: '⬜', desc: '5° classificate' },
+  'FINALE SILVER 1-2 POSTO': { order: 5,  consolazione: true,  emoji: '🥈', desc: 'Finale Silver 1°-2°' },
+  'FINALE SILVER 3-4 POSTO': { order: 6,  consolazione: true,  emoji: '🥉', desc: 'Finale Silver 3°-4°' },
+  'FINALE GOLD 1-2 POSTO'  : { order: 7,  consolazione: false, emoji: '🥇', desc: 'Finale Gold 1°-2°' },
+  'FINALE GOLD 3-4 POSTO'  : { order: 8,  consolazione: false, emoji: '🏅', desc: 'Finale Gold 3°-4°' },
+  'SEMIFINALE 01'        : { order: 9,  consolazione: false, emoji: '⚔️', desc: 'Semifinale 1' },
+  'SEMIFINALE 02'        : { order: 10, consolazione: false, emoji: '⚔️', desc: 'Semifinale 2' },
+  'SEMIFINALE 03'        : { order: 11, consolazione: false, emoji: '⚔️', desc: 'Semifinale 3' },
+  'SEMIFINALE 04'        : { order: 12, consolazione: false, emoji: '⚔️', desc: 'Semifinale 4' },
+  'FINALE 1-2 POSTO'     : { order: 13, consolazione: false, emoji: '🏆', desc: 'Finale 1°-2°' },
+  'FINALE 3-4 POSTO'     : { order: 14, consolazione: true,  emoji: '🥉', desc: 'Finale 3°-4°' },
+  'FINALE 5-6 POSTO'     : { order: 15, consolazione: true,  emoji: '🎖️', desc: 'Finale 5°-6°' },
+  'FINALE 7-8 POSTO'     : { order: 16, consolazione: true,  emoji: '🎖️', desc: 'Finale 7°-8°' },
+  'FINALE 9-10 POSTO'    : { order: 17, consolazione: true,  emoji: '🎖️', desc: 'Finale 9°-10°' },
+  'FINALE 11-12 POSTO'   : { order: 18, consolazione: true,  emoji: '🎖️', desc: 'Finale 11°-12°' },
+  'QUALIFICAZIONE'       : { order: 19, consolazione: false, emoji: '🔑', desc: 'Qualificazione' },
 };
 
+// Riconosce qualsiasi round che inizia con una delle chiavi note
+// oppure pattern come "FINALE * POSTO"
+function _getRoundMeta(roundRaw) {
+  const r = roundRaw.toUpperCase().trim();
+  if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
+  // Pattern generico: FINALE <X>-<Y> POSTO
+  if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) {
+    return { key: r, meta: { order: 20, consolazione: true, emoji: '🎖️', desc: r } };
+  }
+  // Pattern SEMIFINALE con numero
+  if (/^SEMIFINALE\s+\d+$/.test(r)) {
+    return { key: r, meta: { order: 9, consolazione: false, emoji: '⚔️', desc: r } };
+  }
+  return null;
+}
+
 const ROUND_COLORS = {
-  'PLATINO': '#FFD700', 'GOLD': '#FFA500',
-  'SILVER': '#C0C0C0', 'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5'
+  'PLATINO'              : '#FFD700',
+  'GOLD'                 : '#FFA500',
+  'SILVER'               : '#C0C0C0',
+  'BRONZO'               : '#CD7F32',
+  'WHITE'                : '#B0BEC5',
+  'FINALE SILVER 1-2 POSTO': '#A8D8A8',
+  'FINALE SILVER 3-4 POSTO': '#C8E6C9',
+  'FINALE GOLD 1-2 POSTO'  : '#FFD700',
+  'FINALE GOLD 3-4 POSTO'  : '#FFE082',
+  'SEMIFINALE 01'        : '#90CAF9',
+  'SEMIFINALE 02'        : '#90CAF9',
+  'SEMIFINALE 03'        : '#90CAF9',
+  'SEMIFINALE 04'        : '#90CAF9',
+  'FINALE 1-2 POSTO'     : '#FFD700',
+  'FINALE 3-4 POSTO'     : '#CD7F32',
+  'FINALE 5-6 POSTO'     : '#B0BEC5',
+  'FINALE 7-8 POSTO'     : '#B0BEC5',
 };
+
+// ============================================================
+//  _isPlaceholder — riconosce squadre da risolvere dopo
+// ============================================================
+function _isPlaceholder(nome) {
+  if (!nome) return false;
+  const n = nome.trim();
+  // "1° Girone A", "2° Girone Silver 1", "3° Girone Gold 2" ecc.
+  if (/^\d+[°oa*]\s+(Girone|GIR\.?|GIRONE)/i.test(n)) return true;
+  // "Vincente SEMIFINALE 01", "Perdente SEMIFINALE 02"
+  if (/^(Vincente|Perdente)\s+SEMIFINALE\s+\d+/i.test(n)) return true;
+  // "Vincente GOLD 01", "Perdente SILVER 02"
+  if (/^(Vincente|Perdente)\s+(GOLD|SILVER|PLATINO|BRONZO)/i.test(n)) return true;
+  // "1 SILVER 1", "2 GOLD 2" ecc. (formato finali interne)
+  if (/^\d+\s+(SILVER|GOLD|PLATINO|BRONZO)\s+\d+$/i.test(n)) return true;
+  // "1 GIR.A", "2 GIR.B", "3 GIR.C", "4 GIR.D"
+  if (/^\d+\s+GIR\.[A-Z]$/i.test(n)) return true;
+  // "3° GIR.A", "4° GIR.B"
+  if (/^\d+[°oa*]\s+GIR\.[A-Z]$/i.test(n)) return true;
+  return false;
+}
 
 async function importaExcel(event) {
   const file = event.target.files[0];
@@ -85,7 +152,7 @@ function leggiCategorie(wb) {
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   const hi   = trovaRigaHeader(rows, ['CATEGORIA']);
   const hdrs = rows[hi].map(h => String(h||'').trim());
-  const iCat  = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA'));
+  const iCat  = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA') || h.toUpperCase() === 'NOME');
   const iQual = hdrs.findIndex(h => h.toUpperCase().includes('QUALIFICATE') || h.toUpperCase().includes('QUAL'));
   const iForm = hdrs.findIndex(h => h.toUpperCase().includes('FORMATO'));
   return rows.slice(hi + 1)
@@ -139,7 +206,7 @@ function leggiPartiteFase1(wb) {
   const iCampo = hdrs.findIndex(h => h.toUpperCase().includes('CAMPO'));
   const iGiorn = hdrs.findIndex(h => h.toUpperCase().includes('GIORNATA'));
   let iHome = hdrs.findIndex(h => h.toUpperCase().includes('CASA') || h.toUpperCase().includes('HOME'));
-  let iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY'));
+  let iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY') || h.toUpperCase().includes('TRASFERTA'));
   if (iHome < 0) iHome = 2;
   if (iAway < 0) iAway = 3;
   return rows.slice(hi + 1)
@@ -154,10 +221,10 @@ function leggiPartiteFase1(wb) {
       girone   : String(r[iGir  >= 0 ? iGir  : 1]||'').trim(),
       home     : String(r[iHome]||'').trim(),
       away     : String(r[iAway]||'').trim(),
-      orario   : String(r[iOra  >= 0 ? iOra  : -1] !== undefined ? r[iOra]  : ''||'').trim(),
-      giorno   : String(r[iGior >= 0 ? iGior : -1] !== undefined ? r[iGior] : ''||'').trim(),
-      campo    : String(r[iCampo>= 0 ? iCampo: -1] !== undefined ? r[iCampo]: ''||'').trim(),
-      giornata : String(r[iGiorn>= 0 ? iGiorn: -1] !== undefined ? r[iGiorn]: ''||'').trim(),
+      orario   : iOra   >= 0 ? String(r[iOra]  ||'').trim() : '',
+      giorno   : iGior  >= 0 ? String(r[iGior] ||'').trim() : '',
+      campo    : iCampo >= 0 ? String(r[iCampo]||'').trim() : '',
+      giornata : iGiorn >= 0 ? String(r[iGiorn]||'').trim() : '',
     }));
 }
 
@@ -175,24 +242,24 @@ function leggiPartiteFase2(wb) {
     })
     .filter(({ obj }) => {
       const cat   = col(obj, 'CATEGORIA');
-      const round = col(obj, 'ROUND').toUpperCase();
-      return cat && !cat.toUpperCase().includes('LEGENDA') && ROUND_META[round] !== undefined;
+      const round = col(obj, 'ROUND').toUpperCase().trim();
+      return cat && !cat.toUpperCase().includes('LEGENDA') && _getRoundMeta(round) !== null;
     })
     .map(({ obj, idx }) => {
-      const round = col(obj, 'ROUND').toUpperCase();
-      const meta  = ROUND_META[round];
+      const roundRaw = col(obj, 'ROUND').toUpperCase().trim();
+      const { key, meta } = _getRoundMeta(roundRaw);
       return {
         categoria   : col(obj, 'CATEGORIA'),
-        round,
-        roundLabel  : `${meta.emoji} ${round} — ${meta.desc}`,
+        round       : key,
+        roundLabel  : `${meta.emoji} ${key} — ${meta.desc}`,
         roundOrder  : meta.order,
         matchOrder  : idx,
         consolazione: meta.consolazione,
         orario      : col(obj, 'ORARIO', 'ORA'),
         campo       : col(obj, 'CAMPO'),
         giorno      : col(obj, 'GIORNO', 'DATA'),
-        sq1raw      : col(obj, 'SQUADRA CASA', 'SQUADRA 1', 'CASA', 'HOME'),
-        sq2raw      : col(obj, 'SQUADRA OSPITE', 'SQUADRA 2', 'OSPITE', 'AWAY'),
+        sq1raw      : col(obj, 'SQUADRA_CASA', 'SQUADRA CASA', 'CASA', 'HOME'),
+        sq2raw      : col(obj, 'SQUADRA_TRASFERTA', 'SQUADRA OSPITE', 'TRASFERTA', 'OSPITE', 'AWAY'),
       };
     });
 }
@@ -222,8 +289,10 @@ function mostraAnteprima(dati, container) {
     const partite = p1Cat[cat.codice]  || [];
     const fase2   = p2Cat[cat.codice]  || [];
     const totSq   = gironi.reduce((s, g) => s + g.squadre.length, 0);
-    const roundsPresenti = [...new Set(fase2.map(p => p.round))]
-      .sort((a, b) => (ROUND_META[a]?.order||99) - (ROUND_META[b]?.order||99));
+    const roundsPresenti = [...new Set(fase2.map(p => p.round))].sort((a, b) => {
+      const ma = _getRoundMeta(a); const mb = _getRoundMeta(b);
+      return (ma?.meta?.order||99) - (mb?.meta?.order||99);
+    });
 
     html += `
       <div style="margin-bottom:16px;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
@@ -248,7 +317,8 @@ function mostraAnteprima(dati, container) {
       html += `<div style="border-top:1px solid #eee;margin-top:10px;padding-top:10px;">
         <div style="font-weight:700;color:#E85C00;margin-bottom:6px;">🔁 Fase finale:</div>`;
       roundsPresenti.forEach(rnd => {
-        const meta = ROUND_META[rnd] || {};
+        const rm   = _getRoundMeta(rnd);
+        const meta = rm?.meta || {};
         const colr = ROUND_COLORS[rnd] || '#999';
         const pRnd = fase2.filter(p => p.round === rnd);
         html += `<div style="margin-bottom:5px;padding:6px 10px;border-radius:6px;border-left:4px solid ${colr};background:#fafafa;font-size:12px;">
@@ -337,28 +407,22 @@ async function eseguiImportazione() {
   const torneoId = window._selectedTorneoId;
   const dati     = window._importDati;
   if (!torneoId || !dati) return;
-  const btn = null;
-  try { await eseguiImportazioneConTorneo(torneoId, dati, btn); }
+  try { await eseguiImportazioneConTorneo(torneoId, dati, null); }
   catch(e) { console.error(e); alert('❌ Errore:\n' + e.message); }
 }
 
 async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
-  // Carica squadre già esistenti per questo torneo
   const { data: sqEsistenti } = await db.from('squadre').select('id, nome').eq('torneo_id', torneoId);
   const squadreMap = {};
   (sqEsistenti || []).forEach(sq => { squadreMap[`${torneoId}||${sq.nome}`] = sq.id; });
 
-  // Carica categorie esistenti per evitare duplicati
   const { data: catEsistenti } = await db.from('categorie').select('nome').eq('torneo_id', torneoId);
   const nomiCatEsistenti = new Set((catEsistenti || []).map(c => c.nome));
-
-  // Conta categorie esistenti per ordine
   let ordineBase = catEsistenti?.length || 0;
 
   for (let ci = 0; ci < dati.categorie.length; ci++) {
     const cat = dati.categorie[ci];
 
-    // Salta se categoria già esiste con stesso nome
     if (nomiCatEsistenti.has(cat.nome)) {
       toast(`⚠️ Categoria "${cat.nome}" già presente — saltata`);
       continue;
@@ -388,7 +452,6 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       for (let si = 0; si < girone.squadre.length; si++) {
         const nomeSq = girone.squadre[si];
         if (!nomeSq) continue;
-        // NON inserire squadre placeholder in girone_squadre — verranno risolte dopo
         if (_isPlaceholder(nomeSq)) continue;
         const key = `${torneoId}||${nomeSq}`;
         if (!squadreMap[key]) {
@@ -408,31 +471,33 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         (p.categoria === cat.codice || p.categoria === cat.nome) && p.girone === girone.nome
       );
       for (const p of pGir) {
-        // Controlla se home/away sono placeholder tipo "3° Girone A", "1* Girone B"
         const hIsPlaceholder = _isPlaceholder(p.home);
         const aIsPlaceholder = _isPlaceholder(p.away);
         const hId = hIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.home}`] || null);
         const aId = aIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.away}`] || null);
-        if (!hIsPlaceholder && !hId) { console.warn('Squadra home mancante:', p.home); }
-        if (!aIsPlaceholder && !aId) { console.warn('Squadra away mancante:', p.away); }
+        if (!hIsPlaceholder && !hId) console.warn('Squadra home mancante:', p.home);
+        if (!aIsPlaceholder && !aId) console.warn('Squadra away mancante:', p.away);
         await db.from('partite').insert({
           girone_id: girId,
-          home_id: hId,
-          away_id: aId,
+          home_id  : hId,
+          away_id  : aId,
           note_home: hIsPlaceholder ? p.home : null,
           note_away: aIsPlaceholder ? p.away : null,
-          orario: p.orario||null, giorno: p.giorno||null,
-          campo: p.campo||null, giornata: p.giornata||null, giocata: false
+          orario   : p.orario   || null,
+          giorno   : p.giorno   || null,
+          campo    : p.campo    || null,
+          giornata : p.giornata || null,
+          giocata  : false
         });
       }
     }
 
-    // Fase finale — con orario e campo
+    // Fase finale
     const fase2Cat = dati.fase2.filter(p => p.categoria === cat.codice || p.categoria === cat.nome);
     for (let mi = 0; mi < fase2Cat.length; mi++) {
       const p   = fase2Cat[mi];
-      const hId = squadreMap[`${torneoId}||${p.sq1raw}`] || null;
-      const aId = squadreMap[`${torneoId}||${p.sq2raw}`] || null;
+      const hId = _isPlaceholder(p.sq1raw) ? null : (squadreMap[`${torneoId}||${p.sq1raw}`] || null);
+      const aId = _isPlaceholder(p.sq2raw) ? null : (squadreMap[`${torneoId}||${p.sq2raw}`] || null);
       const koRow = {
         categoria_id   : catId,
         round_name     : p.roundLabel,
@@ -445,9 +510,8 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         note_home      : p.sq1raw,
         note_away      : p.sq2raw,
       };
-      // Aggiungi orario e campo solo se la colonna esiste
       if (p.orario) koRow.orario = p.orario;
-      if (p.campo) koRow.campo = p.campo;
+      if (p.campo)  koRow.campo  = p.campo;
       const { error: koErr } = await db.from('knockout').insert(koRow);
       if (koErr) console.warn('Knockout insert warning:', koErr.message);
     }
