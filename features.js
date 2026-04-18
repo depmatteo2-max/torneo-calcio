@@ -1,18 +1,63 @@
-// ============================================================
-//  FEATURES.JS v2 — usa cache, niente loop
-// ============================================================
-
-// ── 1. PATCH CLASSIFICA con GF/GS ──────────────────────────
 window.renderClassifiche = async function() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
-
   const cat = STATE.categorie.find(c=>c.id===STATE.activeCat);
-  const gironi = await getGironiWithData(STATE.activeCat); // usa cache db.js
+  const gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
-
   let html = '';
+
+  // Banner vincitori gironi (mostrato una sola volta per sessione per categoria)
+  const bannerKey = 'vincitori_shown_' + STATE.activeCat;
+  const tuttiCompleti = gironi.every(g => g.partite.length > 0 && g.partite.filter(p=>p.giocata).length === g.partite.length);
+  if (tuttiCompleti && !sessionStorage.getItem(bannerKey)) {
+    sessionStorage.setItem(bannerKey, '1');
+    html += `<div id="vincitori-banner" style="
+      background:linear-gradient(135deg,#0a2e14 0%,#1a4a2e 100%);
+      border-radius:16px;padding:18px 16px;margin-bottom:16px;
+      border:1px solid rgba(255,255,255,0.1);position:relative;
+      animation:bannerSlideIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards;">
+      <button onclick="document.getElementById('vincitori-banner').remove()"
+        style="position:absolute;top:10px;right:12px;background:rgba(255,255,255,0.15);
+        border:none;color:white;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:13px;">✕</button>
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);
+        text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">🏆 Classifiche finali gironi</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">`;
+
+    for (const g of gironi) {
+      const cl = calcGironeClassifica(g);
+      const top3 = cl.slice(0, 3);
+      const medaglie = ['🥇','🥈','🥉'];
+      html += `<div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);
+          text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">${g.nome}</div>`;
+      top3.forEach((row, idx) => {
+        const isVincitore = idx === 0;
+        html += `<div style="display:flex;align-items:center;gap:10px;
+          padding:${isVincitore?'8px 10px':'5px 10px'};
+          background:${isVincitore?'rgba(255,215,0,0.12)':'rgba(255,255,255,0.04)'};
+          border-radius:8px;margin-bottom:4px;
+          border:${isVincitore?'1px solid rgba(255,215,0,0.3)':'1px solid transparent'};">
+          <span style="font-size:${isVincitore?'22px':'16px'}">${medaglie[idx]}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:${isVincitore?'15px':'13px'};font-weight:${isVincitore?'800':'600'};
+              color:${isVincitore?'#FFD700':'rgba(255,255,255,0.8)'};
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${logoHTML(row.sq,'sm')} ${row.sq.nome}
+            </div>
+            ${isVincitore?`<div style="font-size:10px;color:rgba(255,215,0,0.6);margin-top:2px;font-weight:600;">VINCITORE GIRONE</div>`:''}
+          </div>
+          <div style="font-size:${isVincitore?'18px':'14px'};font-weight:800;
+            color:${isVincitore?'#FFD700':'rgba(255,255,255,0.5)'};flex-shrink:0;">
+            ${row.pts} pt
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
     const played = g.partite.filter(p=>p.giocata).length;
@@ -50,20 +95,15 @@ window.renderClassifiche = async function() {
   }
   el.innerHTML = html;
 };
-
-// ── 2. NOTIFICA RISULTATO ───────────────────────────────────
 window.saveRisultato = async function(partita_id, girone_id) {
   const sh = document.getElementById('sh_'+partita_id)?.value;
   const sa = document.getElementById('sa_'+partita_id)?.value;
   if (sh===''||sa==='') { toast('Inserisci entrambi i gol'); return; }
-
-  // Cerca nomi dalla cache già caricata
   const gironi = await getGironiWithData(STATE.activeCat);
   let hN='?', aN='?';
   outer: for (const g of gironi)
     for (const p of g.partite)
       if (p.id===partita_id) { hN=p.home?.nome||'?'; aN=p.away?.nome||'?'; break outer; }
-
   try {
     const result = await dbSavePartita({
       id:partita_id, girone_id,
@@ -79,7 +119,6 @@ window.saveRisultato = async function(partita_id, girone_id) {
     } else toast('Errore salvataggio');
   } catch(e) { toast('Errore: '+(e.message||'sconosciuto')); }
 };
-
 function mostraNotificaRisultato(home, golH, away, golA) {
   document.getElementById('result-notification')?.remove();
   const v = golH>golA ? `🏆 ${home} vince!` : golA>golH ? `🏆 ${away} vince!` : '🤝 Pareggio!';
@@ -98,8 +137,6 @@ function mostraNotificaRisultato(home, golH, away, golA) {
   document.body.appendChild(div);
   setTimeout(()=>{ const e=document.getElementById('result-notification'); if(e){e.style.animation='notifFadeOut 0.5s ease forwards';setTimeout(()=>e.remove(),500);} },6000);
 }
-
-// ── 3. COPPA ────────────────────────────────────────────────
 const _trophyShown = {};
 function checkTrophyAnimation(v, cat) {
   if (!v||!cat) return;
@@ -128,9 +165,8 @@ function mostraCoppa(v, cat) {
   }
 }
 window.testCoppa = ()=>mostraCoppa('Nome Squadra','Under 10');
-
-// ── CSS ─────────────────────────────────────────────────────
 document.head.insertAdjacentHTML('beforeend',`<style>
+@keyframes bannerSlideIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 #result-notification{position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:9999;width:min(400px,92vw);animation:notifSlideIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275) forwards}
 @keyframes notifSlideIn{from{opacity:0;transform:translateX(-50%) translateY(-20px) scale(0.9)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
 @keyframes notifFadeOut{to{opacity:0;transform:translateX(-50%) translateY(-10px) scale(0.95)}}

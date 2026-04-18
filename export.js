@@ -1,52 +1,33 @@
-// ============================================================
-//  EXPORT EXCEL - Soccer Pro Experience
-//  Usa SheetJS (XLSX) caricato dal CDN
-// ============================================================
-
 async function esportaExcel() {
   if (!STATE.activeTorneo) { toast('Nessun torneo selezionato'); return; }
   toast('Generazione Excel in corso...');
-
   try {
-    // Carica SheetJS se non presente
     if (typeof XLSX === 'undefined') {
       await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
     }
-
     const wb = XLSX.utils.book_new();
     const torneo = STATE.tornei.find(t => t.id === STATE.activeTorneo);
     const categorie = await dbGetCategorie(STATE.activeTorneo);
-
     for (const cat of categorie) {
       const gironi = await getGironiWithData(cat.id);
       const ko = await dbGetKnockout(cat.id);
       const squadre = await dbGetSquadre(STATE.activeTorneo);
       const sqMap = {}; squadre.forEach(s => sqMap[s.id] = s);
-
       const rows = [];
-
-      // Titolo
       rows.push([`${cat.nome.toUpperCase()} — ${torneo?.nome || ''} — ${torneo?.data || ''}`]);
       rows.push([]);
-
-      // Leggenda spareggio
       rows.push(['CRITERI DI SPAREGGIO IN CASO DI PARITÀ DI PUNTI']);
       rows.push(['1. Punti', '2. Scontro diretto', '3. Diff. reti scontro diretto']);
       rows.push(['4. Gol fatti scontro diretto', '5. Diff. reti generale', '6. Gol fatti totali']);
       rows.push(['7. Gol subiti totali (meno = meglio)', '8. Sorteggio / Rigori', '']);
       rows.push([]);
-
-      // Fase 1 - Gironi
       rows.push(['◆ FASE 1 — GIRONI']);
       rows.push(['Categoria','Fase','Girone','Giornata','Giorno','Orario','Campo','Squadra 1','','Squadra 2','Risultato','Note']);
-
       let matchNum = 1;
       for (const g of gironi) {
         rows.push([`— ${g.nome} —`,'','','','','','','','','','','']);
         const played = g.partite.filter(p => p.giocata);
         const pending = g.partite.filter(p => !p.giocata);
-        
-        // Partite giocate
         for (const p of played) {
           rows.push([
             cat.nome, 'Fase 1', g.nome, `Partita ${matchNum++}`,
@@ -55,7 +36,6 @@ async function esportaExcel() {
             `${p.gol_home} - ${p.gol_away}`, ''
           ]);
         }
-        // Partite da giocare
         for (const p of pending) {
           rows.push([
             cat.nome, 'Fase 1', g.nome, `Partita ${matchNum++}`,
@@ -64,10 +44,7 @@ async function esportaExcel() {
             '', ''
           ]);
         }
-
         rows.push([]);
-
-        // Classifica girone
         rows.push([`CLASSIFICA ${g.nome}`]);
         rows.push(['Pos.','Squadra','','G','V','P','S','GF','GS','GD','Pt','']);
         const cl = calcGironeClassifica(g);
@@ -82,18 +59,14 @@ async function esportaExcel() {
         });
         rows.push([]);
       }
-
-      // Fase 2 - Knockout
       if (ko.length) {
         rows.push(['◆ FASE 2 — SCONTRI DIRETTI E FINALE']);
         rows.push(['Categoria','Fase','Partita','','Giorno','Orario','Campo','Squadra 1','','Squadra 2','Risultato','Note']);
-
         const roundOrder = ['Quarti di finale','Semifinali','3° posto','Finale','5° posto','7° posto','Consolazione semifinali','Consolazione finale','Consolazione 3° posto'];
         const sorted = [...ko].sort((a,b) => {
           const ia = roundOrder.indexOf(a.round_name), ib = roundOrder.indexOf(b.round_name);
           return (ia===-1?99:ia)-(ib===-1?99:ib);
         });
-
         let lastRound = '';
         for (const m of sorted) {
           if (m.round_name !== lastRound) {
@@ -112,31 +85,22 @@ async function esportaExcel() {
         }
         rows.push([]);
       }
-
-      // Crea foglio
       const ws = XLSX.utils.aoa_to_sheet(rows);
-
-      // Larghezze colonne
       ws['!cols'] = [
         {wch:20},{wch:10},{wch:14},{wch:12},{wch:14},{wch:8},{wch:12},
         {wch:22},{wch:4},{wch:22},{wch:10},{wch:16}
       ];
-
       const sheetName = cat.nome.substring(0, 31).replace(/[:\\\/\?\*\[\]]/g,'');
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     }
-
-    // Scarica
     const filename = `${torneo?.nome || 'Torneo'}_Calendario.xlsx`.replace(/\s+/g,'_');
     XLSX.writeFile(wb, filename);
     toast('✓ Excel scaricato!');
-
   } catch(e) {
     console.error(e);
     toast('Errore nella generazione Excel: ' + e.message);
   }
 }
-
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');

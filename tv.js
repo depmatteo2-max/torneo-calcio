@@ -1,16 +1,10 @@
-// ============================================================
-//  TV.JS v2 — niente loop, usa cache db.js
-// ============================================================
-
 let TV_MODE = false;
 let TV_INTERVAL = null;
 let TV_CAT_INDEX = 0;
 let TV_SECTION_INDEX = 0;
 const TV_SECTIONS = ['classifiche', 'risultati'];
 const TV_DURATION = 15000; // 15s per schermata
-
 function toggleTVMode() { TV_MODE ? exitTVMode() : enterTVMode(); }
-
 function enterTVMode() {
   TV_MODE = true; TV_CAT_INDEX = 0; TV_SECTION_INDEX = 0;
   const el = document.documentElement;
@@ -21,7 +15,6 @@ function enterTVMode() {
   const btn = document.getElementById('tv-btn');
   if (btn) btn.textContent = '✕ Esci TV';
 }
-
 function exitTVMode() {
   TV_MODE = false;
   if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
@@ -31,7 +24,6 @@ function exitTVMode() {
   const btn = document.getElementById('tv-btn');
   if (btn) btn.textContent = '📺 TV';
 }
-
 function creaOverlayTV() {
   document.getElementById('tv-overlay')?.remove();
   const overlay = document.createElement('div');
@@ -54,37 +46,29 @@ function creaOverlayTV() {
       <button onclick="exitTVMode()" id="tv-exit-btn">✕ Esci</button>
     </div>`;
   document.body.appendChild(overlay);
-
-  // Orologio
   const tickOrologio = () => {
     const el = document.getElementById('tv-orologio');
     if (el) el.textContent = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
   };
   tickOrologio();
   setInterval(tickOrologio, 1000);
-
-  // Logo e titolo
   const hl = document.getElementById('header-logo');
   if (hl?.src?.length > 50) { const tl=document.getElementById('tv-logo-img'); tl.src=hl.src; tl.style.display='block'; }
   const ht = document.getElementById('header-title');
   if (ht) document.getElementById('tv-titolo').textContent = ht.textContent;
-
   renderTV();
 }
-
 function avviaAutoScorrimento() {
   if (TV_INTERVAL) clearInterval(TV_INTERVAL);
   avviaProgressBar();
   TV_INTERVAL = setInterval(prossimaSchermataTv, TV_DURATION);
 }
-
 function avviaProgressBar() {
   const bar = document.getElementById('tv-progress-inner');
   if (!bar) return;
   bar.style.transition = 'none'; bar.style.width = '0%';
   setTimeout(()=>{ bar.style.transition=`width ${TV_DURATION}ms linear`; bar.style.width='100%'; }, 50);
 }
-
 function prossimaSchermataTv() {
   if (!STATE.categorie?.length) return;
   TV_SECTION_INDEX++;
@@ -95,23 +79,17 @@ function prossimaSchermataTv() {
   renderTV();
   avviaProgressBar();
 }
-
 async function renderTV() {
   if (!TV_MODE) return;
   const cat = STATE.categorie[TV_CAT_INDEX];
   const section = TV_SECTIONS[TV_SECTION_INDEX];
   if (!cat) return;
-
   const catNomeEl = document.getElementById('tv-cat-nome');
   if (catNomeEl) catNomeEl.textContent = `${section==='classifiche'?'📊 Classifica':'⚽ Risultati'} — ${cat.nome}`;
-
   const content = document.getElementById('tv-content');
   if (!content) return;
   content.style.opacity = '0';
-
-  // Usa cache — getGironiWithData non fa query se dati già in cache
   const gironi = await getGironiWithData(cat.id);
-
   let html = '';
   if (section === 'classifiche') {
     for (const g of gironi) {
@@ -139,10 +117,8 @@ async function renderTV() {
       html += `</tbody></table></div>`;
     }
   } else {
-    // Filtra per oggi se disponibile
     const oggi = typeof _trovaGiornataOggi==='function'
       ? _trovaGiornataOggi(STATE._giornateDisponibili||[]) : null;
-
     for (const g of gironi) {
       let partite = g.partite;
       if (oggi) {
@@ -151,7 +127,6 @@ async function renderTV() {
       }
       const giocate = partite.filter(p=>p.giocata);
       const daFare  = partite.filter(p=>!p.giocata).slice(0,4);
-
       if (giocate.length) {
         html += `<div class="tv-block-title">${g.nome}${oggi?' — Oggi':''} — Risultati</div><div class="tv-matches">`;
         for (const p of giocate.slice(-6)) {
@@ -177,12 +152,9 @@ async function renderTV() {
       }
     }
   }
-
   content.innerHTML = html || '<div class="tv-empty">Nessun dato</div>';
   setTimeout(()=>{ content.style.transition='opacity 0.4s ease'; content.style.opacity='1'; }, 30);
 }
-
-// ── CSS ─────────────────────────────────────────────────────
 document.head.insertAdjacentHTML('beforeend',`<style>
 #tv-overlay{position:fixed;inset:0;background:#060b18;z-index:99998;display:flex;flex-direction:column;font-family:inherit;overflow:hidden}
 #tv-header{display:flex;align-items:center;justify-content:space-between;padding:12px 32px;background:linear-gradient(135deg,#0d1b3e,#1a3a6e);border-bottom:2px solid #2563eb;flex-shrink:0}
