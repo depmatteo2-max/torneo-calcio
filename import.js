@@ -1,14 +1,65 @@
 const ROUND_META = {
-  'PLATINO': { order: 0, consolazione: false, emoji: '🥇', desc: '1° classificate' },
-  'GOLD'   : { order: 1, consolazione: false, emoji: '🥈', desc: '2° classificate' },
-  'SILVER' : { order: 2, consolazione: true,  emoji: '🥉', desc: '3° classificate' },
-  'BRONZO' : { order: 3, consolazione: true,  emoji: '🏅', desc: '4° classificate' },
-  'WHITE'  : { order: 4, consolazione: true,  emoji: '⬜', desc: '5° classificate' }
+  'PLATINO'              : { order: 0,  consolazione: false, emoji: '🥇', desc: '1° classificate' },
+  'GOLD'                 : { order: 1,  consolazione: false, emoji: '🥈', desc: '2° classificate' },
+  'SILVER'               : { order: 2,  consolazione: true,  emoji: '🥉', desc: '3° classificate' },
+  'BRONZO'               : { order: 3,  consolazione: true,  emoji: '🏅', desc: '4° classificate' },
+  'WHITE'                : { order: 4,  consolazione: true,  emoji: '⬜', desc: '5° classificate' },
+  'ARANCIO'              : { order: 5,  consolazione: false, emoji: '🟠', desc: 'Fase Arancio' },
+  'VERDE'                : { order: 6,  consolazione: false, emoji: '🟢', desc: 'Fase Verde' },
+  'BLU'                  : { order: 7,  consolazione: false, emoji: '🔵', desc: 'Fase Blu' },
+  'GIRONE 1'             : { order: 8,  consolazione: false, emoji: '1️⃣', desc: 'Girone 1' },
+  'GIRONE 2'             : { order: 9,  consolazione: false, emoji: '2️⃣', desc: 'Girone 2' },
+  'FINALE SILVER 1-2 POSTO': { order: 10, consolazione: true,  emoji: '🥈', desc: 'Finale Silver 1°-2°' },
+  'FINALE SILVER 3-4 POSTO': { order: 11, consolazione: true,  emoji: '🥉', desc: 'Finale Silver 3°-4°' },
+  'FINALE GOLD 1-2 POSTO'  : { order: 12, consolazione: false, emoji: '🥇', desc: 'Finale Gold 1°-2°' },
+  'FINALE GOLD 3-4 POSTO'  : { order: 13, consolazione: false, emoji: '🏅', desc: 'Finale Gold 3°-4°' },
+  'SEMIFINALE 01'        : { order: 14, consolazione: false, emoji: '⚔️', desc: 'Semifinale 1' },
+  'SEMIFINALE 02'        : { order: 15, consolazione: false, emoji: '⚔️', desc: 'Semifinale 2' },
+  'SEMIFINALE 03'        : { order: 16, consolazione: false, emoji: '⚔️', desc: 'Semifinale 3' },
+  'SEMIFINALE 04'        : { order: 17, consolazione: false, emoji: '⚔️', desc: 'Semifinale 4' },
+  'FINALE 1-2 POSTO'     : { order: 18, consolazione: false, emoji: '🏆', desc: 'Finale 1°-2°' },
+  'FINALE 3-4 POSTO'     : { order: 19, consolazione: true,  emoji: '🥉', desc: 'Finale 3°-4°' },
+  'FINALE 5-6 POSTO'     : { order: 20, consolazione: true,  emoji: '🎖️', desc: 'Finale 5°-6°' },
+  'FINALE 7-8 POSTO'     : { order: 21, consolazione: true,  emoji: '🎖️', desc: 'Finale 7°-8°' },
+  'FINALE 9-10 POSTO'    : { order: 22, consolazione: true,  emoji: '🎖️', desc: 'Finale 9°-10°' },
+  'FINALE 11-12 POSTO'   : { order: 23, consolazione: true,  emoji: '🎖️', desc: 'Finale 11°-12°' },
 };
+
+function _getRoundMeta(roundRaw) {
+  const r = roundRaw.toUpperCase().trim();
+  if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
+  if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
+  if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '⚔️', desc: r } };
+  return null;
+}
+
 const ROUND_COLORS = {
-  'PLATINO': '#FFD700', 'GOLD': '#FFA500',
-  'SILVER': '#C0C0C0', 'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5'
+  'PLATINO': '#FFD700', 'GOLD': '#FFA500', 'SILVER': '#C0C0C0',
+  'BRONZO': '#CD7F32', 'WHITE': '#B0BEC5',
+  'ARANCIO': '#FF8C00', 'VERDE': '#4CAF50', 'BLU': '#2196F3',
+  'GIRONE 1': '#90CAF9', 'GIRONE 2': '#A5D6A7',
+  'FINALE SILVER 1-2 POSTO': '#A9D18E', 'FINALE SILVER 3-4 POSTO': '#C8E6C9',
+  'FINALE GOLD 1-2 POSTO': '#FFD700',   'FINALE GOLD 3-4 POSTO': '#FFE082',
+  'SEMIFINALE 01': '#90CAF9', 'SEMIFINALE 02': '#90CAF9',
+  'SEMIFINALE 03': '#90CAF9', 'SEMIFINALE 04': '#90CAF9',
+  'FINALE 1-2 POSTO': '#FFD700', 'FINALE 3-4 POSTO': '#CD7F32',
+  'FINALE 5-6 POSTO': '#B0BEC5', 'FINALE 7-8 POSTO': '#B0BEC5',
+  'FINALE 9-10 POSTO': '#CFD8DC', 'FINALE 11-12 POSTO': '#ECEFF1',
 };
+
+function _isPlaceholder(nome) {
+  if (!nome) return false;
+  const n = nome.trim();
+  if (/^\d+[°oa*]\s+(Girone|GIR\.?|GIRONE)/i.test(n)) return true;
+  if (/^(Vincente|Perdente)\s+SEMIFINALE\s+\d+/i.test(n)) return true;
+  if (/^(Vincente|Perdente)\s+(GOLD|SILVER|PLATINO|BRONZO|ARANCIO|VERDE|BLU)/i.test(n)) return true;
+  if (/^\d+\s+(SILVER|GOLD|PLATINO|BRONZO|ARANCIO|VERDE|BLU)\s+\d+$/i.test(n)) return true;
+  if (/^\d+[°oa*]?\s*(Arancio|Verde|Blu)$/i.test(n)) return true;
+  if (/^(MIGLIOR|PEGGIOR)\s+(SECONDA|TERZA|QUARTA)/i.test(n)) return true;
+  if (/^(SECONDA|TERZA|QUARTA)\s*\d*$/i.test(n)) return true;
+  return false;
+}
+
 async function importaExcel(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -42,6 +93,7 @@ async function importaExcel(event) {
     preview.innerHTML = `<div style="padding:16px;color:#c00;">❌ Errore lettura: ${e.message}</div>`;
   }
 }
+
 function trovaRigaHeader(rows, keywords) {
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
     const joined = rows[i].map(c => String(c||'').toUpperCase()).join('|');
@@ -49,6 +101,7 @@ function trovaRigaHeader(rows, keywords) {
   }
   return 0;
 }
+
 function col(obj, ...keywords) {
   for (const kw of keywords) {
     const k = Object.keys(obj).find(k => k.toUpperCase().includes(kw.toUpperCase()));
@@ -56,13 +109,14 @@ function col(obj, ...keywords) {
   }
   return '';
 }
+
 function leggiCategorie(wb) {
   const ws = wb.Sheets['CATEGORIE'];
   if (!ws) return [];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   const hi   = trovaRigaHeader(rows, ['CATEGORIA']);
   const hdrs = rows[hi].map(h => String(h||'').trim());
-  const iCat  = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA'));
+  const iCat  = hdrs.findIndex(h => h.toUpperCase().includes('CATEGORIA') || h.toUpperCase() === 'NOME');
   const iQual = hdrs.findIndex(h => h.toUpperCase().includes('QUALIFICATE') || h.toUpperCase().includes('QUAL'));
   const iForm = hdrs.findIndex(h => h.toUpperCase().includes('FORMATO'));
   return rows.slice(hi + 1)
@@ -80,6 +134,7 @@ function leggiCategorie(wb) {
       };
     });
 }
+
 function leggiGironi(wb) {
   const ws = wb.Sheets['GIRONI'];
   if (!ws) return [];
@@ -101,6 +156,7 @@ function leggiGironi(wb) {
     })
     .filter(g => g.nome && g.squadre.length > 0);
 }
+
 function leggiPartiteFase1(wb) {
   const ws = wb.Sheets['PARTITE_FASE1'];
   if (!ws) return [];
@@ -114,7 +170,7 @@ function leggiPartiteFase1(wb) {
   const iCampo = hdrs.findIndex(h => h.toUpperCase().includes('CAMPO'));
   const iGiorn = hdrs.findIndex(h => h.toUpperCase().includes('GIORNATA'));
   let iHome = hdrs.findIndex(h => h.toUpperCase().includes('CASA') || h.toUpperCase().includes('HOME'));
-  let iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY'));
+  let iAway = hdrs.findIndex(h => h.toUpperCase().includes('OSPITE') || h.toUpperCase().includes('AWAY') || h.toUpperCase().includes('TRASFERTA'));
   if (iHome < 0) iHome = 2;
   if (iAway < 0) iAway = 3;
   return rows.slice(hi + 1)
@@ -129,12 +185,13 @@ function leggiPartiteFase1(wb) {
       girone   : String(r[iGir  >= 0 ? iGir  : 1]||'').trim(),
       home     : String(r[iHome]||'').trim(),
       away     : String(r[iAway]||'').trim(),
-      orario   : String(r[iOra  >= 0 ? iOra  : -1] !== undefined ? r[iOra]  : ''||'').trim(),
-      giorno   : String(r[iGior >= 0 ? iGior : -1] !== undefined ? r[iGior] : ''||'').trim(),
-      campo    : String(r[iCampo>= 0 ? iCampo: -1] !== undefined ? r[iCampo]: ''||'').trim(),
-      giornata : String(r[iGiorn>= 0 ? iGiorn: -1] !== undefined ? r[iGiorn]: ''||'').trim(),
+      orario   : iOra   >= 0 ? String(r[iOra]  ||'').trim() : '',
+      giorno   : iGior  >= 0 ? String(r[iGior] ||'').trim() : '',
+      campo    : iCampo >= 0 ? String(r[iCampo]||'').trim() : '',
+      giornata : iGiorn >= 0 ? String(r[iGiorn]||'').trim() : '',
     }));
 }
+
 function leggiPartiteFase2(wb) {
   const ws = wb.Sheets['FASE_FINALE'];
   if (!ws) return [];
@@ -149,27 +206,28 @@ function leggiPartiteFase2(wb) {
     })
     .filter(({ obj }) => {
       const cat   = col(obj, 'CATEGORIA');
-      const round = col(obj, 'ROUND').toUpperCase();
-      return cat && !cat.toUpperCase().includes('LEGENDA') && ROUND_META[round] !== undefined;
+      const round = col(obj, 'ROUND').toUpperCase().trim();
+      return cat && !cat.toUpperCase().includes('LEGENDA') && _getRoundMeta(round) !== null;
     })
     .map(({ obj, idx }) => {
-      const round = col(obj, 'ROUND').toUpperCase();
-      const meta  = ROUND_META[round];
+      const roundRaw = col(obj, 'ROUND').toUpperCase().trim();
+      const { key, meta } = _getRoundMeta(roundRaw);
       return {
         categoria   : col(obj, 'CATEGORIA'),
-        round,
-        roundLabel  : `${meta.emoji} ${round} — ${meta.desc}`,
+        round       : key,
+        roundLabel  : `${meta.emoji} ${key} — ${meta.desc}`,
         roundOrder  : meta.order,
         matchOrder  : idx,
         consolazione: meta.consolazione,
         orario      : col(obj, 'ORARIO', 'ORA'),
         campo       : col(obj, 'CAMPO'),
-        giorno      : col(obj, 'GIORNO', 'DATA'),
-        sq1raw      : col(obj, 'SQUADRA CASA', 'SQUADRA 1', 'CASA', 'HOME'),
-        sq2raw      : col(obj, 'SQUADRA OSPITE', 'SQUADRA 2', 'OSPITE', 'AWAY'),
+        giorno      : col(obj, 'GIORNO', 'DATA', 'GIORNATA'),
+        sq1raw      : col(obj, 'SQUADRA_CASA', 'SQUADRA CASA', 'CASA', 'HOME'),
+        sq2raw      : col(obj, 'SQUADRA_TRASFERTA', 'SQUADRA OSPITE', 'TRASFERTA', 'OSPITE', 'AWAY'),
       };
     });
 }
+
 function mostraAnteprima(dati, container) {
   window._importDati = dati;
   const girCat = {};
@@ -189,8 +247,10 @@ function mostraAnteprima(dati, container) {
     const partite = p1Cat[cat.codice]  || [];
     const fase2   = p2Cat[cat.codice]  || [];
     const totSq   = gironi.reduce((s, g) => s + g.squadre.length, 0);
-    const roundsPresenti = [...new Set(fase2.map(p => p.round))]
-      .sort((a, b) => (ROUND_META[a]?.order||99) - (ROUND_META[b]?.order||99));
+    const roundsPresenti = [...new Set(fase2.map(p => p.round))].sort((a, b) => {
+      const ma = _getRoundMeta(a); const mb = _getRoundMeta(b);
+      return (ma?.meta?.order||99) - (mb?.meta?.order||99);
+    });
     html += `
       <div style="margin-bottom:16px;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
         <div style="background:#111;color:#E85C00;padding:10px 14px;font-weight:700;font-size:14px;">
@@ -212,7 +272,8 @@ function mostraAnteprima(dati, container) {
       html += `<div style="border-top:1px solid #eee;margin-top:10px;padding-top:10px;">
         <div style="font-weight:700;color:#E85C00;margin-bottom:6px;">🔁 Fase finale:</div>`;
       roundsPresenti.forEach(rnd => {
-        const meta = ROUND_META[rnd] || {};
+        const rm   = _getRoundMeta(rnd);
+        const meta = rm?.meta || {};
         const colr = ROUND_COLORS[rnd] || '#999';
         const pRnd = fase2.filter(p => p.round === rnd);
         html += `<div style="margin-bottom:5px;padding:6px 10px;border-radius:6px;border-left:4px solid ${colr};background:#fafafa;font-size:12px;">
@@ -241,6 +302,7 @@ function mostraAnteprima(dati, container) {
   </div></div>`;
   container.innerHTML = html;
 }
+
 async function confermaImportazione() {
   const dati = window._importDati;
   if (!dati) return;
@@ -283,14 +345,15 @@ async function confermaImportazione() {
     alert('❌ Errore:\n' + e.message);
   }
 }
+
 async function eseguiImportazione() {
   const torneoId = window._selectedTorneoId;
   const dati     = window._importDati;
   if (!torneoId || !dati) return;
-  const btn = null;
-  try { await eseguiImportazioneConTorneo(torneoId, dati, btn); }
+  try { await eseguiImportazioneConTorneo(torneoId, dati, null); }
   catch(e) { console.error(e); alert('❌ Errore:\n' + e.message); }
 }
+
 async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
   const { data: sqEsistenti } = await db.from('squadre').select('id, nome').eq('torneo_id', torneoId);
   const squadreMap = {};
@@ -346,24 +409,27 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         const aIsPlaceholder = _isPlaceholder(p.away);
         const hId = hIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.home}`] || null);
         const aId = aIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.away}`] || null);
-        if (!hIsPlaceholder && !hId) { console.warn('Squadra home mancante:', p.home); }
-        if (!aIsPlaceholder && !aId) { console.warn('Squadra away mancante:', p.away); }
+        if (!hIsPlaceholder && !hId) console.warn('Squadra home mancante:', p.home);
+        if (!aIsPlaceholder && !aId) console.warn('Squadra away mancante:', p.away);
         await db.from('partite').insert({
           girone_id: girId,
-          home_id: hId,
-          away_id: aId,
+          home_id  : hId,
+          away_id  : aId,
           note_home: hIsPlaceholder ? p.home : null,
           note_away: aIsPlaceholder ? p.away : null,
-          orario: p.orario||null, giorno: p.giorno||null,
-          campo: p.campo||null, giornata: p.giornata||null, giocata: false
+          orario   : p.orario   || null,
+          giorno   : p.giorno   || null,
+          campo    : p.campo    || null,
+          giornata : p.giornata || null,
+          giocata  : false
         });
       }
     }
     const fase2Cat = dati.fase2.filter(p => p.categoria === cat.codice || p.categoria === cat.nome);
     for (let mi = 0; mi < fase2Cat.length; mi++) {
       const p   = fase2Cat[mi];
-      const hId = squadreMap[`${torneoId}||${p.sq1raw}`] || null;
-      const aId = squadreMap[`${torneoId}||${p.sq2raw}`] || null;
+      const hId = _isPlaceholder(p.sq1raw) ? null : (squadreMap[`${torneoId}||${p.sq1raw}`] || null);
+      const aId = _isPlaceholder(p.sq2raw) ? null : (squadreMap[`${torneoId}||${p.sq2raw}`] || null);
       const koRow = {
         categoria_id   : catId,
         round_name     : p.roundLabel,
@@ -377,7 +443,8 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         note_away      : p.sq2raw,
       };
       if (p.orario) koRow.orario = p.orario;
-      if (p.campo) koRow.campo = p.campo;
+      if (p.campo)  koRow.campo  = p.campo;
+      if (p.giorno) koRow.giorno = p.giorno;
       const { error: koErr } = await db.from('knockout').insert(koRow);
       if (koErr) console.warn('Knockout insert warning:', koErr.message);
     }
@@ -392,7 +459,7 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
     <div style="margin-top:16px;padding:16px 20px;background:#d5f5e3;border-radius:8px;border:1px solid #27ae60;">
       <div style="font-size:16px;font-weight:700;color:#1e8449;">✅ Categorie aggiunte!</div>
       <div style="font-size:13px;color:#333;margin-top:6px;">
-        ${dati.categorie.length} categorie importate con gironi, partite e fase finale (orari e campi inclusi).
+        ${dati.categorie.length} categorie importate con gironi, partite e fase finale.
       </div>
       <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
         <button onclick="aggiornaDopoImport()"
@@ -406,6 +473,7 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       </div>
     </div>`;
 }
+
 async function aggiornaDopoImport() {
   try {
     if (typeof STATE !== 'undefined' && typeof dbGetCategorie === 'function') {
