@@ -18,6 +18,10 @@ let STATE = {
 
 async function init() {
   initDB();
+  if (typeof CONFIG !== 'undefined') {
+    if (CONFIG.NOME_SITO) { document.title = CONFIG.NOME_SITO; var ht=document.getElementById('header-title'); if(ht)ht.textContent=CONFIG.NOME_SITO; }
+    if (typeof getLogo === 'function') { var logo=getLogo(); if(logo){['header-logo','loading-img'].forEach(function(id){var el=document.getElementById(id);if(el)el.src=logo;});} }
+  }
   // Aumenta TTL cache per ridurre chiamate ripetute
   if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
   try {
@@ -710,6 +714,54 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
     const classificheGironi = {};
 
+    // Carica risultati knockout per risolvere Vincente/Perdente SEMIFINALE
+    const { data: allKo } = await db.from('knockout')
+      .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
+      .eq('categoria_id', categoriaId);
+    const risultatiKnockout = {};
+    // Mappa round knockout per tipo: SEMIFINALE → risultato singola partita
+    for (const ko of (allKo||[])) {
+      const mSem = ko.round_name?.match(/SEMIFINALE\s*(\d+)/i);
+      if (mSem) {
+        const key = 'SEMIFINALE ' + mSem[1].padStart(2,'0');
+        risultatiKnockout[key] = ko;
+      }
+    }
+
+    // Calcola classifiche dai round knockout tipo girone (ARANCIO, VERDE, BLU, GIRONE 1, GIRONE 2 ecc.)
+    const ROUND_GIRONE_PATTERN = /^(ARANCIO|VERDE|BLU|GIRONE\s+\d+|GIRONE\s+[A-Z]+\s*\d*|GOLD|SILVER)$/i;
+    const koPerRound = {};
+    for (const ko of (allKo||[])) {
+      const rn = (ko.round_name||'').trim().toUpperCase();
+      if (ROUND_GIRONE_PATTERN.test(rn)) {
+        if (!koPerRound[rn]) koPerRound[rn] = [];
+        koPerRound[rn].push(ko);
+      }
+    }
+    // Per ogni round tipo girone, calcola classifica
+    for (const [roundKey, partite] of Object.entries(koPerRound)) {
+      const giocate = partite.filter(p => p.giocata);
+      if (!giocate.length) continue;
+      // Raccoglie tutti gli ID squadre del round
+      const sqIds = new Set();
+      partite.forEach(p => { if(p.home_id) sqIds.add(p.home_id); if(p.away_id) sqIds.add(p.away_id); });
+      // Carica i nomi delle squadre
+      const sqMap = {};
+      for (const sid of sqIds) {
+        const { data: sq } = await db.from('squadre').select('id,nome,logo').eq('id', sid).single();
+        if (sq) sqMap[sq.id] = sq;
+      }
+      const squadreRound = [...sqIds].map(id => sqMap[id]).filter(Boolean);
+      if (!squadreRound.length) continue;
+      // Calcola classifica come un girone normale
+      const clRound = calcGironeClassifica({
+        squadre: squadreRound,
+        partite: giocate.map(p => ({...p, giocata: true}))
+      });
+      // Salva con il nome del round come chiave (es. "ARANCIO", "VERDE", "BLU")
+      classificheGironi['Girone ' + roundKey.charAt(0) + roundKey.slice(1).toLowerCase()] = clRound;
+    }
+
     // Calcola classifica per ogni girone con almeno una partita giocata
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
@@ -731,7 +783,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
-    if (!Object.keys(classificheGironi).length) return;
+    if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
 
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
     let risolti = 0;
@@ -741,8 +793,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', categoriaId);
     for (const match of (matches||[])) {
-      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi);
-      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi);
+      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
+      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
       const upd={};
       if (newH && newH!==match.home_id) upd.home_id=newH;
       if (newA && newA!==match.away_id) upd.away_id=newA;
@@ -760,8 +812,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
       for (const p of (tuttePartite||[])) {
         if (!p.note_home && !p.note_away) continue;
-        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi);
-        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi);
+        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
+        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
         const upd={};
         if (newH && newH!==p.home_id) upd.home_id=newH;
         if (newA && newA!==p.away_id) upd.away_id=newA;
@@ -774,8 +826,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
       // Aggiorna girone_squadre con le squadre reali risolte
       const sqIds = new Set();
       for (const p of (tuttePartite||[])) {
-        const newH = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi) : p.home_id;
-        const newA = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi) : p.away_id;
+        const newH = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout) : p.home_id;
+        const newA = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout) : p.away_id;
         if (newH) sqIds.add(newH);
         if (newA) sqIds.add(newA);
       }
@@ -822,12 +874,50 @@ function _calcolaMiglioriSecondi(classificheGironi) {
 
 function _isPlaceholder(nome) {
   if (!nome) return false;
-  return /^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(nome.trim());
+  const s = nome.trim();
+  // Formato standard: "1° Girone A", "2° Gruppo B"
+  if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+  // Formato breve round knockout: "1° Arancio", "2° Verde", "1° Blu", "1° Girone 1"
+  if (/^\d+[°º*]?\s*(Arancio|Verde|Blu|Gold|Silver|Girone\s+\d+)$/i.test(s)) return true;
+  // Miglior seconda/terza/quarta
+  if (/^(miglior|peggio|seconda|terza|quarta|quinti?|sesti?)/i.test(s)) return true;
+  // Vincente/Perdente SEMIFINALE
+  if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO)/i.test(s)) return true;
+  return false;
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[]) {
+function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[], risultatiKnockout={}) {
   if (!placeholder) return null;
   const s = placeholder.trim();
+
+  // Gestisce "1° Arancio", "2° Verde", "1° Blu", "1° Gold", "1° Silver", "1° Girone 1"
+  const mKoGirone = s.match(/^(\d+)[°º*]?\s*(Arancio|Verde|Blu|Gold|Silver|Girone\s+\d+)$/i);
+  if (mKoGirone) {
+    const pos = parseInt(mKoGirone[1]);
+    const roundNome = mKoGirone[2].trim();
+    const chiave = 'Girone ' + roundNome.charAt(0).toUpperCase() + roundNome.slice(1).toLowerCase();
+    let cl = classificheGironi[chiave];
+    if (!cl) {
+      const k = Object.keys(classificheGironi).find(k => k.toLowerCase() === chiave.toLowerCase());
+      if (k) cl = classificheGironi[k];
+    }
+    if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+    return null;
+  }
+
+  // Gestisce "Vincente SEMIFINALE XX" o "Perdente SEMIFINALE XX"
+  const mSemVP = s.match(/(Vincente|Perdente)\s+SEMIFINALE\s*(\d+)/i);
+  if (mSemVP) {
+    const tipo = mSemVP[1].toLowerCase();
+    const semKey = 'SEMIFINALE ' + mSemVP[2].padStart(2,'0');
+    const sem = risultatiKnockout[semKey];
+    if (!sem || !sem.giocata) return null;
+    if (tipo === 'vincente') {
+      return sem.gol_home >= sem.gol_away ? sem.home_id : sem.away_id;
+    } else {
+      return sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id;
+    }
+  }
 
   // Gestisce "Miglior 2°" o "Miglior secondo"
   if (/miglior\s*2[°º]?/i.test(s)) {
@@ -1430,16 +1520,16 @@ function aggiungiRigaCategoria() {
 }
 
 function _aggiornaNomeRiga(idx) {
-  const nome = document.getElementById(`cat-nome-${idx}`)?.value || 'categoria';
-  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  const nome = document.getElementById('cat-nome-' + idx)?.value || 'categoria';
+  const btnDiv = document.getElementById('cat-btn-' + idx);
   if (btnDiv && btnDiv.style.display !== 'none') {
     const btn = btnDiv.querySelector('button');
-    if (btn) btn.textContent = `✓ Importa "${nome}"`;
+    if (btn) btn.textContent = '✓ Importa "' + nome + '"';
   }
 }
 
 function _rimuoviRiga(idx) {
-  const el = document.getElementById(`cat-riga-${idx}`);
+  const el = document.getElementById('cat-riga-' + idx);
   if (el) el.remove();
 }
 
@@ -1448,16 +1538,16 @@ let _fileRighe = {}; // idx -> dati excel parsati
 function _fileSelezionato(event, idx) {
   const file = event.target.files[0];
   if (!file) return;
-  const label = document.getElementById(`cat-file-label-${idx}`);
-  if (label) label.textContent = `📄 ${file.name}`;
+  const label = document.getElementById('cat-file-label-' + idx);
+  if (label) label.textContent = '📄 ' + file.name;
 
   // Preview immediato
   _parseExcelRiga(file, idx);
 }
 
 async function _parseExcelRiga(file, idx) {
-  const preview = document.getElementById(`cat-preview-${idx}`);
-  const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  const preview = document.getElementById('cat-preview-' + idx);
+  const btnDiv = document.getElementById('cat-btn-' + idx);
   if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
 
   try {
@@ -1484,7 +1574,7 @@ async function _parseExcelRiga(file, idx) {
     const totGironi = dati.gironi.length;
     const totPartite = dati.partite.length;
     const totFinali = dati.fase2.length;
-    const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
+    const nomeCatInput = document.getElementById('cat-nome-' + idx);
 
     // Auto-compila nome categoria dal file se vuoto
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
@@ -1507,18 +1597,18 @@ async function _parseExcelRiga(file, idx) {
       btnDiv.style.display = 'block';
       const nome = nomeCatInput?.value || 'categoria';
       const btn = btnDiv.querySelector('button');
-      if (btn) btn.textContent = `✓ Importa "${nome}"`;
+      if (btn) btn.textContent = '✓ Importa "' + nome + '"';
     }
   } catch(e) {
-    if (preview) preview.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
+    if (preview) preview.innerHTML = '<div style="color:var(--rosso);font-size:12px;">❌ Errore: ' + e.message + '</div>';
   }
 }
 
 async function _importaRiga(idx) {
   const dati = _fileRighe[idx];
-  const nomeInput = document.getElementById(`cat-nome-${idx}`);
+  const nomeInput = document.getElementById('cat-nome-' + idx);
   const nomeScritto = nomeInput?.value?.trim();
-  const btn = document.querySelector(`#cat-btn-${idx} button`);
+  const btn = document.querySelector('#cat-btn-' + idx + ' button');
 
   if (!dati) { toast('Carica prima un file Excel'); return; }
 
@@ -1550,11 +1640,11 @@ async function _importaRiga(idx) {
     await eseguiImportazioneConTorneo(torneoId, dati, btn);
 
     // Feedback sulla riga
-    const riga = document.getElementById(`cat-riga-${idx}`);
+    const riga = document.getElementById('cat-riga-' + idx);
     if (riga) {
       riga.style.background = 'var(--verde-bg)';
       riga.style.borderColor = 'rgba(22,163,74,0.3)';
-      const preview = document.getElementById(`cat-preview-${idx}`);
+      const preview = document.getElementById('cat-preview-' + idx);
       if (preview) preview.innerHTML = `<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>`;
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
@@ -1564,7 +1654,7 @@ async function _importaRiga(idx) {
     renderCatBar();
 
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Importa "' + (nomeScritto||'categoria') + '"'; }
     toast('❌ Errore: ' + e.message);
     console.error(e);
   }
@@ -1641,7 +1731,7 @@ async function caricaLoghiDaCartella(event) {
   if (!files.length || !log) return;
 
   log.style.display = 'block';
-  log.innerHTML = `📁 ${files.length} file selezionati — abbinamento in corso...<br>`;
+  log.innerHTML = '📁 ' + files.length + ' file selezionati — abbinamento in corso...<br>';
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
 
@@ -1731,7 +1821,7 @@ async function caricaLoghiDaCartella(event) {
       const targets = sqUniche.get(bestKey);
       const conf = bestScore >= 0.85 ? '✅' : bestScore >= 0.55 ? '🟡' : '🟠';
       const nomiTarget = targets.map(s => s.nome).join(' + ');
-      log.innerHTML += `${conf} <strong>${file.name}</strong> → ${nomiTarget} (${Math.round(bestScore*100)}%) `;
+      log.innerHTML += conf + ' <strong>' + file.name + '</strong> → ' + nomiTarget + ' (' + Math.round(bestScore*100) + '%) ';
 
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
@@ -1740,11 +1830,11 @@ async function caricaLoghiDaCartella(event) {
           await dbUpdateLogo(sq.id, compressed);
         }
         abbinati++;
-        log.innerHTML += targets.length > 1 ? `✓ (${targets.length} squadre)<br>` : `✓<br>`;
+        log.innerHTML += targets.length > 1 ? '✓ (' + targets.length + ' squadre)<br>' : '✓<br>';
       } catch(e) { log.innerHTML += `errore<br>`; }
     } else {
       nonAbbinati.push(file.name);
-      log.innerHTML += `❓ <strong>${file.name}</strong> → non trovata<br>`;
+      log.innerHTML += '❓ <strong>' + file.name + '</strong> → non trovata<br>';
     }
     log.scrollTop = log.scrollHeight;
   }
@@ -1755,7 +1845,7 @@ async function caricaLoghiDaCartella(event) {
     log.innerHTML += `<br><small>💡 Usa parte del nome senza prefissi (es. "vercelli.png" per Pro Vercelli)</small>`;
   }
 
-  if (abbinati > 0) { await renderAdminLoghi(); toast(`✅ ${abbinati} loghi caricati!`); }
+  if (abbinati > 0) { await renderAdminLoghi(); toast('✅ ' + abbinati + ' loghi caricati!'); }
   event.target.value = '';
 }
 
@@ -1808,7 +1898,7 @@ async function comprimiloghiEsistenti() {
   log.innerHTML += `<br>🏁 <strong>${compressi} compressi, ${saltati} già piccoli</strong>`;
   btn.disabled = false;
   btn.textContent = '📦 Comprimi loghi grandi';
-  if (compressi > 0) { await renderAdminLoghi(); toast(`✅ ${compressi} loghi compressi!`); }
+  if (compressi > 0) { await renderAdminLoghi(); toast('✅ ' + compressi + ' loghi compressi!'); }
 }
 
 async function uploadLogo(event, squadra_id) {
@@ -1993,9 +2083,9 @@ async function saveMarcatori(partita_id, girone_id) {
   if (!partita) return;
   const all=[];
   for (let i=0;i<(partita.marcatori||[]).length;i++) {
-    const sqEl=document.getElementById(`msq_${partita_id}_${i}`);
-    const nmEl=document.getElementById(`mnm_${partita_id}_${i}`);
-    const mnEl=document.getElementById(`mmin_${partita_id}_${i}`);
+    const sqEl=document.getElementById('msq_' + partita_id + '_' + i);
+    const nmEl=document.getElementById('mnm_' + partita_id + '_' + i);
+    const mnEl=document.getElementById('mmin_' + partita_id + '_' + i);
     if (sqEl&&nmEl&&nmEl.value.trim()) all.push({squadra_id:parseInt(sqEl.value),nome:nmEl.value.trim(),minuto:mnEl?mnEl.value||null:null});
   }
   await dbSaveMarcatori(partita_id,all.filter(m=>m.nome));
@@ -2075,7 +2165,10 @@ async function saveKO(match_id) {
   const ko=await dbGetKnockout(STATE.activeCat);
   const m=ko.find(x=>x.id===match_id); if(!m)return;
   await dbSaveKnockoutMatch({...m, gol_home:parseInt(sh), gol_away:parseInt(sa), giocata:true, inserito_da: STATE.userName||null});
-  toast('✓ Risultato salvato'); await renderAdminKnockout();
+  toast('✓ Risultato salvato');
+  if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+  await renderAdminKnockout();
+  if (STATE.currentSection==='tabellone') await renderTabellone();
 }
 
 async function risolviManuale() {
@@ -2135,7 +2228,7 @@ function enterAdmin(user) {
   STATE.isAdmin=true; STATE.userRole=user.ruolo; STATE.userName=user.nome;
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
-  document.getElementById('admin-btn').textContent=`Esci (${user.nome})`;
+  document.getElementById('admin-btn').textContent='Esci (' + user.nome + ')';
   if (user.ruolo==='arbitro') {
     _mostraNavArbitro(); STATE.currentSection='a-risultati';
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
@@ -2625,27 +2718,27 @@ async function simulaRisultati() {
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
-        _simLog(`Pass ${pass} — ${g.nome}: ${daGiocare.length} partite`);
+        _simLog('Pass ' + pass + ' — ' + g.nome + ': ' + daGiocare.length + ' partite');
         for (const p of daGiocare) {
           const gh = _golCasuale(), ga = _golCasuale();
           await dbSavePartita({ id:p.id, girone_id:p.girone_id, gol_home:gh, gol_away:ga, giocata:true, inserito_da:'🤖 Simulazione' });
           nuovi++; totale++;
-          _simLog(`✓ ${p.home?.nome||'?'} ${gh}–${ga} ${p.away?.nome||'?'}`);
+          _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
         }
       }
 
-      if (nuovi === 0) { _simLog(`✓ Completato in ${pass} passaggi!`); break; }
+      if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
     }
 
     // Risolvi knockout finale
     if (catId) await verificaEGeneraTriangolari(catId);
-    _simLog(`\n✅ ${totale} risultati simulati!`);
-    toast(`✅ ${totale} risultati simulati!`);
+    _simLog('\n✅ ' + totale + ' risultati simulati!');
+    toast('✅ ' + totale + ' risultati simulati!');
     await renderCurrentSection();
 
   } catch(e) {
     console.error(e);
-    _simLog(`❌ Errore: ${e.message}`);
+    _simLog('❌ Errore: ' + e.message);
     toast('Errore: ' + e.message);
   }
 }
@@ -2664,7 +2757,7 @@ async function simulaRisultatiGirone() {
       const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
       if (!daGiocare.length) continue;
 
-      _simLog(`📋 Simulo ${g.nome} (${daGiocare.length} partite)...`);
+      _simLog('📋 Simulo ' + g.nome + ' (' + daGiocare.length + ' partite)...');
       for (const p of daGiocare) {
         const gh = _golCasuale();
         const ga = _golCasuale();
@@ -2678,12 +2771,12 @@ async function simulaRisultatiGirone() {
       break; // solo primo girone
     }
 
-    _simLog(`✅ ${totale} risultati simulati!`);
-    toast(`✅ ${totale} risultati simulati!`);
+    _simLog('✅ ' + totale + ' risultati simulati!');
+    toast('✅ ' + totale + ' risultati simulati!');
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
     await renderCurrentSection();
   } catch(e) {
-    _simLog(`❌ ${e.message}`);
+    _simLog('❌ ' + e.message);
   }
 }
 
@@ -2734,7 +2827,7 @@ async function resetRisultati() {
 
   } catch(e) {
     console.error(e);
-    _simLog(`❌ Errore: ${e.message}`);
+    _simLog('❌ Errore: ' + e.message);
     toast('Errore reset: ' + e.message);
   }
 }
@@ -2762,7 +2855,7 @@ async function resetRisultatiGirone() {
     toast('✅ Risultati categoria azzerati!');
     await renderCurrentSection();
   } catch(e) {
-    _simLog(`❌ ${e.message}`);
+    _simLog('❌ ' + e.message);
   }
 }
 
@@ -2793,8 +2886,8 @@ function mostraEditCampoGiornata(giorno) {
 
 async function salvaCampoGiornata(giorno) {
   const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-  const nomeCampo = document.getElementById(`edit-nome-${keyId}`)?.value?.trim() || '';
-  const indirizzo = document.getElementById(`edit-addr-${keyId}`)?.value?.trim() || '';
+  const nomeCampo = document.getElementById('edit-nome-' + keyId)?.value?.trim() || '';
+  const indirizzo = document.getElementById('edit-addr-' + keyId)?.value?.trim() || '';
   try {
     await dbSaveCampoGiornata(STATE.activeTorneo, giorno, nomeCampo, indirizzo);
     if (!STATE._campiGiornate) STATE._campiGiornate = {};
