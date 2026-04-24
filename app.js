@@ -871,9 +871,9 @@ function _isPlaceholder(nome) {
   const s = nome.trim();
   // "1° Girone A", "2° Gruppo B"
   if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
-  // "1° Arancio", "2° Verde", "1° Blu", "1° Gold", ecc. (N° + parola singola)
+  // "1° Arancio", "2° Verde", "4° BLU" ecc.
   if (/^\d+[°º*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
-  // "MIGLIOR SECONDA", "Miglior 2°"
+  // "MIGLIOR SECONDA", "MIGLIOR 4°", "PEGGIOR 3°", "Miglior 2°"
   if (/^(miglior|peggio)/i.test(s)) return true;
   // "Vincente/Perdente SEMIFINALE X"
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO)/i.test(s)) return true;
@@ -916,6 +916,28 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
   const mMig = s.match(/^(\d+)[°º]?\s*Miglior/i);
   if (mMig) {
     return miglioriSecondi[parseInt(mMig[1]) - 1]?.sq?.id || null;
+  }
+
+  // ── MIGLIOR N° / PEGGIOR N° — es. "MIGLIOR 4°", "PEGGIOR 3°" ──────────
+  const mMigliorN = s.match(/^(miglior|peggio[a-z]*)?\s*(\d+)[°º]/i);
+  if (mMigliorN) {
+    const tipo = (mMigliorN[1]||'').toLowerCase();
+    const pos = parseInt(mMigliorN[2]);
+    // Raccoglie tutti i classificati in quella posizione tra i gironi knockout
+    const candidati = [];
+    for (const [nome, cl] of Object.entries(classificheGironi)) {
+      if (cl.length >= pos) candidati.push({ nome, sq: cl[pos-1].sq, stat: cl[pos-1] });
+    }
+    if (!candidati.length) return null;
+    // Ordina per punti, diff reti, gol fatti
+    candidati.sort((a, b) => {
+      const ptA = a.stat.pts, ptB = b.stat.pts;
+      if (ptB !== ptA) return tipo.startsWith('peggio') ? ptA - ptB : ptB - ptA;
+      const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
+      if (drB !== drA) return tipo.startsWith('peggio') ? drA - drB : drB - drA;
+      return tipo.startsWith('peggio') ? a.stat.gf - b.stat.gf : b.stat.gf - a.stat.gf;
+    });
+    return candidati[0]?.sq?.id || null;
   }
 
   // ── N° Girone X / N° Gruppo X ─────────────────────────────────────────
