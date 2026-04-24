@@ -22,7 +22,6 @@ async function init() {
     if (CONFIG.NOME_SITO) { document.title = CONFIG.NOME_SITO; var ht=document.getElementById('header-title'); if(ht)ht.textContent=CONFIG.NOME_SITO; }
     if (typeof getLogo === 'function') { var logo=getLogo(); if(logo){['header-logo','loading-img'].forEach(function(id){var el=document.getElementById(id);if(el)el.src=logo;});} }
   }
-  // Aumenta TTL cache per ridurre chiamate ripetute
   if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
   try {
     STATE.tornei = await dbGetTornei();
@@ -74,21 +73,19 @@ async function selezionaTorneoPublic(id) {
   STATE.activeTorneo = id;
   _saveSavedTorneo(id);
 
-  // Ricrea le sezioni
   document.getElementById('main-content').innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div>';
 
-  // Mostra nav pubblica, resetta bottoni attivi
   document.getElementById('pub-nav').style.display = 'flex';
   document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
   const btnClass = document.querySelector('[data-section="classifiche"]');
   if (btnClass) btnClass.classList.add('active');
 
   STATE.currentSection = 'classifiche';
-  STATE.activeCat = null; // reset categoria per mostrare selezione
+  STATE.activeCat = null;
   await loadTorneo();
 }
 
@@ -106,7 +103,6 @@ async function loadTorneo() {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
-  // 1. Controlla link condiviso nell'URL (#cat=X&tab=Y)
   const hashParams = _leggiHash();
   if (hashParams.cat) {
     const catId = parseInt(hashParams.cat);
@@ -120,7 +116,6 @@ async function loadTorneo() {
     }
   }
 
-  // 2. Ripristina categoria salvata in localStorage
   const savedCatId = _loadSavedCat();
   const catSalvata = savedCatId && STATE.categorie.find(c => c.id === savedCatId);
 
@@ -167,8 +162,6 @@ function mostraSelezioneCat() {
 
   el.innerHTML = `
     <div style="padding-bottom:32px;">
-
-      <!-- HERO -->
       <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1a56db 100%);
                   border-radius:16px;padding:24px 20px;margin-bottom:22px;
                   display:flex;align-items:center;gap:16px;position:relative;overflow:hidden;">
@@ -189,33 +182,23 @@ function mostraSelezioneCat() {
         </div>
       </div>
 
-      <!-- 3 TASTI PRINCIPALI -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:22px;">
         <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('classifiche',document.querySelector('[data-section=classifiche]'))},150)"
-          style="background:white;border:2px solid var(--bordo);border-radius:14px;
-                 padding:18px 8px;cursor:pointer;font-family:inherit;
-                 display:flex;flex-direction:column;align-items:center;gap:8px;
-                 box-shadow:var(--shadow);transition:all .2s;"
+          style="background:white;border:2px solid var(--bordo);border-radius:14px;padding:18px 8px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px;box-shadow:var(--shadow);transition:all .2s;"
           onmouseover="this.style.borderColor='var(--blu)';this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow)'">
           <span style="font-size:30px;">🏆</span>
           <span style="font-size:12px;font-weight:800;color:var(--testo);">Classifiche</span>
         </button>
         <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('risultati',document.querySelector('[data-section=risultati]'))},150)"
-          style="background:var(--blu);border:2px solid var(--blu);border-radius:14px;
-                 padding:18px 8px;cursor:pointer;font-family:inherit;
-                 display:flex;flex-direction:column;align-items:center;gap:8px;
-                 box-shadow:0 4px 16px rgba(26,86,219,0.35);transition:all .2s;"
+          style="background:var(--blu);border:2px solid var(--blu);border-radius:14px;padding:18px 8px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(26,86,219,0.35);transition:all .2s;"
           onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(26,86,219,0.45)'"
           onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 16px rgba(26,86,219,0.35)'">
           <span style="font-size:30px;">⚽</span>
           <span style="font-size:12px;font-weight:800;color:white;">Risultati</span>
         </button>
         <button onclick="selezionaCategoriaPublic(${firstId});setTimeout(()=>{showSection('tabellone',document.querySelector('[data-section=tabellone]'))},150)"
-          style="background:white;border:2px solid var(--bordo);border-radius:14px;
-                 padding:18px 8px;cursor:pointer;font-family:inherit;
-                 display:flex;flex-direction:column;align-items:center;gap:8px;
-                 box-shadow:var(--shadow);transition:all .2s;"
+          style="background:white;border:2px solid var(--bordo);border-radius:14px;padding:18px 8px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px;box-shadow:var(--shadow);transition:all .2s;"
           onmouseover="this.style.borderColor='var(--blu)';this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow)'">
           <span style="font-size:30px;">🥇</span>
@@ -223,23 +206,17 @@ function mostraSelezioneCat() {
         </button>
       </div>
 
-      <!-- CATEGORIE -->
-      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;
-                  letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
         Seleziona categoria
         <span style="flex:1;height:1px;background:var(--bordo);"></span>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${catFiltrate.map((c,i) => `
           <button onclick="selezionaCategoriaPublic(${c.id})"
-            style="background:white;border:1.5px solid var(--bordo);border-radius:12px;
-                   padding:14px 16px;cursor:pointer;font-family:inherit;
-                   display:flex;align-items:center;gap:12px;
-                   box-shadow:var(--shadow-xs);transition:all .15s;text-align:left;"
+            style="background:white;border:1.5px solid var(--bordo);border-radius:12px;padding:14px 16px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs);transition:all .15s;text-align:left;"
             onmouseover="this.style.borderColor='var(--blu)';this.style.transform='translateY(-1px)';this.style.boxShadow='var(--shadow)'"
             onmouseout="this.style.borderColor='var(--bordo)';this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow-xs)'">
-            <div style="width:38px;height:38px;border-radius:10px;background:${colors[i%colors.length]};
-                        display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+            <div style="width:38px;height:38px;border-radius:10px;background:${colors[i%colors.length]};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
               ${icons[i%icons.length]}
             </div>
             <span style="font-size:16px;font-weight:800;color:var(--testo);flex:1;">${c.nome}</span>
@@ -249,23 +226,18 @@ function mostraSelezioneCat() {
 
       ${catFiltrate.length > 1 ? `
       <button onclick="mostraTutteLCategorie()"
-        style="width:100%;margin-top:12px;padding:12px;background:var(--sfondo);
-               border:1.5px solid var(--bordo);border-radius:10px;
-               font-size:13px;font-weight:600;color:var(--testo-lt);
-               cursor:pointer;font-family:inherit;transition:all .15s;"
+        style="width:100%;margin-top:12px;padding:12px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:10px;font-size:13px;font-weight:600;color:var(--testo-lt);cursor:pointer;font-family:inherit;transition:all .15s;"
         onmouseover="this.style.background='var(--blu-bg)';this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
         onmouseout="this.style.background='var(--sfondo)';this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
         📊 Vedi tutte le categorie insieme
       </button>` : ''}
     </div>`;
 
-  // Logo hero
   if (typeof getLogo === 'function') {
     const l = getLogo();
     if (l) { const img = el.querySelector('#hero-logo'); if(img){img.src=l;img.style.display='block';} }
   }
 
-  // Nascondi nav nella home — più pulita
   document.getElementById('pub-nav').style.display = 'none';
   document.getElementById('cat-bar').style.display = 'none';
   STATE.currentSection = 'classifiche';
@@ -291,7 +263,7 @@ async function selezionaCategoriaPublic(catId) {
 }
 
 async function mostraTutteLCategorie() {
-  _clearSavedCat(); // non salvare — mostra tutto senza filtro
+  _clearSavedCat();
   STATE.activeCat = STATE.categorie[0]?.id || null;
   if (STATE.activeCat) await _caricaGiornate();
   renderCatBar();
@@ -308,45 +280,25 @@ function renderTorneoBar() {
 
   bar.style.display = '';
 
-  bar.innerHTML = `<div style="max-width:700px;margin:0 auto;display:flex;align-items:center;
-    gap:6px;padding:6px 12px;min-height:50px;">
-
-    <!-- 🏠 Home compatto -->
+  bar.innerHTML = `<div style="max-width:700px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:6px 12px;min-height:50px;">
     <button onclick="${multiTorneo ? 'cambiaTorneo()' : 'cambiaCategoria()'}"
-      style="flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;
-             justify-content:center;font-size:16px;
-             background:white;border:1.5px solid var(--bordo);border-radius:10px;
-             cursor:pointer;transition:all .15s;box-shadow:var(--shadow-xs);"
+      style="flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:16px;background:white;border:1.5px solid var(--bordo);border-radius:10px;cursor:pointer;transition:all .15s;box-shadow:var(--shadow-xs);"
       title="Home"
       onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
       onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">🏠</button>
-
     ${cat ? `
-      <!-- Categoria — prende tutto lo spazio -->
       <div style="flex:1;min-width:0;">
-        <div style="font-size:9px;color:var(--testo-xs);font-weight:700;
-                    text-transform:uppercase;letter-spacing:.07em;line-height:1;margin-bottom:1px;">Categoria</div>
-        <div style="font-size:16px;font-weight:900;color:var(--testo);
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">
-          ${cat.nome}
-        </div>
+        <div style="font-size:9px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;letter-spacing:.07em;line-height:1;margin-bottom:1px;">Categoria</div>
+        <div style="font-size:16px;font-weight:900;color:var(--testo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">${cat.nome}</div>
       </div>
-
-      <!-- Azioni -->
       <div style="display:flex;gap:5px;flex-shrink:0;">
         <button onclick="mostraLinkCondivisibile()"
-          style="width:34px;height:34px;border-radius:8px;font-size:14px;
-                 background:var(--sfondo);border:1.5px solid var(--bordo);
-                 color:var(--testo-lt);cursor:pointer;display:flex;align-items:center;
-                 justify-content:center;transition:all .15s;"
+          style="width:34px;height:34px;border-radius:8px;font-size:14px;background:var(--sfondo);border:1.5px solid var(--bordo);color:var(--testo-lt);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;"
           title="Copia link"
           onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.background='var(--sfondo)'">🔗</button>
         ${multiCat ? `<button onclick="cambiaCategoria()"
-          style="height:34px;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;
-                 background:var(--sfondo);border:1.5px solid var(--bordo);
-                 color:var(--testo-lt);cursor:pointer;font-family:inherit;
-                 display:flex;align-items:center;gap:3px;white-space:nowrap;transition:all .15s;"
+          style="height:34px;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;background:var(--sfondo);border:1.5px solid var(--bordo);color:var(--testo-lt);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap;transition:all .15s;"
           onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)';this.style.background='var(--sfondo)'">
           ⇄ Cambia</button>` : ''}
@@ -355,11 +307,10 @@ function renderTorneoBar() {
   </div>`;
 }
 
-
 async function cambiaCategoria() {
   STATE.activeCat = null;
   _clearSavedCat();
-  _cancellaHash(); // rimuove il link dall'URL
+  _cancellaHash();
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
@@ -376,7 +327,7 @@ async function cambiaCategoria() {
   const btn = document.querySelector('[data-section="classifiche"]');
   if (btn) btn.classList.add('active');
 
-  renderTorneoBar(); // ridisegna subito la barra con 🏠
+  renderTorneoBar();
   mostraSelezioneCat();
 }
 
@@ -389,10 +340,8 @@ async function cambiaTorneo() {
   try { localStorage.removeItem('spe_torneo'); } catch(e) {}
   _clearSavedCat();
 
-  // Ricarica lista tornei
   STATE.tornei = await dbGetTornei();
 
-  // Nascondi navigazione
   document.getElementById('pub-nav').style.display = 'none';
   if (document.getElementById('admin-nav')) document.getElementById('admin-nav').style.display = 'none';
   const catBar = document.getElementById('cat-bar');
@@ -400,7 +349,6 @@ async function cambiaTorneo() {
   const torneoBar = document.getElementById('torneo-bar');
   if (torneoBar) torneoBar.style.display = 'none';
 
-  // Ricrea le sezioni nel main-content
   document.getElementById('main-content').innerHTML =
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
@@ -445,7 +393,7 @@ async function renderCurrentSection() {
 }
 
 // ============================================================
-//  LINK CONDIVISIBILE — Hash URL
+//  LINK CONDIVISIBILE
 // ============================================================
 function _leggiHash() {
   const hash = window.location.hash.replace('#', '');
@@ -458,7 +406,6 @@ function _leggiHash() {
 }
 
 function _scriviHash(catId, tab) {
-  const t = STATE.activeTorneo || '';
   const parts = [`cat=${catId}`];
   if (tab && tab !== 'classifiche') parts.push(`tab=${tab}`);
   window.location.hash = parts.join('&');
@@ -480,12 +427,9 @@ function mostraLinkCondivisibile() {
   if (!cat) return;
   const tab = STATE.currentSection || 'classifiche';
   const link = _getLinkCondivisibile(STATE.activeCat, tab);
-
-  // Copia negli appunti
   navigator.clipboard.writeText(link).then(() => {
     toast('🔗 Link copiato! Incollalo su WhatsApp o Telegram');
   }).catch(() => {
-    // Fallback: mostra il link
     prompt('Copia questo link:', link);
   });
 }
@@ -501,17 +445,13 @@ function _renderFooter() {
   }
   footer.innerHTML = `
     <div>Creato da <strong>Matteo De Pandis</strong></div>
-    <div style="margin-top:4px;">
-      <a href="tel:+393283951608">📱 +39 328 395 1608</a>
-    </div>
+    <div style="margin-top:4px;"><a href="tel:+393283951608">📱 +39 328 395 1608</a></div>
   `;
 }
 
 function renderCatBar() {
   const bar = document.getElementById('cat-bar');
   if (!STATE.categorie.length) { bar.innerHTML = ''; return; }
-
-  // Mostra solo barra giornate (le categorie si vedono in cascata)
   bar.innerHTML = `<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;"></div>`;
   _renderGiornataBar();
 }
@@ -522,7 +462,6 @@ function _renderGiornataBar() {
   const giornate = STATE._giornateDisponibili || [];
   if (giornate.length <= 1) { bar.innerHTML = ''; return; }
 
-  // Rileva la giornata di oggi
   const oggi = _trovaGiornataOggi(giornate);
 
   bar.innerHTML = [
@@ -540,21 +479,17 @@ function _renderGiornataBar() {
 }
 
 function _labelGiornata(g) {
-  // Abbrevia "4 Aprile 2026" → "Sab 4 Apr"
-  const giorni = {'sabato':'Sab','domenica':'Dom','lunedì':'Lun','martedì':'Mar','mercoledì':'Mer','giovedì':'Gio','venerdì':'Ven'};
   const mesi = {'gennaio':'Gen','febbraio':'Feb','marzo':'Mar','aprile':'Apr','maggio':'Mag','giugno':'Giu',
                  'luglio':'Lug','agosto':'Ago','settembre':'Set','ottobre':'Ott','novembre':'Nov','dicembre':'Dic'};
   let label = g;
   for (const [full, short] of Object.entries(mesi)) {
     label = label.toLowerCase().replace(full, short);
   }
-  // Rimuovi anno
   label = label.replace(/20\d\d/,'').trim().replace(/\s+/g,' ');
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function _trovaGiornataOggi(giornate) {
-  // Confronta ogni giornata con la data di oggi
   const ora = new Date();
   const mesiMap = {'gennaio':0,'febbraio':1,'marzo':2,'aprile':3,'maggio':4,'giugno':5,
                    'luglio':6,'agosto':7,'settembre':8,'ottobre':9,'novembre':10,'dicembre':11};
@@ -573,7 +508,6 @@ function _trovaGiornataOggi(giornate) {
 }
 
 function _abbreviaNomeCat(nome) {
-  // Abbrevia nomi lunghi per la pill bar
   const abbr = {
     'Girone Silver 1': 'Silver 1', 'Girone Silver 2': 'Silver 2',
     'Girone Gold 1': 'Gold 1', 'Girone Gold 2': 'Gold 2',
@@ -581,7 +515,6 @@ function _abbreviaNomeCat(nome) {
     'Esordienti 2014': 'Esord. 2014', 'Girone Unico': 'Girone Unico',
   };
   if (abbr[nome]) return abbr[nome];
-  // Tronca se troppo lungo
   return nome.length > 14 ? nome.substring(0, 13) + '…' : nome;
 }
 
@@ -590,7 +523,6 @@ async function selectCat(id) {
   _saveSavedCat(id);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
-  // Carica giornate disponibili per questa categoria
   await _caricaGiornate();
   renderCatBar();
   renderCurrentSection();
@@ -606,7 +538,6 @@ async function _caricaGiornate() {
   if (!STATE.activeCat) return;
   try {
     const dateSet = new Set();
-    // Legge solo dalla categoria attiva
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) {
       const { data: partite } = await db.from('partite')
@@ -622,8 +553,6 @@ async function _caricaGiornate() {
       return (meseEntry ? meseEntry[1] : 0) * 100 + giorno;
     };
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
-
-    // Auto-seleziona OGGI se disponibile, altrimenti 'tutte'
     const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
     STATE.activeGiornata = oggi || 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
@@ -705,11 +634,9 @@ function _risolviGruppi(lista, giocate) {
 
 // ============================================================
 //  RISOLUZIONE PLACEHOLDER FASE FINALE
-//  Funziona girone per girone — non aspetta tutti i gironi
 // ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
-    // ── Carica gironi normali ──────────────────────────────────────────
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     const classificheGironi = {};
 
@@ -731,20 +658,17 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
-    // ── Carica tutti i round knockout ──────────────────────────────────
     const { data: allKo } = await db.from('knockout')
       .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
       .eq('categoria_id', categoriaId);
 
-    // Round che si comportano come gironi (non sono semifinali/finali/quarti)
     const ROUND_NON_GIRONE = /SEMIFINALE|FINALE|QUARTO|CONSOLAZ|PLAYOFF|SPAREGGIO/i;
     const koPerRound = {};
-    const risultatiKnockout = {}; // per Vincente/Perdente SEMIFINALE
+    const risultatiKnockout = {};
 
     for (const ko of (allKo||[])) {
       const rn = (ko.round_name||'').trim();
 
-      // Raccoglie SEMIFINALE per Vincente/Perdente
       const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
       if (mSem) {
         const key = 'SEMIFINALE ' + mSem[1].padStart(2, '0');
@@ -755,23 +679,19 @@ async function verificaEGeneraTriangolari(categoriaId) {
         risultatiKnockout['QUARTO ' + mQuarto[1].padStart(2, '0')] = ko;
       }
 
-      // Se il round NON è semifinale/finale/quarto → è un girone knockout
       if (!ROUND_NON_GIRONE.test(rn) && ko.home_id && ko.away_id) {
-        // Usa il nome del round come chiave (normalizzato)
         const key = rn.toUpperCase();
         if (!koPerRound[key]) koPerRound[key] = [];
         koPerRound[key].push(ko);
       }
     }
 
-    // Calcola classifica per ogni round-girone knockout
     for (const [roundKey, partite] of Object.entries(koPerRound)) {
       const giocate = partite.filter(p => p.giocata);
       if (!giocate.length) continue;
       const sqIds = new Set();
       partite.forEach(p => { if(p.home_id) sqIds.add(p.home_id); if(p.away_id) sqIds.add(p.away_id); });
       if (!sqIds.size) continue;
-      // Carica squadre in batch
       const { data: sqList } = await db.from('squadre')
         .select('id,nome,logo').in('id', [...sqIds]);
       if (!sqList || !sqList.length) continue;
@@ -779,17 +699,15 @@ async function verificaEGeneraTriangolari(categoriaId) {
         squadre: sqList,
         partite: giocate.map(p => ({ ...p, giocata: true }))
       });
-      // Salva con chiave = nome round uppercase (es. "ARANCIO", "VERDE", "BLU", "GIRONE 1")
       classificheGironi[roundKey] = cl;
     }
 
-    // ── Esci se non c'è nulla da risolvere ──────────────────────────────
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
 
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
     let risolti = 0;
 
-    // ── 1. Risolvi placeholder nel KNOCKOUT ──────────────────────────────
+    // ── 1. Risolvi placeholder nel KNOCKOUT ──
     for (const match of (allKo||[])) {
       const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
       const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
@@ -802,7 +720,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
-    // ── 2. Risolvi placeholder nelle PARTITE normali + girone_squadre ────
+    // ── 2. Risolvi placeholder nelle PARTITE normali + girone_squadre ──
     for (const g of (gironi||[])) {
       const { data: tuttePartite } = await db.from('partite')
         .select('id,note_home,note_away,home_id,away_id')
@@ -819,7 +737,8 @@ async function verificaEGeneraTriangolari(categoriaId) {
           risolti++;
         }
       }
-      // Aggiorna girone_squadre con squadre reali
+
+      // Aggiorna girone_squadre — FIX: non aggiungere più squadre del previsto
       const { data: tutteP2 } = await db.from('partite')
         .select('id,note_home,note_away,home_id,away_id').eq('girone_id', g.id);
       const sqIds = new Set();
@@ -832,11 +751,14 @@ async function verificaEGeneraTriangolari(categoriaId) {
       if (sqIds.size > 0) {
         const { data: gsEsist } = await db.from('girone_squadre').select('squadra_id').eq('girone_id', g.id);
         const gsIds = new Set((gsEsist||[]).map(r => r.squadra_id));
+        const totaleSlot = (gsEsist||[]).length;
         for (const sqId of sqIds) {
-          if (!gsIds.has(sqId)) {
-            await db.from('girone_squadre').insert({ girone_id: g.id, squadra_id: sqId, posizione: 0 }).select();
-            gsIds.add(sqId);
-          }
+          if (gsIds.has(sqId)) continue;
+          if (gsIds.size >= totaleSlot) continue;
+          const { data: sqCheck } = await db.from('squadre').select('nome').eq('id', sqId).single();
+          if (!sqCheck || _isPlaceholder(sqCheck.nome)) continue;
+          await db.from('girone_squadre').insert({ girone_id: g.id, squadra_id: sqId, posizione: 0 }).select();
+          gsIds.add(sqId);
         }
       }
     }
@@ -852,7 +774,6 @@ async function verificaEGeneraTriangolari(categoriaId) {
 
 
 function _calcolaMiglioriSecondi(classificheGironi) {
-  // Raccoglie tutti i 2° classificati e li ordina per punti/DR/GF
   const secondi = [];
   for (const [nome, cl] of Object.entries(classificheGironi)) {
     if (cl.length >= 2) secondi.push({ girone: nome, sq: cl[1].sq, stat: cl[1] });
@@ -869,13 +790,9 @@ function _calcolaMiglioriSecondi(classificheGironi) {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
-  // "1° Girone A", "2° Gruppo B"
   if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
-  // "1° Arancio", "2° Verde", "4° BLU" ecc.
   if (/^\d+[°º*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
-  // "MIGLIOR SECONDA", "MIGLIOR 4°", "PEGGIOR 3°", "Miglior 2°"
   if (/^(miglior|peggio)/i.test(s)) return true;
-  // "Vincente/Perdente SEMIFINALE X"
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO)/i.test(s)) return true;
   return false;
 }
@@ -885,7 +802,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
   if (!placeholder) return null;
   const s = placeholder.trim();
 
-  // ── Vincente/Perdente SEMIFINALE XX ──────────────────────────────────
+  // ── Vincente/Perdente SEMIFINALE XX ──
   const mSemVP = s.match(/(Vincente|Perdente)\s+SEMIFINALE\s*(\d+)/i);
   if (mSemVP) {
     const tipo = mSemVP[1].toLowerCase();
@@ -897,7 +814,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
       : (sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id);
   }
 
-  // ── Vincente/Perdente QUARTO XX ───────────────────────────────────────
+  // ── Vincente/Perdente QUARTO XX ──
   const mQVP = s.match(/(Vincente|Perdente)\s+QUARTO\s*(\d+)/i);
   if (mQVP) {
     const tipo = mQVP[1].toLowerCase();
@@ -909,7 +826,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
       : (q.gol_home <= q.gol_away ? q.home_id : q.away_id);
   }
 
-  // ── Miglior 2° / MIGLIOR SECONDA ─────────────────────────────────────
+  // ── Miglior 2° ──
   if (/miglior\s*2[°º]?/i.test(s) || /miglior\s*second/i.test(s)) {
     return miglioriSecondi[0]?.sq?.id || null;
   }
@@ -918,18 +835,16 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return miglioriSecondi[parseInt(mMig[1]) - 1]?.sq?.id || null;
   }
 
-  // ── MIGLIOR N° / PEGGIOR N° — es. "MIGLIOR 4°", "PEGGIOR 3°" ──────────
+  // ── MIGLIOR N° / PEGGIOR N° ──
   const mMigliorN = s.match(/^(miglior|peggio[a-z]*)?\s*(\d+)[°º]/i);
   if (mMigliorN) {
     const tipo = (mMigliorN[1]||'').toLowerCase();
     const pos = parseInt(mMigliorN[2]);
-    // Raccoglie tutti i classificati in quella posizione tra i gironi knockout
     const candidati = [];
     for (const [nome, cl] of Object.entries(classificheGironi)) {
       if (cl.length >= pos) candidati.push({ nome, sq: cl[pos-1].sq, stat: cl[pos-1] });
     }
     if (!candidati.length) return null;
-    // Ordina per punti, diff reti, gol fatti
     candidati.sort((a, b) => {
       const ptA = a.stat.pts, ptB = b.stat.pts;
       if (ptB !== ptA) return tipo.startsWith('peggio') ? ptA - ptB : ptB - ptA;
@@ -940,7 +855,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return candidati[0]?.sq?.id || null;
   }
 
-  // ── N° Girone X / N° Gruppo X ─────────────────────────────────────────
+  // ── N° Girone X / N° Gruppo X ──
   const mGir = s.match(/^(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
   if (mGir) {
     const pos = parseInt(mGir[1]);
@@ -948,7 +863,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     const candidati = [
       `${mGir[2]} ${resto}`,
       `${mGir[2] === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
-      resto.toUpperCase(), // chiave diretta (es. "ARANCIO")
+      resto.toUpperCase(),
     ];
     for (const cand of candidati) {
       let cl = classificheGironi[cand];
@@ -968,13 +883,11 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return null;
   }
 
-  // ── N° NomeRound — es. "1° Arancio", "2° Verde", "1° Blu" ─────────────
-  // Cerca qualsiasi chiave in classificheGironi che contenga la parola chiave
+  // ── N° NomeRound — es. "1° Arancio", "2° Verde", "1° Blu" ──
   const mKo = s.match(/^(\d+)[°º*]?\s+(\w+(?:\s+\w+)?)$/);
   if (mKo) {
     const pos = parseInt(mKo[1]);
     const keyword = mKo[2].trim().toUpperCase();
-    // Cerca classifica il cui nome contiene la keyword
     let cl = null;
     const k = Object.keys(classificheGironi).find(k =>
       k.toUpperCase() === keyword ||
@@ -986,7 +899,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return null;
   }
 
-  // ── Formato breve "1A", "2B" ───────────────────────────────────────────
+  // ── Formato breve "1A", "2B" ──
   const mShort = s.match(/^(\d+)[°º*]?([A-Za-z]+\d*)$/);
   if (mShort) {
     const pos = parseInt(mShort[1]);
@@ -1039,20 +952,15 @@ function _orarioToMinuti(orario) {
 
 
 // ============================================================
-//  BATCH LOADER — carica tutte le categorie in parallelo
+//  BATCH LOADER
 // ============================================================
 async function _caricaTutteCategorie() {
-  const key = '_all_cats_' + STATE.activeTorneo;
-  // Carica tutti i gironi di tutte le categorie in parallelo
   const results = await Promise.all(
     STATE.categorie.map(cat => getGironiWithData(cat.id).then(gironi => ({ cat, gironi })))
   );
   return results;
 }
 
-// ============================================================
-//  RIEPILOGO TORNEO (tutte le giornate)
-// ============================================================
 function _riepilogoBanner(section) {
   if (!STATE._giornateDisponibili || STATE._giornateDisponibili.length <= 1) return '';
   const isRiepilogo = STATE.activeGiornata === 'tutte';
@@ -1115,7 +1023,7 @@ async function renderClassifiche() {
 }
 
 // ============================================================
-//  PUBLIC: RISULTATI — ordinati per orario, con chi ha inserito
+//  PUBLIC: RISULTATI
 // ============================================================
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
@@ -1133,13 +1041,11 @@ async function renderRisultati() {
     }
   }
 
-  // Filtra per giornata se selezionata
   const filtroAttivo = STATE.activeGiornata && STATE.activeGiornata !== 'tutte';
   if (filtroAttivo) {
     tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
 
-  // Ordina per orario
   tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
 
   const giocate = tuttePartite.filter(p => p.giocata);
@@ -1147,7 +1053,6 @@ async function renderRisultati() {
 
   let html = '';
 
-  // ── Carica campi giornate ──
   if (!STATE._campiGiornate) {
     try {
       const cg = await dbGetCampiGiornate(STATE.activeTorneo);
@@ -1157,7 +1062,6 @@ async function renderRisultati() {
   }
   const campiMap = STATE._campiGiornate || {};
 
-  // ── Header giornata in cima ──
   if (filtroAttivo) {
     const _campoOggi = campiMap[STATE.activeGiornata];
     const _keyIdOggi = STATE.activeGiornata.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
@@ -1179,13 +1083,11 @@ async function renderRisultati() {
       <div id="edit-campo-${_keyIdOggi}" style="display:none;margin-top:8px;"></div>
     </div>`;
   } else {
-    // Riepilogo: mostra giorni disponibili come chip cliccabili
     const giornate = STATE._giornateDisponibili || [];
     if (giornate.length > 1) {
       html += `<div style="background:white;border:1px solid var(--bordo);border-radius:var(--radius);
         padding:12px 14px;margin-bottom:14px;box-shadow:var(--shadow);">
-        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;
-          letter-spacing:.07em;margin-bottom:10px;">📅 Filtra per giornata</div>
+        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">📅 Filtra per giornata</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${giornate.map(g => {
             const oggi = _trovaGiornataOggi(giornate);
@@ -1202,7 +1104,6 @@ async function renderRisultati() {
     }
   }
 
-  // Funzione per renderizzare una partita
   const renderPartita = (p, showCat) => {
     const mH = (p.marcatori||[]).filter(m=>m.squadra_id===p.home_id);
     const mA = (p.marcatori||[]).filter(m=>m.squadra_id===p.away_id);
@@ -1221,8 +1122,7 @@ async function renderRisultati() {
     } else {
       r += `<div class="match-score pending">vs</div>`;
     }
-    r += `<div class="match-team right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
-      </div>`;
+    r += `<div class="match-team right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div></div>`;
     if (mH.length||mA.length) {
       r += `<div class="match-scorers">`;
       mH.forEach(m=>r+=`<span class="scorer-chip">⚽ ${m.nome}${m.minuto?' '+m.minuto+"'":''}  ${p.home?.nome||''}</span>`);
@@ -1233,7 +1133,6 @@ async function renderRisultati() {
     return r;
   };
 
-  // ── Helper: banner giornata con campo ──
   const _bannerGiornata = (giorno, isOggi) => {
     const campo = campiMap[giorno];
     const colore = isOggi ? 'var(--blu)' : 'var(--sfondo)';
@@ -1258,17 +1157,11 @@ async function renderRisultati() {
     </div>`;
   };
 
-  // ── Risultati ──
   if (giocate.length) {
     html += `<div class="section-label">✅ Risultati <span style="color:var(--verde);font-weight:800;">(${giocate.length})</span></div>`;
-    // Raggruppa per giorno se riepilogo
     if (!filtroAttivo) {
       const perGiorno = {};
-      giocate.forEach(p => {
-        const g = p.giorno || '—';
-        if (!perGiorno[g]) perGiorno[g] = [];
-        perGiorno[g].push(p);
-      });
+      giocate.forEach(p => { const g = p.giorno || '—'; if (!perGiorno[g]) perGiorno[g] = []; perGiorno[g].push(p); });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
         const _oggi = _trovaGiornataOggi(STATE._giornateDisponibili||[]);
         html += _bannerGiornata(giorno, giorno===_oggi);
@@ -1283,16 +1176,11 @@ async function renderRisultati() {
     }
   }
 
-  // ── Programma ──
   if (daFare.length) {
     html += `<div class="section-label">🕐 Programma <span style="color:var(--testo-xs);font-weight:600;">(${daFare.length})</span></div>`;
     if (!filtroAttivo) {
       const perGiorno = {};
-      daFare.forEach(p => {
-        const g = p.giorno || '—';
-        if (!perGiorno[g]) perGiorno[g] = [];
-        perGiorno[g].push(p);
-      });
+      daFare.forEach(p => { const g = p.giorno || '—'; if (!perGiorno[g]) perGiorno[g] = []; perGiorno[g].push(p); });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
         html += _bannerGiornata(giorno, false);
         html += `<div class="card">`;
@@ -1343,7 +1231,7 @@ async function renderTabellone() {
         h+=`<div class="match-result" style="border-bottom:1px solid #f0f0f0;padding-bottom:10px;margin-bottom:8px;">
           ${orario}
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div class="match-team ${isPending?'':''}"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${isPending?'':logoHTML(hm,'sm')}${hmNome}</span></div>
+            <div class="match-team"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${isPending?'':logoHTML(hm,'sm')}${hmNome}</span></div>
             <div class="match-score ${!m.giocata?'pending':''}">${m.giocata?m.gol_home+' — '+m.gol_away:'vs'}</div>
             <div class="match-team right"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${amNome}${isPending?'':logoHTML(am,'sm')}</span></div>
           </div>
@@ -1447,20 +1335,15 @@ async function renderAdminSetup() {
   }
   html+=`<div class="section-label">Aggiungi categorie da Excel</div>
   <div class="card">
-    <div style="font-size:13px;color:var(--testo-lt);margin-bottom:14px;">
-      Per ogni categoria: scrivi il nome e carica il file Excel.
-    </div>
+    <div style="font-size:13px;color:var(--testo-lt);margin-bottom:14px;">Per ogni categoria: scrivi il nome e carica il file Excel.</div>
     <div id="cat-import-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
     <button onclick="aggiungiRigaCategoria()"
-      style="width:100%;padding:10px;border:1.5px dashed var(--bordo);border-radius:9px;
-             background:var(--sfondo);color:var(--blu);font-size:13px;font-weight:600;
-             cursor:pointer;font-family:inherit;">
+      style="width:100%;padding:10px;border:1.5px dashed var(--bordo);border-radius:9px;background:var(--sfondo);color:var(--blu);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
       + Aggiungi categoria
     </button>
     <div id="import-preview" style="margin-top:14px;"></div>
   </div>`;
   el.innerHTML = html;
-  // Aggiungi prima riga automaticamente se lista vuota
   setTimeout(() => {
     if (document.getElementById('cat-import-list') &&
         document.getElementById('cat-import-list').children.length === 0) {
@@ -1492,8 +1375,6 @@ async function addCategoria() {
   renderCatBar(); toast('Categoria aggiunta!'); await renderAdminSetup();
 }
 
-
-
 // ============================================================
 //  RIGHE CATEGORIA + EXCEL
 // ============================================================
@@ -1509,30 +1390,24 @@ function aggiungiRigaCategoria() {
   div.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;">
       <input id="cat-nome-${idx}" class="form-input" placeholder="Nome categoria (es. Esordienti 2013)"
-        style="flex:1;font-size:13px;"
-        oninput="_aggiornaNomeRiga(${idx})">
+        style="flex:1;font-size:13px;" oninput="_aggiornaNomeRiga(${idx})">
       <button onclick="_rimuoviRiga(${idx})"
-        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);
-               border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
+        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
     </div>
     <div id="cat-file-area-${idx}">
-      <label style="display:flex;align-items:center;gap:8px;background:white;border:1.5px solid var(--bordo);
-                    border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--testo-lt);
-                    transition:all .15s;"
+      <label style="display:flex;align-items:center;gap:8px;background:white;border:1.5px solid var(--bordo);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--testo-lt);transition:all .15s;"
              onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
              onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
         <span>📂</span>
         <span id="cat-file-label-${idx}">Seleziona file Excel...</span>
-        <input type="file" accept=".xlsx,.xls" style="display:none;"
-          onchange="_fileSelezionato(event, ${idx})">
+        <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="_fileSelezionato(event, ${idx})">
       </label>
     </div>
     <div id="cat-preview-${idx}" style="display:none;"></div>
     <div id="cat-btn-${idx}" style="display:none;">
       <button onclick="_importaRiga(${idx})"
-        style="width:100%;background:var(--blu);color:white;border:none;border-radius:8px;
-               padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
-        ✓ Importa "${document.getElementById('cat-nome-${idx}')?.value||'categoria'}"
+        style="width:100%;background:var(--blu);color:white;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
+        ✓ Importa categoria
       </button>
     </div>
   `;
@@ -1553,15 +1428,13 @@ function _rimuoviRiga(idx) {
   if (el) el.remove();
 }
 
-let _fileRighe = {}; // idx -> dati excel parsati
+let _fileRighe = {};
 
 function _fileSelezionato(event, idx) {
   const file = event.target.files[0];
   if (!file) return;
   const label = document.getElementById('cat-file-label-' + idx);
   if (label) label.textContent = '📄 ' + file.name;
-
-  // Preview immediato
   _parseExcelRiga(file, idx);
 }
 
@@ -1590,13 +1463,11 @@ async function _parseExcelRiga(file, idx) {
 
     _fileRighe[idx] = dati;
 
-    // Mostra riepilogo
     const totGironi = dati.gironi.length;
     const totPartite = dati.partite.length;
     const totFinali = dati.fase2.length;
     const nomeCatInput = document.getElementById('cat-nome-' + idx);
 
-    // Auto-compila nome categoria dal file se vuoto
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
       nomeCatInput.value = dati.categorie[0].nome;
     }
@@ -1632,11 +1503,9 @@ async function _importaRiga(idx) {
 
   if (!dati) { toast('Carica prima un file Excel'); return; }
 
-  // Sovrascrivi il nome categoria con quello scritto dall'utente
   if (nomeScritto && dati.categorie.length) {
     dati.categorie[0].nome = nomeScritto;
     dati.categorie[0].codice = nomeScritto;
-    // Aggiorna anche i riferimenti nelle partite e gironi
     const vecchioNome = dati.gironi[0]?.categoria;
     if (vecchioNome) {
       dati.gironi.forEach(g => { if(g.categoria === vecchioNome) g.categoria = nomeScritto; });
@@ -1655,11 +1524,9 @@ async function _importaRiga(idx) {
     if (!tornei.data?.length) throw new Error('Nessun torneo attivo');
     const torneoId = STATE.activeTorneo || tornei.data[0].id;
 
-    // Usa la funzione di importazione esistente
     window._importDati = dati;
     await eseguiImportazioneConTorneo(torneoId, dati, btn);
 
-    // Feedback sulla riga
     const riga = document.getElementById('cat-riga-' + idx);
     if (riga) {
       riga.style.background = 'var(--verde-bg)';
@@ -1669,7 +1536,6 @@ async function _importaRiga(idx) {
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
 
-    // Aggiorna stato
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
     renderCatBar();
 
@@ -1688,13 +1554,10 @@ async function rinominaCat(id) {
   try {
     await dbUpdateCategoria(id, { nome: nuovo.trim() });
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
-    renderCatBar();
-    renderTorneoBar();
+    renderCatBar(); renderTorneoBar();
     toast('✅ Categoria rinominata!');
     await renderAdminSetup();
-  } catch(e) {
-    toast('❌ Errore: ' + e.message);
-  }
+  } catch(e) { toast('❌ Errore: ' + e.message); }
 }
 
 async function deleteCat(id) {
@@ -1708,25 +1571,20 @@ async function deleteCat(id) {
 // ============================================================
 async function renderAdminLoghi() {
   const el=document.getElementById('sec-a-loghi');
-  const squadre=await dbGetSquadreFull(STATE.activeTorneo); // con logo
+  const squadre=await dbGetSquadreFull(STATE.activeTorneo);
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
   let html='<div class="section-label">Loghi squadre</div><div class="card">';
   html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
   html+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <label style="display:inline-flex;align-items:center;gap:8px;background:var(--blu,#1a56db);color:white;
-                  padding:9px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;
-                  font-family:inherit;border:2px solid var(--blu,#1a56db);transition:all .15s;"
+    <label style="display:inline-flex;align-items:center;gap:8px;background:var(--blu,#1a56db);color:white;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;border:2px solid var(--blu,#1a56db);transition:all .15s;"
            onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
       📁 Carica loghi da cartella
       <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
     </label>
-
-    <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">
-      📦 Comprimi loghi grandi
-    </button>
+    <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">📦 Comprimi loghi grandi</button>
   </div>
   <div style="font-size:11px;color:#888;margin-bottom:12px;">
-    💡 <strong>Suggerimento:</strong> rinomina i file con il nome della squadra (es. <em>rhodense.png</em>, <em>scarioni.jpg</em>) e selezionali tutti insieme
+    💡 <strong>Suggerimento:</strong> rinomina i file con il nome della squadra (es. <em>rhodense.png</em>) e selezionali tutti insieme
   </div>
   <div id="loghi-auto-log" style="display:none;background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;max-height:200px;overflow-y:auto;font-family:monospace;"></div>`;
   for (const sq of squadre) {
@@ -1742,9 +1600,7 @@ async function renderAdminLoghi() {
   }
   html+='</div>'; el.innerHTML=html;
 }
-// ============================================================
-//  CARICA LOGHI DA CARTELLA — abbinamento intelligente v2
-// ============================================================
+
 async function caricaLoghiDaCartella(event) {
   const files = Array.from(event.target.files);
   const log = document.getElementById('loghi-auto-log');
@@ -1755,49 +1611,30 @@ async function caricaLoghiDaCartella(event) {
 
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
 
-  // Prefissi da rimuovere all'inizio
-  const PREFISSI = /^(a\.s\.d\.|asd|ssd|acd|usd|a\.c\.|ac|a\.s\.|as|u\.s\.|us|s\.s\.|ss|ssc|asc|fc|f\.c\.|gc|gc|pd|pol|polisportiva|unione|sporting|real|atletico|athletic|pro|new|calcio|football|club|team)\s*/gi;
-  // Suffissi da rimuovere alla fine
+  const PREFISSI = /^(a\.s\.d\.|asd|ssd|acd|usd|a\.c\.|ac|a\.s\.|as|u\.s\.|us|s\.s\.|ss|ssc|asc|fc|f\.c\.|gc|pd|pol|polisportiva|unione|sporting|real|atletico|athletic|pro|new|calcio|football|club|team)\s*/gi;
   const SUFFISSI = /\s*(calcio|football|club|sport|city|united|1972|1908|1919|1973|2016|2024|verde|bianco|blu|grigio|srl|spa|s\.p\.a\.|f\.c\.)\s*$/gi;
 
   const norm = (s) => {
     if (!s) return '';
-    let r = s.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // togli accenti
-      
+    return s.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(PREFISSI, '')
       .replace(SUFFISSI, '')
       .replace(/[^a-z0-9\s]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    return r;
   };
 
-  // Token principali (parole >= 3 lettere)
   const tokens = (s) => norm(s).split(' ').filter(w => w.length >= 3);
 
   const similarita = (fileStr, sqStr) => {
     const fn = norm(fileStr);
     const sn = norm(sqStr);
     if (!fn || !sn) return 0;
-
-    // 1. Corrispondenza esatta dopo normalizzazione
     if (fn === sn) return 1.0;
-
-    // 2. Uno contiene l'altro
-    if (sn.includes(fn) || fn.includes(sn)) {
-      return Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
-    }
-
-    // 3. Inizia con (es. "rho" → "rhodense", "luc" → "luciano manara")
-    if (sn.startsWith(fn) || fn.startsWith(sn)) {
-      const ratio = Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
-      return ratio * 0.95;
-    }
-
-    // 4. Token in comune
-    const tf = tokens(fileStr);
-    const ts = tokens(sqStr);
+    if (sn.includes(fn) || fn.includes(sn)) return Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length);
+    if (sn.startsWith(fn) || fn.startsWith(sn)) return (Math.min(fn.length, sn.length) / Math.max(fn.length, sn.length)) * 0.95;
+    const tf = tokens(fileStr); const ts = tokens(sqStr);
     if (!tf.length || !ts.length) return 0;
     let comuni = 0, parziali = 0;
     for (const w of tf) {
@@ -1805,18 +1642,12 @@ async function caricaLoghiDaCartella(event) {
       else if (ts.some(t => t.startsWith(w) || w.startsWith(t))) parziali++;
     }
     if (comuni > 0) return (comuni + parziali * 0.5) / Math.max(tf.length, ts.length) * 0.9;
-
-    // 5. Il file è un'abbreviazione (prima lettera di ogni parola)
     const iniziali = ts.map(t => t[0]).join('');
     if (fn === iniziali) return 0.75;
-    // Abbreviazione parziale
     if (iniziali.startsWith(fn) || fn.startsWith(iniziali)) return 0.6;
-
     return 0;
   };
 
-  // Raggruppa squadre per gestire doppioni (stessa squadra in gironi diversi)
-  // Usa Map per tenere solo una per nome normalizzato
   const sqUniche = new Map();
   for (const sq of squadre) {
     const key = norm(sq.nome);
@@ -1840,18 +1671,13 @@ async function caricaLoghiDaCartella(event) {
     if (bestKey && bestScore >= 0.3) {
       const targets = sqUniche.get(bestKey);
       const conf = bestScore >= 0.85 ? '✅' : bestScore >= 0.55 ? '🟡' : '🟠';
-      const nomiTarget = targets.map(s => s.nome).join(' + ');
-      log.innerHTML += conf + ' <strong>' + file.name + '</strong> → ' + nomiTarget + ' (' + Math.round(bestScore*100) + '%) ';
-
+      log.innerHTML += conf + ' <strong>' + file.name + '</strong> → ' + targets.map(s => s.nome).join(' + ') + ' (' + Math.round(bestScore*100) + '%) ';
       try {
         const compressed = await _comprimiImmagine(file, 120, 0.80);
-        // Carica logo per TUTTE le squadre con lo stesso nome (doppioni)
-        for (const sq of targets) {
-          await dbUpdateLogo(sq.id, compressed);
-        }
+        for (const sq of targets) { await dbUpdateLogo(sq.id, compressed); }
         abbinati++;
         log.innerHTML += targets.length > 1 ? '✓ (' + targets.length + ' squadre)<br>' : '✓<br>';
-      } catch(e) { log.innerHTML += `errore<br>`; }
+      } catch(e) { log.innerHTML += 'errore<br>'; }
     } else {
       nonAbbinati.push(file.name);
       log.innerHTML += '❓ <strong>' + file.name + '</strong> → non trovata<br>';
@@ -1860,64 +1686,40 @@ async function caricaLoghiDaCartella(event) {
   }
 
   log.innerHTML += `<br>🏁 <strong>${abbinati} file abbinati</strong>`;
-  if (nonAbbinati.length) {
-    log.innerHTML += `<br>⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
-    log.innerHTML += `<br><small>💡 Usa parte del nome senza prefissi (es. "vercelli.png" per Pro Vercelli)</small>`;
-  }
-
+  if (nonAbbinati.length) log.innerHTML += `<br>⚠️ Non abbinati: ${nonAbbinati.join(', ')}`;
   if (abbinati > 0) { await renderAdminLoghi(); toast('✅ ' + abbinati + ' loghi caricati!'); }
   event.target.value = '';
 }
 
-
-// ── COMPRIMI LOGHI ESISTENTI ────────────────────────────────
 async function comprimiloghiEsistenti() {
   const btn = document.getElementById('btn-comprimi-loghi');
   const log = document.getElementById('loghi-auto-log');
   if (!btn || !log) return;
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Compressione...';
-  log.style.display = 'block';
-  log.innerHTML = '📦 Avvio compressione loghi...<br>';
-
+  btn.disabled = true; btn.textContent = '⏳ Compressione...';
+  log.style.display = 'block'; log.innerHTML = '📦 Avvio compressione loghi...<br>';
   const squadre = await dbGetSquadreFull(STATE.activeTorneo);
   const conLogo = squadre.filter(s => s.logo?.startsWith('data:'));
-
   let compressi = 0, saltati = 0;
   for (const sq of conLogo) {
     const kb = Math.round(sq.logo.length * 0.75 / 1024);
     if (kb < 15) { saltati++; continue; }
-
     log.innerHTML += `📦 ${sq.nome} (${kb}KB)... `;
     log.scrollTop = log.scrollHeight;
-
     try {
       const compressed = await _comprimiImmagine(
-        { arrayBuffer: async () => {
-          const b64 = sq.logo.split(',')[1];
-          const bin = atob(b64);
-          const arr = new Uint8Array(bin.length);
-          for (let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-          return arr.buffer;
-        }},
-        120, 0.75,
-        sq.logo // passa direttamente
+        { arrayBuffer: async () => { const b64=sq.logo.split(',')[1]; const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i); return arr.buffer; }},
+        120, 0.75, sq.logo
       );
       const newKb = Math.round(compressed.length * 0.75 / 1024);
       await dbUpdateLogo(sq.id, compressed);
       compressi++;
       log.innerHTML += `✅ ${newKb}KB (-${Math.round((1-newKb/kb)*100)}%)<br>`;
-    } catch(e) {
-      log.innerHTML += `❌ Errore<br>`;
-    }
+    } catch(e) { log.innerHTML += `❌ Errore<br>`; }
     log.scrollTop = log.scrollHeight;
     await new Promise(r => setTimeout(r, 100));
   }
-
   log.innerHTML += `<br>🏁 <strong>${compressi} compressi, ${saltati} già piccoli</strong>`;
-  btn.disabled = false;
-  btn.textContent = '📦 Comprimi loghi grandi';
+  btn.disabled = false; btn.textContent = '📦 Comprimi loghi grandi';
   if (compressi > 0) { await renderAdminLoghi(); toast('✅ ' + compressi + ' loghi compressi!'); }
 }
 
@@ -1929,10 +1731,7 @@ async function uploadLogo(event, squadra_id) {
     await dbUpdateLogo(squadra_id, compressed);
     toast('✅ Logo caricato!');
     await renderAdminLoghi();
-  } catch(e) {
-    console.error(e);
-    toast('Errore caricamento logo');
-  }
+  } catch(e) { console.error(e); toast('Errore caricamento logo'); }
 }
 
 function _comprimiImmagine(file, maxSize = 120, quality = 0.75, dataUrl = null) {
@@ -1961,7 +1760,7 @@ function _comprimiImmagine(file, maxSize = 120, quality = 0.75, dataUrl = null) 
 async function removeLogo(squadra_id) { await dbUpdateLogo(squadra_id,null); toast('Logo rimosso'); await renderAdminLoghi(); }
 
 // ============================================================
-//  ADMIN: RISULTATI — ordinati per orario, con chi ha inserito
+//  ADMIN: RISULTATI
 // ============================================================
 let openScorers={};
 
@@ -1974,25 +1773,14 @@ async function renderAdminRisultati() {
   const campiMap = {}; campiGiornate.forEach(c => campiMap[c.giorno] = c);
   STATE._campiGiornate = campiMap;
 
-  // Raccoglie tutte le partite e ordina per orario
   let tuttePartite = [];
   for (const g of gironi) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id });
   }
-  // Filtra per giornata se selezionata
   if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') {
     tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   }
   tuttePartite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
-
-  // ── Raggruppa per giorno e mostra banner ──
-  const perGiornoAdmin = {};
-  tuttePartite.forEach(p => {
-    const g = p.giorno || '—';
-    if (!perGiornoAdmin[g]) perGiornoAdmin[g] = [];
-    perGiornoAdmin[g].push(p);
-  });
-  const mostraBannerAdmin = Object.keys(perGiornoAdmin).length > 1 || STATE.activeGiornata === 'tutte';
 
   let html='';
   for (const p of tuttePartite) {
@@ -2009,26 +1797,21 @@ async function renderAdminRisultati() {
       <span style="font-size:11px;color:#bbb;">${p._girone}</span>
       ${p.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${p.inserito_da}</span>`:''}
     </div>`;
-    // Banner giornata — mostra solo alla prima partita del giorno
+
     const _pgIdx = tuttePartite.indexOf(p);
     const _prevGiorno = _pgIdx > 0 ? tuttePartite[_pgIdx-1].giorno : null;
     if (p.giorno && p.giorno !== _prevGiorno) {
       const _campoG = campiMap[p.giorno] || {};
       const _keyG = (p.giorno).replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-      html += `<div style="background:var(--blu);color:white;border-radius:var(--radius);
-        padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      html += `<div style="background:var(--blu);color:white;border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="flex:1;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="font-size:13px;font-weight:700;">📅 ${p.giorno}</span>
-            ${_campoG.nome_campo||_campoG.indirizzo ? `<span style="font-size:12px;color:rgba(255,255,255,0.85);">
-              📍 <strong>${_campoG.nome_campo||''}</strong>${_campoG.nome_campo&&_campoG.indirizzo?' — ':''}${_campoG.indirizzo||''}
-            </span>` : ''}
+            ${_campoG.nome_campo||_campoG.indirizzo ? `<span style="font-size:12px;color:rgba(255,255,255,0.85);">📍 <strong>${_campoG.nome_campo||''}</strong>${_campoG.nome_campo&&_campoG.indirizzo?' — ':''}${_campoG.indirizzo||''}</span>` : ''}
           </div>
         </div>
         <button onclick="mostraEditCampoGiornata('${p.giorno}')"
-          style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);
-                 color:white;border-radius:6px;padding:3px 10px;
-                 font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">
           ✏️ ${_campoG.nome_campo ? 'Modifica' : 'Aggiungi'} luogo
         </button>
         <div id="edit-campo-${_keyG}" style="display:none;width:100%;margin-top:8px;"></div>
@@ -2119,7 +1902,6 @@ async function saveMarcatori(partita_id, girone_id) {
 async function renderAdminKnockout() {
   const el=document.getElementById('sec-a-knockout');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  // Risolvi automaticamente i placeholder prima di mostrare
   await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
@@ -2265,17 +2047,12 @@ function enterAdmin(user) {
 }
 
 function _addSimBtn() {
-  // Aggiungi tasto simulazione nell'header (solo per admin, non arbitri)
   if (document.getElementById('sim-toggle-btn')) return;
   const btn = document.createElement('button');
   btn.id = 'sim-toggle-btn';
   btn.textContent = '🎮';
   btn.title = 'Modalità Simulazione';
-  btn.style.cssText = `
-    background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);
-    color:#f59e0b;border-radius:8px;padding:6px 10px;font-size:15px;
-    cursor:pointer;transition:all .18s;
-  `;
+  btn.style.cssText = 'background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;border-radius:8px;padding:6px 10px;font-size:15px;cursor:pointer;transition:all .18s;';
   btn.onmouseover = () => btn.style.background = 'rgba(245,158,11,0.25)';
   btn.onmouseout  = () => btn.style.background = 'rgba(245,158,11,0.12)';
   btn.onclick = toggleSimulazione;
@@ -2300,7 +2077,6 @@ function exitAdmin() {
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('admin-btn').textContent='Admin';
-  // Rimuovi tasto simulazione e pannello
   const simBtn = document.getElementById('sim-toggle-btn');
   if (simBtn) simBtn.remove();
   const simPanel = document.getElementById('sim-panel');
@@ -2339,11 +2115,11 @@ function loadScript(src) {
 window.addEventListener('DOMContentLoaded', init);
 
 // ============================================================
-//  TV MODE — scorre tutte le categorie, filtra per oggi
+//  TV MODE
 // ============================================================
 let _tvState = {
   active: false,
-  section: 'classifiche', // classifiche | risultati
+  section: 'classifiche',
   catIndex: 0,
   scrollTimer: null,
   catTimer: null,
@@ -2369,40 +2145,31 @@ function closeTV() {
   clearInterval(_tvState.scrollTimer);
   clearInterval(_tvState.catTimer);
   clearInterval(_tvState.clockTimer);
-  // Reset scroll progress
   const prog = document.getElementById('tv-scroll-progress');
   if (prog) prog.style.width = '0%';
 }
 
-function _tvCategorieFiltrate() {
-  // Usa tutte le categorie disponibili
-  return STATE.categorie;
-}
+function _tvCategorieFiltrate() { return STATE.categorie; }
 
 function _tvRenderCatBar() {
   const bar = document.getElementById('tv-cat-bar');
   if (!bar) return;
   const cats = _tvCategorieFiltrate();
   bar.innerHTML = cats.map((c, i) =>
-    `<button class="tv-cat-btn ${i === _tvState.catIndex ? 'active' : ''}"
-      onclick="_tvShowCat(${i})">${_abbreviaNomeCat(c.nome)}</button>`
+    `<button class="tv-cat-btn ${i === _tvState.catIndex ? 'active' : ''}" onclick="_tvShowCat(${i})">${_abbreviaNomeCat(c.nome)}</button>`
   ).join('');
 }
 
 async function _tvShowCat(idx) {
   _tvState.catIndex = idx;
   _tvRenderCatBar();
-
   const cats = _tvCategorieFiltrate();
   if (!cats[idx]) return;
   const cat = cats[idx];
-
-  // Carica dati con filtro giorno
   const oggi = _tvGetOggi();
   const content = document.getElementById('tv-content');
   if (!content) return;
   content.innerHTML = '<div style="color:rgba(255,255,255,0.3);padding:40px;text-align:center;">Caricamento...</div>';
-
   try {
     if (_tvState.section === 'classifiche') {
       await _tvRenderClassifiche(cat, oggi, content);
@@ -2414,7 +2181,6 @@ async function _tvShowCat(idx) {
 }
 
 function _tvGetOggi() {
-  // Restituisce la giornata di oggi se disponibile
   const giornate = STATE._giornateDisponibili || [];
   return _trovaGiornataOggi(giornate);
 }
@@ -2422,27 +2188,19 @@ function _tvGetOggi() {
 async function _tvRenderClassifiche(cat, oggi, container) {
   const gironi = await getGironiWithData(cat.id);
   let html = '';
-
   if (oggi) {
-    html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;
-      padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;letter-spacing:.04em;">
-      📅 ${oggi} — Classifica in tempo reale
-    </div>`;
+    html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;letter-spacing:.04em;">📅 ${oggi} — Classifica in tempo reale</div>`;
   }
-
   html += '<div class="tv-gironi-grid">';
   for (const g of gironi) {
     const cl = calcGironeClassifica(g);
     html += `<div class="tv-girone-card">
-      <div class="tv-girone-title">${g.nome}
-        <span style="font-size:11px;font-weight:600;opacity:.5;margin-left:auto;">${g.partite.filter(p=>p.giocata).length}/${g.partite.length}</span>
-      </div>
+      <div class="tv-girone-title">${g.nome}<span style="font-size:11px;font-weight:600;opacity:.5;margin-left:auto;">${g.partite.filter(p=>p.giocata).length}/${g.partite.length}</span></div>
       <table class="tv-standings-table">
         <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>Pt</th></tr></thead>
         <tbody>`;
     cl.forEach((row, idx) => {
       const q = idx < (cat.qualificate || 1);
-      const diff = row.gf - row.gs;
       html += `<tr class="${q ? 'qualifies' : ''}">
         <td><span class="${q ? 'q-dot' : 'nq-dot'}"></span></td>
         <td>${logoHTML(row.sq, 'sm')}</td>
@@ -2463,91 +2221,45 @@ async function _tvRenderRisultati(cat, oggi, container) {
   for (const g of gironi) {
     for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome });
   }
-
-  // Filtra per oggi se disponibile
   if (oggi) {
     const filtrateOggi = tuttePartite.filter(p => p.giorno === oggi);
     if (filtrateOggi.length) tuttePartite = filtrateOggi;
   }
-
   tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
-
   const giocate = tuttePartite.filter(p => p.giocata);
   const daFare  = tuttePartite.filter(p => !p.giocata);
-
   let html = '';
-  if (oggi) {
-    html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;
-      padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;">
-      📅 ${oggi}
+  if (oggi) html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;">📅 ${oggi}</div>`;
+
+  const renderTvMatch = (p, pending) => {
+    const hm = p.home; const am = p.away;
+    return `<div class="tv-match-card">
+      <div class="tv-match-header">${p.orario ? '🕐 ' + p.orario : ''}${p.campo ? ' · ' + p.campo : ''}<span style="margin-left:auto">${p._girone}</span></div>
+      <div class="tv-match-body">
+        <div class="tv-match-team">
+          ${hm?.logo ? `<img src="${hm.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(hm?.nome||'?').substring(0,2).toUpperCase()}</div>`}
+          <div class="tv-team-name">${hm?.nome||'?'}</div>
+        </div>
+        <div class="tv-score-box">${pending ? `<span class="tv-score-pending">vs</span>` : `<span class="tv-score">${p.gol_home}</span><span class="tv-score-sep">—</span><span class="tv-score">${p.gol_away}</span>`}</div>
+        <div class="tv-match-team">
+          ${am?.logo ? `<img src="${am.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(am?.nome||'?').substring(0,2).toUpperCase()}</div>`}
+          <div class="tv-team-name">${am?.nome||'?'}</div>
+        </div>
+      </div>
     </div>`;
-  }
+  };
 
   if (giocate.length) {
-    html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;
-      letter-spacing:.08em;margin-bottom:12px;">✅ Risultati</div>
-      <div class="tv-results-grid">`;
-    for (const p of giocate) {
-      const hm = p.home; const am = p.away;
-      html += `<div class="tv-match-card">
-        <div class="tv-match-header">
-          ${p.orario ? `🕐 ${p.orario}` : ''}
-          ${p.campo ? ` · ${p.campo}` : ''}
-          <span style="margin-left:auto">${p._girone}</span>
-        </div>
-        <div class="tv-match-body">
-          <div class="tv-match-team">
-            ${hm?.logo ? `<img src="${hm.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(hm?.nome||'?').substring(0,2).toUpperCase()}</div>`}
-            <div class="tv-team-name">${hm?.nome||'?'}</div>
-          </div>
-          <div class="tv-score-box">
-            <span class="tv-score">${p.gol_home}</span>
-            <span class="tv-score-sep">—</span>
-            <span class="tv-score">${p.gol_away}</span>
-          </div>
-          <div class="tv-match-team">
-            ${am?.logo ? `<img src="${am.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(am?.nome||'?').substring(0,2).toUpperCase()}</div>`}
-            <div class="tv-team-name">${am?.nome||'?'}</div>
-          </div>
-        </div>
-      </div>`;
-    }
+    html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">✅ Risultati</div><div class="tv-results-grid">`;
+    giocate.forEach(p => { html += renderTvMatch(p, false); });
     html += '</div>';
   }
-
   if (daFare.length) {
-    html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;
-      letter-spacing:.08em;margin:20px 0 12px;">🕐 Programma</div>
-      <div class="tv-results-grid">`;
-    for (const p of daFare) {
-      const hm = p.home; const am = p.away;
-      html += `<div class="tv-match-card">
-        <div class="tv-match-header">
-          ${p.orario ? `🕐 ${p.orario}` : '—'}
-          ${p.campo ? ` · ${p.campo}` : ''}
-          <span style="margin-left:auto">${p._girone}</span>
-        </div>
-        <div class="tv-match-body">
-          <div class="tv-match-team">
-            ${hm?.logo ? `<img src="${hm.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(hm?.nome||'?').substring(0,2).toUpperCase()}</div>`}
-            <div class="tv-team-name">${hm?.nome||'?'}</div>
-          </div>
-          <div class="tv-score-box">
-            <span class="tv-score-pending">vs</span>
-          </div>
-          <div class="tv-match-team">
-            ${am?.logo ? `<img src="${am.logo}" class="tv-team-logo-lg">` : `<div class="tv-team-avatar-lg">${(am?.nome||'?').substring(0,2).toUpperCase()}</div>`}
-            <div class="tv-team-name">${am?.nome||'?'}</div>
-          </div>
-        </div>
-      </div>`;
-    }
+    html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 12px;">🕐 Programma</div><div class="tv-results-grid">`;
+    daFare.forEach(p => { html += renderTvMatch(p, true); });
     html += '</div>';
   }
-
-  if (!giocate.length && !daFare.length) {
-    html += '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:60px;">Nessuna partita</div>';
-  }
+  if (!giocate.length && !daFare.length) html += '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:60px;">Nessuna partita</div>';
   container.innerHTML = html;
 }
 
@@ -2571,27 +2283,20 @@ function _tvStartClock() {
 }
 
 function _tvStartAutoscroll() {
-  const SCROLL_INTERVAL = 30000; // 30s per categoria
+  const SCROLL_INTERVAL = 30000;
   let elapsed = 0;
   const TICK = 200;
-
   clearInterval(_tvState.scrollTimer);
   _tvState.scrollTimer = setInterval(() => {
     elapsed += TICK;
     const pct = (elapsed / SCROLL_INTERVAL) * 100;
     const prog = document.getElementById('tv-scroll-progress');
     if (prog) prog.style.width = Math.min(pct, 100) + '%';
-
-    // Scrolla il contenuto
     const content = document.getElementById('tv-content');
     if (content) {
       content.scrollTop += 2;
-      // Se arrivato in fondo, passa alla categoria successiva
-      if (content.scrollTop + content.clientHeight >= content.scrollHeight - 10) {
-        elapsed = SCROLL_INTERVAL; // forza cambio
-      }
+      if (content.scrollTop + content.clientHeight >= content.scrollHeight - 10) elapsed = SCROLL_INTERVAL;
     }
-
     if (elapsed >= SCROLL_INTERVAL) {
       elapsed = 0;
       if (prog) prog.style.width = '0%';
@@ -2603,95 +2308,43 @@ function _tvStartAutoscroll() {
 }
 
 // ============================================================
-//  🎮 MODALITÀ SIMULAZIONE — Protetta da password
-//  Password: 19880204
+//  SIMULAZIONE
 // ============================================================
-
 const _SIM_PWD = '19880204';
 let _simUnlocked = false;
 
 function toggleSimulazione() {
-  if (_simUnlocked) {
-    _renderSimPanel();
-    return;
-  }
+  if (_simUnlocked) { _renderSimPanel(); return; }
   const pwd = prompt('🔐 Inserisci la password per la modalità simulazione:');
   if (!pwd) return;
-  if (pwd !== _SIM_PWD) {
-    alert('❌ Password errata');
-    return;
-  }
+  if (pwd !== _SIM_PWD) { alert('❌ Password errata'); return; }
   _simUnlocked = true;
   toast('✅ Modalità simulazione attivata!');
   _renderSimPanel();
 }
 
 function _renderSimPanel() {
-  // Rimuovi panel esistente
   const existing = document.getElementById('sim-panel');
   if (existing) { existing.remove(); return; }
-
   const panel = document.createElement('div');
   panel.id = 'sim-panel';
-  panel.style.cssText = `
-    position: fixed; bottom: 80px; right: 16px; z-index: 8000;
-    background: #0f172a; border: 2px solid #f59e0b;
-    border-radius: 14px; padding: 16px; width: 280px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    font-family: var(--font-display, sans-serif);
-  `;
-
+  panel.style.cssText = 'position:fixed;bottom:80px;right:16px;z-index:8000;background:#0f172a;border:2px solid #f59e0b;border-radius:14px;padding:16px;width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:var(--font-display,sans-serif);';
   panel.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">
-        🎮 SIMULAZIONE
-      </div>
+      <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">🎮 SIMULAZIONE</div>
       <button onclick="document.getElementById('sim-panel').remove()"
-        style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);
-               color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;
-               font-size:12px;font-family:inherit;">✕</button>
+        style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit;">✕</button>
     </div>
-
-    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">
-      Genera risultati casuali per testare il sistema. Solo per sviluppo!
-    </div>
-
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">Genera risultati casuali per testare il sistema.</div>
     <div style="display:flex;flex-direction:column;gap:8px;">
-      <button onclick="simulaRisultati()"
-        style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;
-               color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;
-               cursor:pointer;font-family:inherit;letter-spacing:.04em;">
-        ⚽ SIMULA RISULTATI
-      </button>
-
-      <button onclick="simulaRisultatiGirone()"
-        style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);
-               color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;
-               cursor:pointer;font-family:inherit;">
-        ⚽ Simula solo girone attivo
-      </button>
-
+      <button onclick="simulaRisultati()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">⚽ SIMULA RISULTATI</button>
+      <button onclick="simulaRisultatiGirone()" style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚽ Simula solo girone attivo</button>
       <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
-
-      <button onclick="resetRisultati()"
-        style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);
-               color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;
-               cursor:pointer;font-family:inherit;">
-        🔄 RESET — Azzera tutti i risultati
-      </button>
-
-      <button onclick="resetRisultatiGirone()"
-        style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);
-               color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;
-               cursor:pointer;font-family:inherit;">
-        🔄 Reset solo girone attivo
-      </button>
+      <button onclick="resetRisultati()" style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 RESET — Azzera tutti i risultati</button>
+      <button onclick="resetRisultatiGirone()" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Reset solo girone attivo</button>
     </div>
-
-    <div id="sim-log" style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.4);
-      max-height:80px;overflow-y:auto;line-height:1.6;"></div>
+    <div id="sim-log" style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.4);max-height:80px;overflow-y:auto;line-height:1.6;"></div>
   `;
-
   document.body.appendChild(panel);
 }
 
@@ -2701,40 +2354,25 @@ function _simLog(msg) {
 }
 
 function _golCasuale() {
-  // Distribuzione realistica: molti pareggi bassi, rari risultati alti
   const r = Math.random();
-  if (r < 0.15) return 0;
-  if (r < 0.35) return 1;
-  if (r < 0.55) return 2;
-  if (r < 0.70) return 3;
-  if (r < 0.82) return 4;
-  if (r < 0.91) return 5;
-  if (r < 0.96) return 6;
-  return 7;
+  if (r < 0.15) return 0; if (r < 0.35) return 1; if (r < 0.55) return 2;
+  if (r < 0.70) return 3; if (r < 0.82) return 4; if (r < 0.91) return 5;
+  if (r < 0.96) return 6; return 7;
 }
 
 async function simulaRisultati() {
   if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
-  _simLog('⏳ Avvio simulazione multi-passaggio...');
-
+  _simLog('⏳ Avvio simulazione...');
   try {
     const catId = STATE.activeCat || STATE.categorie[0]?.id;
     let totale = 0;
     const MAX = 6;
-
     for (let pass = 1; pass <= MAX; pass++) {
-      // 1. Risolvi placeholder
-      if (catId) {
-        await verificaEGeneraTriangolari(catId);
-        if (typeof _cacheClear === 'function') _cacheClear();
-      }
-
-      // 2. Carica gironi aggiornati
+      if (catId) { await verificaEGeneraTriangolari(catId); if (typeof _cacheClear === 'function') _cacheClear(); }
       const gironi = await getGironiWithData(catId);
       let nuovi = 0;
-
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
@@ -2743,143 +2381,90 @@ async function simulaRisultati() {
           const gh = _golCasuale(), ga = _golCasuale();
           await dbSavePartita({ id:p.id, girone_id:p.girone_id, gol_home:gh, gol_away:ga, giocata:true, inserito_da:'🤖 Simulazione' });
           nuovi++; totale++;
-          _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
         }
       }
-
       if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
     }
-
-    // Risolvi knockout finale
     if (catId) await verificaEGeneraTriangolari(catId);
-    _simLog('\n✅ ' + totale + ' risultati simulati!');
+    _simLog('✅ ' + totale + ' risultati simulati!');
     toast('✅ ' + totale + ' risultati simulati!');
     await renderCurrentSection();
-
-  } catch(e) {
-    console.error(e);
-    _simLog('❌ Errore: ' + e.message);
-    toast('Errore: ' + e.message);
-  }
+  } catch(e) { _simLog('❌ ' + e.message); toast('Errore: ' + e.message); }
 }
 
 async function simulaRisultatiGirone() {
   if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
-
   try {
     const gironi = await getGironiWithData(STATE.activeCat);
-    // Prende solo il primo girone con partite da giocare
     let totale = 0;
-
     for (const g of gironi) {
       const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
       if (!daGiocare.length) continue;
-
       _simLog('📋 Simulo ' + g.nome + ' (' + daGiocare.length + ' partite)...');
       for (const p of daGiocare) {
-        const gh = _golCasuale();
-        const ga = _golCasuale();
-        await dbSavePartita({
-          id: p.id, girone_id: p.girone_id,
-          gol_home: gh, gol_away: ga, giocata: true,
-          inserito_da: '🤖 Simulazione'
-        });
+        const gh = _golCasuale(), ga = _golCasuale();
+        await dbSavePartita({ id:p.id, girone_id:p.girone_id, gol_home:gh, gol_away:ga, giocata:true, inserito_da:'🤖 Simulazione' });
         totale++;
       }
-      break; // solo primo girone
+      break;
     }
-
     _simLog('✅ ' + totale + ' risultati simulati!');
     toast('✅ ' + totale + ' risultati simulati!');
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
     await renderCurrentSection();
-  } catch(e) {
-    _simLog('❌ ' + e.message);
-  }
+  } catch(e) { _simLog('❌ ' + e.message); }
 }
 
 async function resetRisultati() {
   if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
-  if (!confirm('⚠️ Azzerare TUTTI i risultati del torneo? Questa operazione non può essere annullata.')) return;
-
+  if (!confirm('⚠️ Azzerare TUTTI i risultati del torneo?')) return;
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
   _simLog('⏳ Reset in corso...');
-
   try {
-    // Reset tutte le partite della categoria attiva
     const cats = STATE.activeCat ? [STATE.activeCat] : STATE.categorie.map(c => c.id);
     let totale = 0;
-
     for (const catId of cats) {
       const gironi = await dbGetGironi(catId);
       for (const g of gironi) {
-        const { error } = await db.from('partite')
-          .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
-          .eq('girone_id', g.id);
+        const { error } = await db.from('partite').update({ gol_home:0, gol_away:0, giocata:false, inserito_da:null }).eq('girone_id', g.id);
         if (!error) totale++;
       }
-      // Reset knockout
-      await db.from('knockout')
-        .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
-        .eq('categoria_id', catId);
-      // Reset marcatori
+      await db.from('knockout').update({ gol_home:0, gol_away:0, giocata:false, inserito_da:null }).eq('categoria_id', catId);
       const gironiIds = gironi.map(g => g.id);
       if (gironiIds.length) {
-        const { data: partite } = await db.from('partite')
-          .select('id').in('girone_id', gironiIds);
-        if (partite?.length) {
-          await db.from('marcatori')
-            .delete()
-            .in('partita_id', partite.map(p => p.id));
-        }
+        const { data: partite } = await db.from('partite').select('id').in('girone_id', gironiIds);
+        if (partite?.length) await db.from('marcatori').delete().in('partita_id', partite.map(p => p.id));
       }
     }
-
-    // Invalida cache
     if (typeof _cacheClear === 'function') _cacheClear();
-
-    _simLog(`✅ Reset completato!`);
+    _simLog('✅ Reset completato!');
     toast('✅ Tutti i risultati azzerati!');
     await renderCurrentSection();
-
-  } catch(e) {
-    console.error(e);
-    _simLog('❌ Errore: ' + e.message);
-    toast('Errore reset: ' + e.message);
-  }
+  } catch(e) { _simLog('❌ ' + e.message); toast('Errore reset: ' + e.message); }
 }
 
 async function resetRisultatiGirone() {
   if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
   if (!confirm('⚠️ Azzerare i risultati della categoria attiva?')) return;
-
   const log = document.getElementById('sim-log');
   if (log) log.innerHTML = '';
-
   try {
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) {
-      await db.from('partite')
-        .update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null })
-        .eq('girone_id', g.id);
+      await db.from('partite').update({ gol_home:0, gol_away:0, giocata:false, inserito_da:null }).eq('girone_id', g.id);
     }
-    await db.from('knockout')
-      .update({ gol_home: 0, gol_away: 0, giocata: false })
-      .eq('categoria_id', STATE.activeCat);
-
+    await db.from('knockout').update({ gol_home:0, gol_away:0, giocata:false }).eq('categoria_id', STATE.activeCat);
     if (typeof _cacheClear === 'function') _cacheClear();
     _simLog('✅ Reset categoria completato!');
     toast('✅ Risultati categoria azzerati!');
     await renderCurrentSection();
-  } catch(e) {
-    _simLog('❌ ' + e.message);
-  }
+  } catch(e) { _simLog('❌ ' + e.message); }
 }
 
-// ── MODIFICA CAMPO GIORNATA ──────────────────────────────────
+// ── MODIFICA CAMPO GIORNATA ──
 function mostraEditCampoGiornata(giorno) {
   const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
   const div = document.getElementById('edit-campo-' + keyId);
@@ -2890,15 +2475,10 @@ function mostraEditCampoGiornata(giorno) {
     <div style="background:white;border:1px solid var(--bordo);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;">
       <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">📍 Luogo partite — ${giorno}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input id="edit-nome-${keyId}" class="form-input" style="flex:1;min-width:120px;font-size:13px;"
-          placeholder="Nome campo (es. Campo Comunale)" value="${esistente.nome_campo||''}">
-        <input id="edit-addr-${keyId}" class="form-input" style="flex:2;min-width:200px;font-size:13px;"
-          placeholder="Indirizzo (es. Via Roma 1, Massa)" value="${esistente.indirizzo||''}">
+        <input id="edit-nome-${keyId}" class="form-input" style="flex:1;min-width:120px;font-size:13px;" placeholder="Nome campo" value="${esistente.nome_campo||''}">
+        <input id="edit-addr-${keyId}" class="form-input" style="flex:2;min-width:200px;font-size:13px;" placeholder="Indirizzo" value="${esistente.indirizzo||''}">
         <button onclick="salvaCampoGiornata('${giorno}')"
-          style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 14px;
-                 font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
-          ✓ Salva
-        </button>
+          style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">✓ Salva</button>
       </div>
     </div>`;
   div.style.display = 'block';
@@ -2915,7 +2495,5 @@ async function salvaCampoGiornata(giorno) {
     toast('✅ Luogo salvato!');
     if (STATE.currentSection === 'risultati') await renderRisultati();
     await renderAdminRisultati();
-  } catch(e) {
-    toast('❌ Errore: ' + e.message);
-  }
+  } catch(e) { toast('❌ Errore: ' + e.message); }
 }
