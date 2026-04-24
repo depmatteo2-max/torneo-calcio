@@ -513,6 +513,7 @@ async function aggiornaDopoImport() {
       if (typeof showSection === 'function') {
         const btn = document.querySelector('[data-section="a-risultati"]');
         showSection('a-risultati', btn);
+        
       }
     }
   } catch(e) { location.reload(); }
