@@ -140,6 +140,36 @@ function leggiGironi(wb) {
   if (!ws) return [];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
+  const hdrs = rows[hi].map(h => String(h||'').trim().toUpperCase());
+
+  // Trova indici colonne
+  const iCat = hdrs.findIndex(h => h.includes('CATEGORIA') || h === 'NOME');
+  const iGir = hdrs.findIndex(h => h.includes('GIRONE'));
+  const iSq  = hdrs.findIndex(h => h.includes('SQUADRA'));
+
+  // Se c'è colonna SQUADRA esplicita → una squadra per riga
+  if (iSq >= 0) {
+    const righe = rows.slice(hi + 1).filter(r => {
+      const cat = String(r[iCat >= 0 ? iCat : 0]||'').trim();
+      const gir = String(r[iGir >= 0 ? iGir : 1]||'').trim();
+      const sq  = String(r[iSq]||'').trim();
+      return cat && gir && sq && !cat.startsWith('ℹ') && !cat.startsWith('—');
+    });
+
+    // Raggruppa per categoria+girone
+    const map = {};
+    for (const r of righe) {
+      const cat = String(r[iCat >= 0 ? iCat : 0]||'').trim();
+      const gir = String(r[iGir >= 0 ? iGir : 1]||'').trim();
+      const sq  = String(r[iSq]||'').trim();
+      const key = `${cat}||${gir}`;
+      if (!map[key]) map[key] = { categoria: cat, nome: gir, squadre: [] };
+      if (sq && !sq.startsWith('ℹ')) map[key].squadre.push(sq);
+    }
+    return Object.values(map).filter(g => g.nome && g.squadre.length > 0);
+  }
+
+  // Fallback: squadre in colonne dalla 2 in poi (formato vecchio)
   return rows.slice(hi + 1)
     .filter(r => {
       const cat = String(r[0]||'').trim();
@@ -150,7 +180,7 @@ function leggiGironi(wb) {
       const squadre = [];
       for (let i = 2; i < r.length; i++) {
         const s = String(r[i]||'').trim();
-        if (s && !s.startsWith('ℹ')) squadre.push(s);
+        if (s && !s.startsWith('ℹ') && isNaN(Number(s))) squadre.push(s);
       }
       return { categoria: String(r[0]||'').trim(), nome: String(r[1]||'').trim(), squadre };
     })
