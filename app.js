@@ -709,153 +709,147 @@ function _risolviGruppi(lista, giocate) {
 // ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
+    // ── Carica gironi normali ──────────────────────────────────────────
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
-    if (!gironi||!gironi.length) return;
-
     const classificheGironi = {};
 
-    // Carica risultati knockout per risolvere Vincente/Perdente SEMIFINALE
-    const { data: allKo } = await db.from('knockout')
-      .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
-      .eq('categoria_id', categoriaId);
-    const risultatiKnockout = {};
-    // Mappa round knockout per tipo: SEMIFINALE → risultato singola partita
-    for (const ko of (allKo||[])) {
-      const mSem = ko.round_name?.match(/SEMIFINALE\s*(\d+)/i);
-      if (mSem) {
-        const key = 'SEMIFINALE ' + mSem[1].padStart(2,'0');
-        risultatiKnockout[key] = ko;
-      }
-    }
-
-    // Calcola classifiche dai round knockout tipo girone (ARANCIO, VERDE, BLU, GIRONE 1, GIRONE 2 ecc.)
-    const ROUND_GIRONE_PATTERN = /^(ARANCIO|VERDE|BLU|GIRONE\s+\d+|GIRONE\s+[A-Z]+\s*\d*|GOLD|SILVER)$/i;
-    const koPerRound = {};
-    for (const ko of (allKo||[])) {
-      const rn = (ko.round_name||'').trim().toUpperCase();
-      if (ROUND_GIRONE_PATTERN.test(rn)) {
-        if (!koPerRound[rn]) koPerRound[rn] = [];
-        koPerRound[rn].push(ko);
-      }
-    }
-    // Per ogni round tipo girone, calcola classifica
-    for (const [roundKey, partite] of Object.entries(koPerRound)) {
-      const giocate = partite.filter(p => p.giocata);
-      if (!giocate.length) continue;
-      // Raccoglie tutti gli ID squadre del round
-      const sqIds = new Set();
-      partite.forEach(p => { if(p.home_id) sqIds.add(p.home_id); if(p.away_id) sqIds.add(p.away_id); });
-      // Carica i nomi delle squadre
-      const sqMap = {};
-      for (const sid of sqIds) {
-        const { data: sq } = await db.from('squadre').select('id,nome,logo').eq('id', sid).single();
-        if (sq) sqMap[sq.id] = sq;
-      }
-      const squadreRound = [...sqIds].map(id => sqMap[id]).filter(Boolean);
-      if (!squadreRound.length) continue;
-      // Calcola classifica come un girone normale
-      const clRound = calcGironeClassifica({
-        squadre: squadreRound,
-        partite: giocate.map(p => ({...p, giocata: true}))
-      });
-      // Salva con il nome del round come chiave (es. "ARANCIO", "VERDE", "BLU")
-      classificheGironi['Girone ' + roundKey.charAt(0) + roundKey.slice(1).toLowerCase()] = clRound;
-    }
-
-    // Calcola classifica per ogni girone con almeno una partita giocata
-    for (const g of gironi) {
+    for (const g of (gironi||[])) {
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
-      if (!partite||partite.length===0) continue;
-      const giocate = partite.filter(p=>p.giocata);
-      if (giocate.length===0) continue;
+      if (!partite || !partite.length) continue;
+      const giocate = partite.filter(p => p.giocata);
+      if (!giocate.length) continue;
       const { data: gsRows } = await db.from('girone_squadre')
         .select('squadra_id,squadre(id,nome,logo)')
         .eq('girone_id', g.id);
-      const squadre = (gsRows||[]).map(r=>({
-        id:r.squadra_id, nome:r.squadre?.nome||'', logo:r.squadre?.logo||null
-      }));
-      // Escludi squadre placeholder dalla classifica
-      const squadreReali = squadre.filter(s => !_isPlaceholder(s.nome));
+      const squadreReali = (gsRows||[])
+        .map(r => ({ id: r.squadra_id, nome: r.squadre?.nome||'', logo: r.squadre?.logo||null }))
+        .filter(s => !_isPlaceholder(s.nome));
       if (squadreReali.length > 0) {
-        classificheGironi[g.nome] = calcGironeClassifica({squadre:squadreReali, partite:giocate});
+        classificheGironi[g.nome] = calcGironeClassifica({ squadre: squadreReali, partite: giocate });
       }
     }
 
+    // ── Carica tutti i round knockout ──────────────────────────────────
+    const { data: allKo } = await db.from('knockout')
+      .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
+      .eq('categoria_id', categoriaId);
+
+    // Round che si comportano come gironi (non sono semifinali/finali/quarti)
+    const ROUND_NON_GIRONE = /SEMIFINALE|FINALE|QUARTO|CONSOLAZ|PLAYOFF|SPAREGGIO/i;
+    const koPerRound = {};
+    const risultatiKnockout = {}; // per Vincente/Perdente SEMIFINALE
+
+    for (const ko of (allKo||[])) {
+      const rn = (ko.round_name||'').trim();
+
+      // Raccoglie SEMIFINALE per Vincente/Perdente
+      const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
+      if (mSem) {
+        const key = 'SEMIFINALE ' + mSem[1].padStart(2, '0');
+        risultatiKnockout[key] = ko;
+      }
+      const mQuarto = rn.match(/QUARTO\s*(\d+)/i);
+      if (mQuarto) {
+        risultatiKnockout['QUARTO ' + mQuarto[1].padStart(2, '0')] = ko;
+      }
+
+      // Se il round NON è semifinale/finale/quarto → è un girone knockout
+      if (!ROUND_NON_GIRONE.test(rn) && ko.home_id && ko.away_id) {
+        // Usa il nome del round come chiave (normalizzato)
+        const key = rn.toUpperCase();
+        if (!koPerRound[key]) koPerRound[key] = [];
+        koPerRound[key].push(ko);
+      }
+    }
+
+    // Calcola classifica per ogni round-girone knockout
+    for (const [roundKey, partite] of Object.entries(koPerRound)) {
+      const giocate = partite.filter(p => p.giocata);
+      if (!giocate.length) continue;
+      const sqIds = new Set();
+      partite.forEach(p => { if(p.home_id) sqIds.add(p.home_id); if(p.away_id) sqIds.add(p.away_id); });
+      if (!sqIds.size) continue;
+      // Carica squadre in batch
+      const { data: sqList } = await db.from('squadre')
+        .select('id,nome,logo').in('id', [...sqIds]);
+      if (!sqList || !sqList.length) continue;
+      const cl = calcGironeClassifica({
+        squadre: sqList,
+        partite: giocate.map(p => ({ ...p, giocata: true }))
+      });
+      // Salva con chiave = nome round uppercase (es. "ARANCIO", "VERDE", "BLU", "GIRONE 1")
+      classificheGironi[roundKey] = cl;
+    }
+
+    // ── Esci se non c'è nulla da risolvere ──────────────────────────────
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
 
     const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
     let risolti = 0;
 
-    // 1. Risolvi placeholder nel KNOCKOUT
-    const { data: matches } = await db.from('knockout')
-      .select('id,note_home,note_away,home_id,away_id')
-      .eq('categoria_id', categoriaId);
-    for (const match of (matches||[])) {
+    // ── 1. Risolvi placeholder nel KNOCKOUT ──────────────────────────────
+    for (const match of (allKo||[])) {
       const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
       const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
-      const upd={};
-      if (newH && newH!==match.home_id) upd.home_id=newH;
-      if (newA && newA!==match.away_id) upd.away_id=newA;
+      const upd = {};
+      if (newH && newH !== match.home_id) upd.home_id = newH;
+      if (newA && newA !== match.away_id) upd.away_id = newA;
       if (Object.keys(upd).length) {
-        await db.from('knockout').update(upd).eq('id',match.id);
+        await db.from('knockout').update(upd).eq('id', match.id);
         risolti++;
       }
     }
 
-    // 2. Risolvi placeholder nelle PARTITE normali + aggiorna girone_squadre
-    for (const g of gironi) {
+    // ── 2. Risolvi placeholder nelle PARTITE normali + girone_squadre ────
+    for (const g of (gironi||[])) {
       const { data: tuttePartite } = await db.from('partite')
         .select('id,note_home,note_away,home_id,away_id')
         .eq('girone_id', g.id);
-
       for (const p of (tuttePartite||[])) {
         if (!p.note_home && !p.note_away) continue;
         const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
         const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
-        const upd={};
-        if (newH && newH!==p.home_id) upd.home_id=newH;
-        if (newA && newA!==p.away_id) upd.away_id=newA;
+        const upd = {};
+        if (newH && newH !== p.home_id) upd.home_id = newH;
+        if (newA && newA !== p.away_id) upd.away_id = newA;
         if (Object.keys(upd).length) {
-          await db.from('partite').update(upd).eq('id',p.id);
+          await db.from('partite').update(upd).eq('id', p.id);
           risolti++;
         }
       }
-
-      // Aggiorna girone_squadre con le squadre reali risolte
+      // Aggiorna girone_squadre con squadre reali
+      const { data: tutteP2 } = await db.from('partite')
+        .select('id,note_home,note_away,home_id,away_id').eq('girone_id', g.id);
       const sqIds = new Set();
-      for (const p of (tuttePartite||[])) {
-        const newH = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout) : p.home_id;
-        const newA = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout) : p.away_id;
-        if (newH) sqIds.add(newH);
-        if (newA) sqIds.add(newA);
+      for (const p of (tutteP2||[])) {
+        const h = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout) : p.home_id;
+        const a = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout) : p.away_id;
+        if (h) sqIds.add(h);
+        if (a) sqIds.add(a);
       }
       if (sqIds.size > 0) {
-        // Leggi girone_squadre esistenti
-        const { data: gsEsist } = await db.from('girone_squadre')
-          .select('squadra_id').eq('girone_id', g.id);
-        const gsIds = new Set((gsEsist||[]).map(r=>r.squadra_id));
-        // Inserisci solo le squadre mancanti
+        const { data: gsEsist } = await db.from('girone_squadre').select('squadra_id').eq('girone_id', g.id);
+        const gsIds = new Set((gsEsist||[]).map(r => r.squadra_id));
         for (const sqId of sqIds) {
           if (!gsIds.has(sqId)) {
-            await db.from('girone_squadre').insert({
-              girone_id: g.id, squadra_id: sqId, posizione: 0
-            }).select();
+            await db.from('girone_squadre').insert({ girone_id: g.id, squadra_id: sqId, posizione: 0 }).select();
             gsIds.add(sqId);
           }
         }
       }
     }
 
-    if (risolti>0) {
+    if (risolti > 0) {
       _mostraNotificaTriangolari();
-      if (STATE.currentSection==='a-knockout') await renderAdminKnockout();
-      if (STATE.currentSection==='tabellone') await renderTabellone();
-      if (STATE.currentSection==='a-risultati') await renderAdminRisultati();
+      if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
+      if (STATE.currentSection === 'tabellone') await renderTabellone();
+      if (STATE.currentSection === 'a-risultati') await renderAdminRisultati();
     }
-  } catch(e) { console.error('verificaEGeneraTriangolari:',e); }
+  } catch(e) { console.error('verificaEGeneraTriangolari:', e); }
 }
+
 
 function _calcolaMiglioriSecondi(classificheGironi) {
   // Raccoglie tutti i 2° classificati e li ordina per punti/DR/GF
@@ -875,100 +869,102 @@ function _calcolaMiglioriSecondi(classificheGironi) {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
-  // Formato standard: "1° Girone A", "2° Gruppo B"
+  // "1° Girone A", "2° Gruppo B"
   if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
-  // Formato breve round knockout: "1° Arancio", "2° Verde", "1° Blu", "1° Girone 1"
-  if (/^\d+[°º*]?\s*(Arancio|Verde|Blu|Gold|Silver|Girone\s+\d+)$/i.test(s)) return true;
-  // Miglior seconda/terza/quarta
-  if (/^(miglior|peggio|seconda|terza|quarta|quinti?|sesti?)/i.test(s)) return true;
-  // Vincente/Perdente SEMIFINALE
+  // "1° Arancio", "2° Verde", "1° Blu", "1° Gold", ecc. (N° + parola singola)
+  if (/^\d+[°º*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
+  // "MIGLIOR SECONDA", "Miglior 2°"
+  if (/^(miglior|peggio)/i.test(s)) return true;
+  // "Vincente/Perdente SEMIFINALE X"
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO)/i.test(s)) return true;
   return false;
 }
+
 
 function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[], risultatiKnockout={}) {
   if (!placeholder) return null;
   const s = placeholder.trim();
 
-  // Gestisce "1° Arancio", "2° Verde", "1° Blu", "1° Gold", "1° Silver", "1° Girone 1"
-  const mKoGirone = s.match(/^(\d+)[°º*]?\s*(Arancio|Verde|Blu|Gold|Silver|Girone\s+\d+)$/i);
-  if (mKoGirone) {
-    const pos = parseInt(mKoGirone[1]);
-    const roundNome = mKoGirone[2].trim();
-    const chiave = 'Girone ' + roundNome.charAt(0).toUpperCase() + roundNome.slice(1).toLowerCase();
-    let cl = classificheGironi[chiave];
-    if (!cl) {
-      const k = Object.keys(classificheGironi).find(k => k.toLowerCase() === chiave.toLowerCase());
-      if (k) cl = classificheGironi[k];
-    }
-    if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
-    return null;
-  }
-
-  // Gestisce "Vincente SEMIFINALE XX" o "Perdente SEMIFINALE XX"
+  // ── Vincente/Perdente SEMIFINALE XX ──────────────────────────────────
   const mSemVP = s.match(/(Vincente|Perdente)\s+SEMIFINALE\s*(\d+)/i);
   if (mSemVP) {
     const tipo = mSemVP[1].toLowerCase();
-    const semKey = 'SEMIFINALE ' + mSemVP[2].padStart(2,'0');
+    const semKey = 'SEMIFINALE ' + mSemVP[2].padStart(2, '0');
     const sem = risultatiKnockout[semKey];
     if (!sem || !sem.giocata) return null;
-    if (tipo === 'vincente') {
-      return sem.gol_home >= sem.gol_away ? sem.home_id : sem.away_id;
-    } else {
-      return sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id;
-    }
+    return tipo === 'vincente'
+      ? (sem.gol_home >= sem.gol_away ? sem.home_id : sem.away_id)
+      : (sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id);
   }
 
-  // Gestisce "Miglior 2°" o "Miglior secondo"
-  if (/miglior\s*2[°º]?/i.test(s)) {
+  // ── Vincente/Perdente QUARTO XX ───────────────────────────────────────
+  const mQVP = s.match(/(Vincente|Perdente)\s+QUARTO\s*(\d+)/i);
+  if (mQVP) {
+    const tipo = mQVP[1].toLowerCase();
+    const key = 'QUARTO ' + mQVP[2].padStart(2, '0');
+    const q = risultatiKnockout[key];
+    if (!q || !q.giocata) return null;
+    return tipo === 'vincente'
+      ? (q.gol_home >= q.gol_away ? q.home_id : q.away_id)
+      : (q.gol_home <= q.gol_away ? q.home_id : q.away_id);
+  }
+
+  // ── Miglior 2° / MIGLIOR SECONDA ─────────────────────────────────────
+  if (/miglior\s*2[°º]?/i.test(s) || /miglior\s*second/i.test(s)) {
     return miglioriSecondi[0]?.sq?.id || null;
   }
-  // Gestisce "2° Miglior 2°", "3° Miglior 2°" ecc.
-  const mMig = s.match(/(\d+)[°º]?\s*Miglior/i);
+  const mMig = s.match(/^(\d+)[°º]?\s*Miglior/i);
   if (mMig) {
-    const idx = parseInt(mMig[1]) - 1;
-    return miglioriSecondi[idx]?.sq?.id || null;
+    return miglioriSecondi[parseInt(mMig[1]) - 1]?.sq?.id || null;
   }
 
-  // Gestisce "N° Girone X" o "N° Gruppo X" — es. "1° Girone A", "2° Gruppo B", "1° Girone Unico"
-  const m = s.match(/(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
-  if (m) {
-    const pos = parseInt(m[1]);
-    const tipo = m[2]; // "Girone" o "Gruppo"
-    const resto = m[3].trim();
-
-    // Prova prima con il tipo originale (es. "Gruppo A"), poi con l'alternativo (es. "Girone A")
+  // ── N° Girone X / N° Gruppo X ─────────────────────────────────────────
+  const mGir = s.match(/^(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
+  if (mGir) {
+    const pos = parseInt(mGir[1]);
+    const resto = mGir[3].trim();
     const candidati = [
-      `${tipo} ${resto}`,
-      `${tipo === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
+      `${mGir[2]} ${resto}`,
+      `${mGir[2] === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
+      resto.toUpperCase(), // chiave diretta (es. "ARANCIO")
     ];
-
-    for (const nomeGirone of candidati) {
-      // 1. Match esatto
-      let cl = classificheGironi[nomeGirone];
-
-      // 2. Case-insensitive
+    for (const cand of candidati) {
+      let cl = classificheGironi[cand];
+      if (!cl) {
+        const k = Object.keys(classificheGironi).find(k => k.toLowerCase() === cand.toLowerCase());
+        if (k) cl = classificheGironi[k];
+      }
       if (!cl) {
         const k = Object.keys(classificheGironi).find(k =>
-          k.toLowerCase() === nomeGirone.toLowerCase()
+          k.toLowerCase().endsWith(' ' + resto.toLowerCase()) ||
+          k.toUpperCase() === resto.toUpperCase()
         );
         if (k) cl = classificheGironi[k];
       }
-
-      // 3. Suffisso (es. "A" dentro "Girone A" o "Gruppo A")
-      if (!cl) {
-        const k = Object.keys(classificheGironi).find(k =>
-          k.toLowerCase().endsWith(' ' + resto.toLowerCase())
-        );
-        if (k) cl = classificheGironi[k];
-      }
-
-      if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+      if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
     }
     return null;
   }
 
-  // Formato breve "1A", "2B"
+  // ── N° NomeRound — es. "1° Arancio", "2° Verde", "1° Blu" ─────────────
+  // Cerca qualsiasi chiave in classificheGironi che contenga la parola chiave
+  const mKo = s.match(/^(\d+)[°º*]?\s+(\w+(?:\s+\w+)?)$/);
+  if (mKo) {
+    const pos = parseInt(mKo[1]);
+    const keyword = mKo[2].trim().toUpperCase();
+    // Cerca classifica il cui nome contiene la keyword
+    let cl = null;
+    const k = Object.keys(classificheGironi).find(k =>
+      k.toUpperCase() === keyword ||
+      k.toUpperCase().includes(keyword) ||
+      keyword.includes(k.toUpperCase())
+    );
+    if (k) cl = classificheGironi[k];
+    if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
+    return null;
+  }
+
+  // ── Formato breve "1A", "2B" ───────────────────────────────────────────
   const mShort = s.match(/^(\d+)[°º*]?([A-Za-z]+\d*)$/);
   if (mShort) {
     const pos = parseInt(mShort[1]);
@@ -976,16 +972,18 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     const k = Object.keys(classificheGironi).find(k =>
       k.toUpperCase().endsWith(` ${gir}`) ||
       k.toUpperCase() === `GIRONE ${gir}` ||
-      k.toUpperCase() === `GRUPPO ${gir}`
+      k.toUpperCase() === `GRUPPO ${gir}` ||
+      k.toUpperCase() === gir
     );
     if (!k) return null;
     const cl = classificheGironi[k];
     if (!cl || cl.length < pos) return null;
-    return cl[pos-1]?.sq?.id || null;
+    return cl[pos - 1]?.sq?.id || null;
   }
 
   return null;
 }
+
 
 async function forzaRisoluzioneAccoppiamenti() {
   if (!STATE.activeCat) return;
