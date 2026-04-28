@@ -17,18 +17,22 @@ const ROUND_META = {
   'SEMIFINALE 02'        : { order: 15, consolazione: false, emoji: '⚔️', desc: 'Semifinale 2' },
   'SEMIFINALE 03'        : { order: 16, consolazione: false, emoji: '⚔️', desc: 'Semifinale 3' },
   'SEMIFINALE 04'        : { order: 17, consolazione: false, emoji: '⚔️', desc: 'Semifinale 4' },
-  'FINALE 1-2 POSTO'     : { order: 18, consolazione: false, emoji: '🏆', desc: 'Finale 1°-2°' },
-  'FINALE 3-4 POSTO'     : { order: 19, consolazione: true,  emoji: '🥉', desc: 'Finale 3°-4°' },
-  'FINALE 5-6 POSTO'     : { order: 20, consolazione: true,  emoji: '🎖️', desc: 'Finale 5°-6°' },
-  'FINALE 7-8 POSTO'     : { order: 21, consolazione: true,  emoji: '🎖️', desc: 'Finale 7°-8°' },
-  'FINALE 9-10 POSTO'    : { order: 22, consolazione: true,  emoji: '🎖️', desc: 'Finale 9°-10°' },
-  'FINALE 11-12 POSTO'   : { order: 23, consolazione: true,  emoji: '🎖️', desc: 'Finale 11°-12°' },
+  'FINALE 1'             : { order: 18, consolazione: false, emoji: '🏆', desc: 'Finale 1' },
+  'FINALE 2'             : { order: 19, consolazione: true,  emoji: '🥉', desc: 'Finale 2' },
+  'FINALE 3'             : { order: 20, consolazione: true,  emoji: '🎖️', desc: 'Finale 3' },
+  'FINALE 1-2 POSTO'     : { order: 21, consolazione: false, emoji: '🏆', desc: 'Finale 1°-2°' },
+  'FINALE 3-4 POSTO'     : { order: 22, consolazione: true,  emoji: '🥉', desc: 'Finale 3°-4°' },
+  'FINALE 5-6 POSTO'     : { order: 23, consolazione: true,  emoji: '🎖️', desc: 'Finale 5°-6°' },
+  'FINALE 7-8 POSTO'     : { order: 24, consolazione: true,  emoji: '🎖️', desc: 'Finale 7°-8°' },
+  'FINALE 9-10 POSTO'    : { order: 25, consolazione: true,  emoji: '🎖️', desc: 'Finale 9°-10°' },
+  'FINALE 11-12 POSTO'   : { order: 26, consolazione: true,  emoji: '🎖️', desc: 'Finale 11°-12°' },
 };
 
 function _getRoundMeta(roundRaw) {
   const r = roundRaw.toUpperCase().trim();
   if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
   if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
+  if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '🏆', desc: r } };
   if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '⚔️', desc: r } };
   return null;
 }
@@ -42,6 +46,7 @@ const ROUND_COLORS = {
   'FINALE GOLD 1-2 POSTO': '#FFD700',   'FINALE GOLD 3-4 POSTO': '#FFE082',
   'SEMIFINALE 01': '#90CAF9', 'SEMIFINALE 02': '#90CAF9',
   'SEMIFINALE 03': '#90CAF9', 'SEMIFINALE 04': '#90CAF9',
+  'FINALE 1': '#FFD700', 'FINALE 2': '#90CAF9', 'FINALE 3': '#A5D6A7',
   'FINALE 1-2 POSTO': '#FFD700', 'FINALE 3-4 POSTO': '#CD7F32',
   'FINALE 5-6 POSTO': '#B0BEC5', 'FINALE 7-8 POSTO': '#B0BEC5',
   'FINALE 9-10 POSTO': '#CFD8DC', 'FINALE 11-12 POSTO': '#ECEFF1',
@@ -50,11 +55,18 @@ const ROUND_COLORS = {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const n = nome.trim();
-  if (/^\d+[°oa*]\s+(Girone|GIR\.?|GIRONE)/i.test(n)) return true;
+  // Formato "N° Girone X" o "N° Girone Unico"
+  if (/^\d+[°ºoa*]?\s*(Girone|GIR\.?|GIRONE)/i.test(n)) return true;
+  // Formato "Vincente/Perdente Finale N"
+  if (/^(Vincente|Perdente)\s+(Finale|FINALE)\s*\d+/i.test(n)) return true;
+  // Formato "Vincente/Perdente SEMIFINALE N"
   if (/^(Vincente|Perdente)\s+SEMIFINALE\s+\d+/i.test(n)) return true;
+  // Formato "Vincente/Perdente GOLD/SILVER/..."
   if (/^(Vincente|Perdente)\s+(GOLD|SILVER|PLATINO|BRONZO|ARANCIO|VERDE|BLU)/i.test(n)) return true;
   if (/^\d+\s+(SILVER|GOLD|PLATINO|BRONZO|ARANCIO|VERDE|BLU)\s+\d+$/i.test(n)) return true;
-  if (/^\d+[°oa*]?\s*(Arancio|Verde|Blu)$/i.test(n)) return true;
+  if (/^\d+[°ºoa*]?\s*(Arancio|Verde|Blu)$/i.test(n)) return true;
+  // Formato "N° Finale N"
+  if (/^\d+[°ºoa*]?\s*Finale\s*\d+$/i.test(n)) return true;
   if (/^(MIGLIOR|PEGGIOR)\s+(SECONDA|TERZA|QUARTA)/i.test(n)) return true;
   if (/^(SECONDA|TERZA|QUARTA)\s*\d*$/i.test(n)) return true;
   return false;
@@ -142,12 +154,11 @@ function leggiGironi(wb) {
   const hi   = trovaRigaHeader(rows, ['CATEGORIA', 'GIRONE']);
   const hdrs = rows[hi].map(h => String(h||'').trim().toUpperCase());
 
-  // Trova indici colonne
   const iCat = hdrs.findIndex(h => h.includes('CATEGORIA') || h === 'NOME');
   const iGir = hdrs.findIndex(h => h.includes('GIRONE'));
   const iSq  = hdrs.findIndex(h => h.includes('SQUADRA'));
 
-  // Se c'è colonna SQUADRA esplicita → una squadra per riga
+  // Formato nuovo: una squadra per riga (include placeholder)
   if (iSq >= 0) {
     const righe = rows.slice(hi + 1).filter(r => {
       const cat = String(r[iCat >= 0 ? iCat : 0]||'').trim();
@@ -156,7 +167,6 @@ function leggiGironi(wb) {
       return cat && gir && sq && !cat.startsWith('ℹ') && !cat.startsWith('—');
     });
 
-    // Raggruppa per categoria+girone
     const map = {};
     for (const r of righe) {
       const cat = String(r[iCat >= 0 ? iCat : 0]||'').trim();
@@ -164,6 +174,7 @@ function leggiGironi(wb) {
       const sq  = String(r[iSq]||'').trim();
       const key = `${cat}||${gir}`;
       if (!map[key]) map[key] = { categoria: cat, nome: gir, squadre: [] };
+      // Include TUTTI — sia squadre reali che placeholder
       if (sq && !sq.startsWith('ℹ')) map[key].squadre.push(sq);
     }
     return Object.values(map).filter(g => g.nome && g.squadre.length > 0);
@@ -289,7 +300,7 @@ function mostraAnteprima(dati, container) {
         <div style="padding:12px 14px;font-size:13px;">
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
             <span style="background:#fff3e0;border:1px solid #ffcc80;padding:3px 10px;border-radius:20px;">🏟 <b>${gironi.length}</b> gironi</span>
-            <span style="background:#fff3e0;border:1px solid #ffcc80;padding:3px 10px;border-radius:20px;">👥 <b>${totSq}</b> squadre</span>
+            <span style="background:#fff3e0;border:1px solid #ffcc80;padding:3px 10px;border-radius:20px;">👥 <b>${totSq}</b> slot</span>
             <span style="background:#fff3e0;border:1px solid #ffcc80;padding:3px 10px;border-radius:20px;">⚽ <b>${partite.length}</b> partite gironi</span>
             <span style="background:#fff3e0;border:1px solid #ffcc80;padding:3px 10px;border-radius:20px;">🏆 <b>${fase2.length}</b> partite finali</span>
           </div>`;
@@ -391,6 +402,7 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
   const { data: catEsistenti } = await db.from('categorie').select('nome').eq('torneo_id', torneoId);
   const nomiCatEsistenti = new Set((catEsistenti || []).map(c => c.nome));
   let ordineBase = catEsistenti?.length || 0;
+
   for (let ci = 0; ci < dati.categorie.length; ci++) {
     const cat = dati.categorie[ci];
     if (nomiCatEsistenti.has(cat.nome)) {
@@ -406,8 +418,10 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
     }).select('id').single();
     if (cErr) throw new Error('Errore cat ' + cat.nome + ': ' + cErr.message);
     const catId = catR.id;
+
     const gironiCat = dati.gironi.filter(g => g.categoria === cat.codice || g.categoria === cat.nome);
     const gironiMap = {};
+
     for (const girone of gironiCat) {
       const { data: girR, error: gErr } = await db.from('gironi').insert({
         categoria_id: catId, nome: girone.nome
@@ -415,10 +429,13 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       if (gErr) throw new Error('Errore girone ' + girone.nome + ': ' + gErr.message);
       const girId = girR.id;
       gironiMap[girone.nome] = girId;
+
+      // *** FIX CRITICO: importa TUTTE le squadre del girone inclusi i placeholder ***
+      // I placeholder vengono creati come squadre nel DB per riservare lo slot
+      // così totaleSlot sarà corretto e il sistema potrà sostituirli
       for (let si = 0; si < girone.squadre.length; si++) {
         const nomeSq = girone.squadre[si];
         if (!nomeSq) continue;
-        if (_isPlaceholder(nomeSq)) continue;
         const key = `${torneoId}||${nomeSq}`;
         if (!squadreMap[key]) {
           const { data: sqR, error: sqErr } = await db.from('squadre').insert({
@@ -431,16 +448,23 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
           girone_id: girId, squadra_id: squadreMap[key], posizione: si
         });
       }
+
+      // Importa partite del girone
       const pGir = dati.partite.filter(p =>
         (p.categoria === cat.codice || p.categoria === cat.nome) && p.girone === girone.nome
       );
       for (const p of pGir) {
         const hIsPlaceholder = _isPlaceholder(p.home);
         const aIsPlaceholder = _isPlaceholder(p.away);
-        const hId = hIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.home}`] || null);
-        const aId = aIsPlaceholder ? null : (squadreMap[`${torneoId}||${p.away}`] || null);
+        // Usa lo squadreMap per trovare l'ID anche dei placeholder (ora sono nel DB)
+        const hId = squadreMap[`${torneoId}||${p.home}`] || null;
+        const aId = squadreMap[`${torneoId}||${p.away}`] || null;
         if (!hIsPlaceholder && !hId) console.warn('Squadra home mancante:', p.home);
         if (!aIsPlaceholder && !aId) console.warn('Squadra away mancante:', p.away);
+
+        // Giornata: usa il campo giornata se presente, altrimenti giorno
+        const giornoVal = p.giornata || p.giorno || null;
+
         await db.from('partite').insert({
           girone_id: girId,
           home_id  : hId,
@@ -448,18 +472,21 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
           note_home: hIsPlaceholder ? p.home : null,
           note_away: aIsPlaceholder ? p.away : null,
           orario   : p.orario   || null,
-          giorno   : p.giorno   || null,
+          giorno   : giornoVal,
           campo    : p.campo    || null,
-          giornata : p.giornata || null,
+          giornata : giornoVal,
           giocata  : false
         });
       }
     }
+
+    // Fase finale (knockout)
     const fase2Cat = dati.fase2.filter(p => p.categoria === cat.codice || p.categoria === cat.nome);
     for (let mi = 0; mi < fase2Cat.length; mi++) {
       const p   = fase2Cat[mi];
       const hId = _isPlaceholder(p.sq1raw) ? null : (squadreMap[`${torneoId}||${p.sq1raw}`] || null);
       const aId = _isPlaceholder(p.sq2raw) ? null : (squadreMap[`${torneoId}||${p.sq2raw}`] || null);
+      const giornoVal = p.giorno || null;
       const koRow = {
         categoria_id   : catId,
         round_name     : p.roundLabel,
@@ -472,13 +499,14 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         note_home      : p.sq1raw,
         note_away      : p.sq2raw,
       };
-      if (p.orario) koRow.orario = p.orario;
-      if (p.campo)  koRow.campo  = p.campo;
-      if (p.giorno) koRow.giorno = p.giorno;
+      if (p.orario)   koRow.orario = p.orario;
+      if (p.campo)    koRow.campo  = p.campo;
+      if (giornoVal)  koRow.giorno = giornoVal;
       const { error: koErr } = await db.from('knockout').insert(koRow);
       if (koErr) console.warn('Knockout insert warning:', koErr.message);
     }
   }
+
   window._importDati = null;
   if (typeof STATE !== 'undefined' && typeof dbGetCategorie === 'function') {
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
@@ -513,7 +541,6 @@ async function aggiornaDopoImport() {
       if (typeof showSection === 'function') {
         const btn = document.querySelector('[data-section="a-risultati"]');
         showSection('a-risultati', btn);
-        
       }
     }
   } catch(e) { location.reload(); }
