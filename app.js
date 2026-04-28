@@ -565,10 +565,16 @@ async function verificaEGeneraTriangolari(categoriaId) {
     for (const g of (gironi||[])) {
       const { data: partite } = await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id', g.id);
       if (!partite || !partite.length) continue;
-      const giocate = partite.filter(p => p.giocata);
+      // Usa solo partite con squadre reali risolte (home_id e away_id non null)
+      const giocate = partite.filter(p => p.giocata && p.home_id && p.away_id);
       if (!giocate.length) continue;
-      const { data: gsRows } = await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id', g.id);
-      const squadreReali = (gsRows||[]).map(r => ({ id: r.squadra_id, nome: r.squadre?.nome||'', logo: r.squadre?.logo||null })).filter(s => !_isPlaceholder(s.nome));
+      // Raccoglie tutti gli ID squadre reali dalle partite giocate
+      const sqIdsReali = new Set();
+      giocate.forEach(p => { sqIdsReali.add(p.home_id); sqIdsReali.add(p.away_id); });
+      if (!sqIdsReali.size) continue;
+      const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', [...sqIdsReali]);
+      // Filtra solo squadre reali (non placeholder)
+      const squadreReali = (sqList||[]).filter(s => !_isPlaceholder(s.nome));
       if (squadreReali.length > 0) classificheGironi[g.nome] = calcGironeClassifica({ squadre: squadreReali, partite: giocate });
     }
 
