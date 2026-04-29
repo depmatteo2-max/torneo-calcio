@@ -563,32 +563,31 @@ async function verificaEGeneraTriangolari(categoriaId) {
     const classificheGironi = {};
 
     // PASSO 1: calcola classifiche di ogni girone
-    // Per ogni girone prende le partite giocate con home_id e away_id reali
-    // e calcola la classifica solo con le squadre reali (no placeholder)
+    // Usa partite giocate con home_id e away_id reali e NON placeholder
     for (const g of (gironi||[])) {
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
       if (!partite || !partite.length) continue;
-      // Solo partite giocate con ENTRAMBE le squadre risolte (no null)
       const giocate = partite.filter(p => p.giocata && p.home_id && p.away_id);
       if (!giocate.length) continue;
-      // Carica i nomi delle squadre coinvolte
       const sqIds = new Set();
       giocate.forEach(p => { sqIds.add(p.home_id); sqIds.add(p.away_id); });
       const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', [...sqIds]);
       const sqMap = {}; (sqList||[]).forEach(s => sqMap[s.id] = s);
-      // Partite dove ENTRAMBE le squadre NON sono placeholder
       const partitePure = giocate.filter(p =>
         !_isPlaceholder(sqMap[p.home_id]?.nome) && !_isPlaceholder(sqMap[p.away_id]?.nome)
       );
       if (!partitePure.length) continue;
-      // Squadre uniche nelle partite pure
       const sqRealiIds = new Set();
       partitePure.forEach(p => { sqRealiIds.add(p.home_id); sqRealiIds.add(p.away_id); });
       const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
       if (squadreReali.length > 0) {
-        classificheGironi[g.nome] = calcGironeClassifica({ squadre: squadreReali, partite: partitePure });
+        // Salva con il nome del girone E con varianti per facilitare il lookup
+        const cl = calcGironeClassifica({ squadre: squadreReali, partite: partitePure });
+        classificheGironi[g.nome] = cl;
+        // Aggiungi anche varianti uppercase e senza accenti per lookup robusto
+        classificheGironi[g.nome.toUpperCase()] = cl;
       }
     }
 
@@ -794,16 +793,20 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
       return null;
     }
 
-    // Match diretto con il nome del girone (es. "1° Girone A", "1° A", "1° ARANCIO")
-    const keyword = resto.toUpperCase();
-    // Cerca il girone che contiene questa parola chiave
-    const k = Object.keys(classificheGironi).find(k =>
-      k.toUpperCase() === keyword ||
-      k.toUpperCase() === 'GIRONE ' + keyword ||
-      k.toUpperCase() === 'GRUPPO ' + keyword ||
-      k.toUpperCase().endsWith(' ' + keyword) ||
-      keyword.includes(k.toUpperCase())
-    );
+    // Match diretto con il nome del girone (es. "1° Girone A", "1° A", "1° ARANCIO", "1° Venerdi")
+    const keyword = resto.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    // Cerca il girone che contiene questa parola chiave (case insensitive, senza accenti)
+    const normKey = (s) => s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const k = Object.keys(classificheGironi).find(k => {
+      const kn = normKey(k);
+      return kn === keyword ||
+        kn === 'GIRONE ' + keyword ||
+        kn === 'GRUPPO ' + keyword ||
+        kn.endsWith(' ' + keyword) ||
+        keyword === kn ||
+        keyword.endsWith(kn) ||
+        kn.includes(keyword);
+    });
     if (k) {
       const cl = classificheGironi[k];
       if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
