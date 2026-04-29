@@ -646,28 +646,22 @@ async function verificaEGeneraTriangolari(categoriaId) {
         if (Object.keys(upd).length) { await db.from('partite').update(upd).eq('id', p.id); risolti++; }
       }
 
-      // *** FIX CRITICO: aggiorna girone_squadre senza superare slot originali ***
-      const { data: tutteP2 } = await db.from('partite').select('id,note_home,note_away,home_id,away_id').eq('girone_id', g.id);
-      const sqIds = new Set();
-      for (const p of (tutteP2||[])) {
-        const h = p.note_home ? _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout) : p.home_id;
-        const a = p.note_away ? _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout) : p.away_id;
-        if (h) sqIds.add(h);
-        if (a) sqIds.add(a);
-      }
-      if (sqIds.size > 0) {
-        const { data: gsEsist } = await db.from('girone_squadre').select('squadra_id').eq('girone_id', g.id);
-        const gsIds = new Set((gsEsist||[]).map(r => r.squadra_id));
-        // Conta slot totali già presenti (placeholder inclusi) — non aggiungere oltre questo numero
-        const totaleSlot = (gsEsist||[]).length;
-        for (const sqId of sqIds) {
-          if (gsIds.has(sqId)) continue;
-          if (gsIds.size >= totaleSlot) continue;
-          const { data: sqCheck } = await db.from('squadre').select('nome').eq('id', sqId).single();
-          if (!sqCheck || _isPlaceholder(sqCheck.nome)) continue;
-          await db.from('girone_squadre').insert({ girone_id: g.id, squadra_id: sqId, posizione: 0 }).select();
-          gsIds.add(sqId);
-        }
+      // *** FIX CRITICO: sostituisce placeholder in girone_squadre con squadre reali ***
+      // Carica tutto il girone_squadre con le note delle partite
+      const { data: gsEsist } = await db.from('girone_squadre').select('id,squadra_id').eq('girone_id', g.id);
+      for (const gs of (gsEsist||[])) {
+        // Verifica se questa squadra è un placeholder
+        const { data: sqInfo } = await db.from('squadre').select('nome').eq('id', gs.squadra_id).single();
+        if (!sqInfo || !_isPlaceholder(sqInfo.nome)) continue;
+        // È un placeholder — trova la squadra reale corrispondente
+        const sqReale = _resolvePlaceholder(sqInfo.nome, classificheGironi, miglioriSecondi, risultatiKnockout);
+        if (!sqReale || sqReale === gs.squadra_id) continue;
+        // Verifica che la squadra reale non sia già nel girone
+        const giaPresente = (gsEsist||[]).some(r => r.squadra_id === sqReale);
+        if (giaPresente) continue;
+        // Sostituisce il placeholder con la squadra reale
+        await db.from('girone_squadre').update({ squadra_id: sqReale }).eq('id', gs.id);
+        risolti++;
       }
     }
 
@@ -1903,7 +1897,12 @@ async function simulaRisultati() {
     const catId = STATE.activeCat || STATE.categorie[0]?.id;
     let totale = 0; const MAX = 6;
     for (let pass = 1; pass <= MAX; pass++) {
-      if (catId) { await verificaEGeneraTriangolari(catId); if (typeof _cacheClear === 'function') _cacheClear(); }
+      if (catId) {
+        await verificaEGeneraTriangolari(catId);
+        // Forza svuotamento cache DOPO la risoluzione placeholder
+        if (typeof _cacheClear === 'function') _cacheClear();
+        if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
+      }
       const gironi = await getGironiWithData(catId); let nuovi = 0;
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
