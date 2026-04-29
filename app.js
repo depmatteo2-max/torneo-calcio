@@ -241,6 +241,7 @@ async function selezionaCategoriaPublic(catId) {
   _saveSavedCat(catId);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
+  if (typeof _cacheClear === 'function') _cacheClear();
   preloadCategoria(catId);
   await _caricaGiornate();
   renderTorneoBar();
@@ -454,7 +455,11 @@ function _abbreviaNomeCat(nome) {
 
 async function selectCat(id) {
   STATE.activeCat = id; _saveSavedCat(id); STATE.activeGiornata = 'tutte'; STATE._giornateDisponibili = [];
-  await _caricaGiornate(); renderCatBar(); renderCurrentSection();
+  if (typeof _cacheClear === 'function') _cacheClear();
+  await _caricaGiornate();
+  renderCatBar();
+  _scriviHash(id, STATE.currentSection);
+  await renderCurrentSection();
 }
 async function selectGiornata(g) { STATE.activeGiornata = g; _renderGiornataBar(); renderCurrentSection(); }
 
