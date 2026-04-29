@@ -563,26 +563,30 @@ async function verificaEGeneraTriangolari(categoriaId) {
     const classificheGironi = {};
 
     // PASSO 1: calcola classifiche di ogni girone
-    // Usa SOLO le partite dove entrambe le squadre sono reali (non placeholder)
+    // Per ogni girone prende le partite giocate con home_id e away_id reali
+    // e calcola la classifica solo con le squadre reali (no placeholder)
     for (const g of (gironi||[])) {
-      const { data: partite } = await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away').eq('girone_id', g.id);
+      const { data: partite } = await db.from('partite')
+        .select('id,home_id,away_id,gol_home,gol_away,giocata')
+        .eq('girone_id', g.id);
       if (!partite || !partite.length) continue;
+      // Solo partite giocate con ENTRAMBE le squadre risolte (no null)
       const giocate = partite.filter(p => p.giocata && p.home_id && p.away_id);
       if (!giocate.length) continue;
+      // Carica i nomi delle squadre coinvolte
       const sqIds = new Set();
       giocate.forEach(p => { sqIds.add(p.home_id); sqIds.add(p.away_id); });
       const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', [...sqIds]);
       const sqMap = {}; (sqList||[]).forEach(s => sqMap[s.id] = s);
-      // Filtra partite dove ENTRAMBE le squadre sono reali (non placeholder)
-      const partitePure = giocate.filter(p => {
-        const hNome = sqMap[p.home_id]?.nome || '';
-        const aNome = sqMap[p.away_id]?.nome || '';
-        return !_isPlaceholder(hNome) && !_isPlaceholder(aNome);
-      });
+      // Partite dove ENTRAMBE le squadre NON sono placeholder
+      const partitePure = giocate.filter(p =>
+        !_isPlaceholder(sqMap[p.home_id]?.nome) && !_isPlaceholder(sqMap[p.away_id]?.nome)
+      );
       if (!partitePure.length) continue;
+      // Squadre uniche nelle partite pure
       const sqRealiIds = new Set();
       partitePure.forEach(p => { sqRealiIds.add(p.home_id); sqRealiIds.add(p.away_id); });
-      const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(Boolean).filter(s => !_isPlaceholder(s.nome));
+      const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
       if (squadreReali.length > 0) {
         classificheGironi[g.nome] = calcGironeClassifica({ squadre: squadreReali, partite: partitePure });
       }
