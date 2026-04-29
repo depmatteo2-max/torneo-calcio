@@ -241,7 +241,6 @@ async function selezionaCategoriaPublic(catId) {
   _saveSavedCat(catId);
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
-  if (typeof _cacheClear === 'function') _cacheClear();
   preloadCategoria(catId);
   await _caricaGiornate();
   renderTorneoBar();
@@ -455,11 +454,7 @@ function _abbreviaNomeCat(nome) {
 
 async function selectCat(id) {
   STATE.activeCat = id; _saveSavedCat(id); STATE.activeGiornata = 'tutte'; STATE._giornateDisponibili = [];
-  if (typeof _cacheClear === 'function') _cacheClear();
-  await _caricaGiornate();
-  renderCatBar();
-  _scriviHash(id, STATE.currentSection);
-  await renderCurrentSection();
+  await _caricaGiornate(); renderCatBar(); renderCurrentSection();
 }
 async function selectGiornata(g) { STATE.activeGiornata = g; _renderGiornataBar(); renderCurrentSection(); }
 
@@ -502,11 +497,21 @@ function calcGironeClassifica(girone) {
   for (const sq of girone.squadre) map[sq.id] = { sq, g:0, v:0, p:0, s:0, gf:0, gs:0, pts:0, rigori:0 };
   const giocate = girone.partite.filter(p => p.giocata);
   for (const p of giocate) {
-    const h = map[p.home_id]; const a = map[p.away_id]; if (!h || !a) continue;
-    h.g++; a.g++; h.gf += p.gol_home; h.gs += p.gol_away; a.gf += p.gol_away; a.gs += p.gol_home;
-    if (p.gol_home > p.gol_away) { h.v++; h.pts+=3; a.s++; }
-    else if (p.gol_home < p.gol_away) { a.v++; a.pts+=3; h.s++; }
-    else { h.p++; h.pts++; a.p++; a.pts++; }
+    const h = map[p.home_id]; const a = map[p.away_id];
+    // Conta la partita anche se solo UNA squadra e' nel girone (partite extra ospiti)
+    if (!h && !a) continue;
+    if (h) { h.g++; h.gf += p.gol_home; h.gs += p.gol_away; }
+    if (a) { a.g++; a.gf += p.gol_away; a.gs += p.gol_home; }
+    if (p.gol_home > p.gol_away) {
+      if (h) { h.v++; h.pts+=3; }
+      if (a) { a.s++; }
+    } else if (p.gol_home < p.gol_away) {
+      if (a) { a.v++; a.pts+=3; }
+      if (h) { h.s++; }
+    } else {
+      if (h) { h.p++; h.pts++; }
+      if (a) { a.p++; a.pts++; }
+    }
   }
   const lista = Object.values(map);
   lista.sort((a,b) => {
