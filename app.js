@@ -877,6 +877,8 @@ async function renderClassifiche() {
 
   let html = '';
   for (const g of gironi) {
+    // Nascondi gironi di qualificazione con solo 1 partita (es. Girone F1, F2, F3)
+    if (g.partite.length <= 1) continue;
     const cl = calcGironeClassifica(g);
     const played = g.partite.filter(p=>p.giocata).length;
     html += `<div class="card" style="margin-bottom:8px;">
