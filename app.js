@@ -754,44 +754,56 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return candidati[0]?.sq?.id || null;
   }
 
-  const mGir = s.match(/^(\d+)[°º*]?\s*(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
-  if (mGir) {
-    const pos = parseInt(mGir[1]);
-    const resto = mGir[3].trim();
-    const candidati = [
-      `${mGir[2]} ${resto}`,
-      `${mGir[2] === 'Girone' ? 'Gruppo' : 'Girone'} ${resto}`,
-      resto.toUpperCase(),
-    ];
-    for (const cand of candidati) {
-      let cl = classificheGironi[cand];
-      if (!cl) { const k = Object.keys(classificheGironi).find(k => k.toLowerCase() === cand.toLowerCase()); if (k) cl = classificheGironi[k]; }
-      if (!cl) { const k = Object.keys(classificheGironi).find(k => k.toLowerCase().endsWith(' ' + resto.toLowerCase()) || k.toUpperCase() === resto.toUpperCase()); if (k) cl = classificheGironi[k]; }
+  // Risoluzione generica: "N° <nome girone>" o "N° Girone X" o "N° X"
+  // Estrae il numero di posizione e cerca il girone nel dizionario
+  const mNum = s.match(/^(\d+)\s*[°º*o]?\s*(.+)$/i);
+  if (mNum) {
+    const pos = parseInt(mNum[1]);
+    const resto = mNum[2].trim();
+
+    // Cerca prima match esatto con "Girone X" o "Gruppo X"
+    const mGir = resto.match(/^(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
+    if (mGir) {
+      const nomeGirone = mGir[1] + ' ' + mGir[2].trim();
+      const nomeAlt = (mGir[1] === 'Girone' ? 'Gruppo' : 'Girone') + ' ' + mGir[2].trim();
+      const parteFinale = mGir[2].trim();
+      // Cerca in ordine: match esatto, case insensitive, endsWith, contains
+      for (const cerca of [nomeGirone, nomeAlt]) {
+        const k = Object.keys(classificheGironi).find(k =>
+          k.toLowerCase() === cerca.toLowerCase() ||
+          k.toLowerCase().endsWith(' ' + parteFinale.toLowerCase())
+        );
+        if (k) {
+          const cl = classificheGironi[k];
+          if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
+        }
+      }
+      // Cerca solo la parte finale
+      const k2 = Object.keys(classificheGironi).find(k =>
+        k.toLowerCase() === parteFinale.toLowerCase() ||
+        k.toUpperCase().endsWith(' ' + parteFinale.toUpperCase())
+      );
+      if (k2) {
+        const cl = classificheGironi[k2];
+        if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
+      }
+      return null;
+    }
+
+    // Match diretto con il nome del girone (es. "1° Girone A", "1° A", "1° ARANCIO")
+    const keyword = resto.toUpperCase();
+    // Cerca il girone che contiene questa parola chiave
+    const k = Object.keys(classificheGironi).find(k =>
+      k.toUpperCase() === keyword ||
+      k.toUpperCase() === 'GIRONE ' + keyword ||
+      k.toUpperCase() === 'GRUPPO ' + keyword ||
+      k.toUpperCase().endsWith(' ' + keyword) ||
+      keyword.includes(k.toUpperCase())
+    );
+    if (k) {
+      const cl = classificheGironi[k];
       if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
     }
-    return null;
-  }
-
-  const mKo = s.match(/^(\d+)[°º*]?\s+(\w+(?:\s+\w+)?)$/);
-  if (mKo) {
-    const pos = parseInt(mKo[1]);
-    const keyword = mKo[2].trim().toUpperCase();
-    const k = Object.keys(classificheGironi).find(k => k.toUpperCase() === keyword || k.toUpperCase().includes(keyword) || keyword.includes(k.toUpperCase()));
-    if (!k) return null;
-    const cl = classificheGironi[k];
-    if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
-    return null;
-  }
-
-  const mShort = s.match(/^(\d+)[°º*]?([A-Za-z]+\d*)$/);
-  if (mShort) {
-    const pos = parseInt(mShort[1]);
-    const gir = mShort[2].toUpperCase();
-    const k = Object.keys(classificheGironi).find(k => k.toUpperCase().endsWith(` ${gir}`) || k.toUpperCase() === `GIRONE ${gir}` || k.toUpperCase() === `GRUPPO ${gir}` || k.toUpperCase() === gir);
-    if (!k) return null;
-    const cl = classificheGironi[k];
-    if (!cl || cl.length < pos) return null;
-    return cl[pos - 1]?.sq?.id || null;
   }
 
   return null;
