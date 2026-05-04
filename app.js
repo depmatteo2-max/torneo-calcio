@@ -1681,7 +1681,7 @@ function enterAdmin(user) {
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
     document.getElementById('sec-a-tornei').classList.add('active');
     document.getElementById('cat-bar').style.display='none'; STATE.currentSection='a-tornei'; renderAdminTornei();
-    _addSimBtn(); _addCreaTorneoBtn();
+    _addSimBtn();
   }
 }
 
@@ -1695,21 +1695,6 @@ function _addSimBtn() {
   btn.onclick = toggleSimulazione;
   const headerRight = document.querySelector('.header-right');
   if (headerRight) headerRight.insertBefore(btn, headerRight.firstChild);
-}
-
-function _addCreaTorneoBtn() {
-  if (document.getElementById('crea-torneo-btn')) return;
-  const nav = document.getElementById('admin-nav');
-  if (!nav) return;
-  const btn = document.createElement('button');
-  btn.id = 'crea-torneo-btn';
-  btn.className = 'nav-btn';
-  btn.setAttribute('data-section', 'a-crea');
-  btn.innerHTML = '🆕 Crea';
-  btn.title = 'Crea nuovo torneo';
-  btn.style.cssText = 'background:var(--verde,#16a34a);color:white;border-color:var(--verde,#16a34a);font-weight:800;';
-  btn.onclick = function() { showSection('a-crea', btn); };
-  nav.insertBefore(btn, nav.firstChild);
 }
 
 function _mostraNavArbitro() {
@@ -1985,7 +1970,9 @@ function ctStep2() {
 
             <!-- Header girone -->
             <div style="background:var(--sfondo);padding:8px 12px;display:flex;align-items:center;gap:10px;">
-              <div style="background:var(--blu-bg);color:var(--blu);font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;">Girone ${g.nome}</div>
+              <input value="${g.nome}" placeholder="Nome girone"
+                style="background:var(--blu-bg);color:var(--blu);font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;border:1.5px solid var(--blu);width:110px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].gironi[${gi}].nome=this.value;CT.categorie[${ci}].accoppiamenti=[];">
               <div style="font-size:11px;color:var(--testo-xs);">Gioca nel:</div>
               <select style="border:1px solid var(--bordo);border-radius:6px;padding:3px 8px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].gironi[${gi}].giorno=parseInt(this.value)">
@@ -2096,7 +2083,7 @@ function _ctAutoAccoppiamenti(cat) {
     gironiNorm.forEach((g,gi)=>{
       const roundIdx = pos-1; // 1° tutti → round 0, 2° tutti → round 1
       const round = roundNames[roundIdx] || `ROUND ${roundIdx+1}`;
-      accs.push({ pos, daGironeId:g.id, daGironeName:'Girone '+g.nome, aRound:round });
+      accs.push({ pos, daGironeId:g.id, daGironeName:g.nome, aRound:round, giorno:1 });
     });
   }
   cat.accoppiamenti = accs;
@@ -2107,8 +2094,9 @@ function ctStep3() {
 
   const catsHTML = CT.categorie.map((cat,ci)=>{
     if (!cat.accoppiamenti.length) _ctAutoAccoppiamenti(cat);
+    if (!cat.squadreFinale) cat.squadreFinale = []; // squadre dirette in finale
     const gironiNorm = cat.gironi.filter(g=>g.tipo==='normale');
-    const maxPos = Math.max(...gironiNorm.map(g=>g.squadre.length), cat.qualificate);
+    const maxPos = Math.max(...gironiNorm.map(g=>g.squadre.length), cat.qualificate, 1);
 
     return `
       <div style="border:1.5px solid var(--bordo);border-radius:12px;margin-bottom:16px;overflow:hidden;">
@@ -2116,53 +2104,77 @@ function ctStep3() {
         <div style="padding:14px;">
 
           <div style="background:var(--blu-bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--blu);">
-            💡 Definisci dove va ogni classificato. Es: il 1° di ogni girone va nel girone <strong>ARANCIO</strong>, il 2° nel <strong>VERDE</strong>, ecc.
+            💡 Per ogni posizione e per ogni girone, scrivi in quale round finale va la squadra. Puoi personalizzare tutto liberamente.
           </div>
 
-          <!-- Tabella accoppiamenti per posizione -->
-          ${Array.from({length:maxPos},(_,posIdx)=>{
-            const pos=posIdx+1;
-            const roundDefault = roundNames[posIdx] || 'ROUND '+(posIdx+1);
-            // Trova il round attuale per questa posizione
-            const accPerPos = cat.accoppiamenti.filter(a=>a.pos===pos);
-            const roundAttuale = accPerPos[0]?.aRound || roundDefault;
-            return `
-              <div style="border:1px solid var(--bordo);border-radius:10px;margin-bottom:10px;overflow:hidden;">
-                <div style="background:var(--sfondo);padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                  <div style="background:var(--arancio-bg);color:var(--arancio);font-size:12px;font-weight:800;padding:3px 10px;border-radius:20px;">${pos}° classificato</div>
-                  <div style="font-size:12px;color:var(--testo-lt);">di ogni girone va nel round:</div>
-                  <input value="${roundAttuale}" style="border:1.5px solid var(--bordo);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:700;font-family:inherit;width:120px;"
-                    onchange="ctSetRoundPerPos(${ci},${pos},this.value)">
-                  <div style="font-size:11px;color:var(--testo-xs);margin-left:auto;">
-                    ${gironiNorm.map(g=>`<span style="background:var(--blu-bg);color:var(--blu);padding:2px 7px;border-radius:12px;margin-right:4px;font-size:10px;font-weight:700;">Girone ${g.nome}</span>`).join('')}
-                    → <strong>${roundAttuale}</strong>
-                  </div>
-                </div>
-                <!-- Girone successivo (solo se ha squadre che aspettano) -->
-                ${posIdx<cat.qualificate?`
-                  <div style="padding:8px 14px;font-size:12px;color:var(--testo-lt);">
-                    Il giorno del round <strong>${roundAttuale}</strong>:
-                    <select style="border:1px solid var(--bordo);border-radius:6px;padding:3px 8px;font-size:12px;margin-left:6px;font-family:inherit;"
-                      onchange="ctSetGiornoRound(${ci},'${roundAttuale}',parseInt(this.value))">
-                      ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${ctGetGiornoRound(cat,'${roundAttuale}')===di?'selected':''}>${_ctFmtData(CT.torneo.giorni[di].data)||'Giorno '+(di+1)}</option>`).join('')}
-                    </select>
-                  </div>`:''}
-              </div>`;
-          }).join('')}
+          <!-- Tabella accoppiamenti per girone × posizione -->
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px;">
+              <thead>
+                <tr style="background:var(--sfondo);">
+                  <th style="padding:8px 10px;text-align:left;border:1px solid var(--bordo);font-size:11px;color:var(--testo-xs);">Posto</th>
+                  ${gironiNorm.map(g=>`<th style="padding:8px 10px;text-align:center;border:1px solid var(--bordo);color:var(--blu);font-weight:800;">${g.nome}</th>`).join('')}
+                  <th style="padding:8px 10px;text-align:center;border:1px solid var(--bordo);font-size:11px;color:var(--testo-xs);">Giorno</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Array.from({length:maxPos},(_,posIdx)=>{
+                  const pos=posIdx+1;
+                  const roundDefault = roundNames[posIdx] || 'ROUND '+(posIdx+1);
+                  const giornoRound = cat.accoppiamenti.find(a=>a.pos===pos)?.giorno ?? 1;
+                  return `<tr style="background:${posIdx<cat.qualificate?'white':'var(--sfondo)'};">
+                    <td style="padding:6px 10px;border:1px solid var(--bordo);">
+                      <span style="background:${posIdx<cat.qualificate?'var(--verde-bg)':'var(--sfondo)'};color:${posIdx<cat.qualificate?'var(--verde)':'var(--testo-xs)'};font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;">
+                        ${pos}° posto
+                      </span>
+                    </td>
+                    ${gironiNorm.map((g,gi)=>{
+                      const acc = cat.accoppiamenti.find(a=>a.pos===pos && a.daGironeId===g.id);
+                      const val = acc?.aRound || (posIdx<cat.qualificate ? roundDefault : 'CONSOLAZIONE');
+                      return `<td style="padding:4px 6px;border:1px solid var(--bordo);text-align:center;">
+                        <input value="${val}"
+                          style="width:100%;border:1.5px solid ${posIdx<cat.qualificate?'var(--blu)':'var(--bordo)'};border-radius:6px;padding:4px 8px;font-size:12px;font-weight:700;font-family:inherit;text-align:center;background:${posIdx<cat.qualificate?'var(--blu-bg)':'white'};"
+                          onchange="ctSetAccoppiamento(${ci},${pos},'${g.id}',this.value,'${g.nome}')">
+                      </td>`;
+                    }).join('')}
+                    <td style="padding:4px 6px;border:1px solid var(--bordo);text-align:center;">
+                      <select style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
+                        onchange="ctSetGiornoPos(${ci},${pos},parseInt(this.value))">
+                        ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${giornoRound===di?'selected':''}>${_ctFmtData(CT.torneo.giorni[di].data)||'G'+(di+1)}</option>`).join('')}
+                      </select>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
 
-          <!-- Squadre che non si qualificano -->
-          ${cat.gironi[0]?.squadre.length > cat.qualificate ? `
-            <div style="border:1px solid var(--bordo-lt);border-radius:10px;padding:10px 14px;background:var(--sfondo);">
-              <div style="font-size:12px;font-weight:700;color:var(--testo-xs);margin-bottom:6px;">⬇️ Non qualificate (${cat.gironi[0].squadre.length - cat.qualificate} per girone)</div>
-              <div style="font-size:12px;color:var(--testo-lt);">Giocano finali consolazione dal ${cat.gironi[0].squadre.length}° posto al ${(cat.gironi[0].squadre.length - cat.qualificate)*cat.gironi.length}° posto</div>
-            </div>` : ''}
+          <!-- Squadre già in finale (saltano qualifiche) -->
+          <div style="margin-top:14px;border:1.5px dashed var(--bordo);border-radius:10px;padding:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--testo-xs);margin-bottom:8px;">🏟️ Squadre già qualificate (entrano direttamente in finale)</div>
+            ${(cat.squadreFinale||[]).map((sq,si)=>`
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <input value="${sq.nome}" placeholder="Nome squadra"
+                  style="flex:1;border:1px solid var(--bordo);border-radius:6px;padding:5px 10px;font-size:13px;font-family:inherit;"
+                  onchange="CT.categorie[${ci}].squadreFinale[${si}].nome=this.value">
+                <input value="${sq.round||''}" placeholder="Round (es. ARANCIO)"
+                  style="width:130px;border:1px solid var(--bordo);border-radius:6px;padding:5px 10px;font-size:12px;font-family:inherit;"
+                  onchange="CT.categorie[${ci}].squadreFinale[${si}].round=this.value">
+                <button onclick="CT.categorie[${ci}].squadreFinale.splice(${si},1);renderAdminCreaTorneo()"
+                  style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;">✕</button>
+              </div>`).join('')}
+            <button onclick="CT.categorie[${ci}].squadreFinale.push({nome:'',round:'ARANCIO'});renderAdminCreaTorneo()"
+              style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">
+              + Aggiungi squadra già qualificata
+            </button>
+          </div>
         </div>
       </div>`;
   }).join('');
 
   return `
     <div class="card">
-      <div class="card-title">🔀 Accoppiamenti Qualificate</div>
+      <div class="card-title">🔀 Accoppiamenti</div>
       ${catsHTML}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
@@ -2171,14 +2183,31 @@ function ctStep3() {
     </div>`;
 }
 
+function ctSetAccoppiamento(ci, pos, gironeId, round, gironeNome) {
+  const cat = CT.categorie[ci];
+  // Rimuovi accoppiamento esistente per questo pos+girone
+  cat.accoppiamenti = cat.accoppiamenti.filter(a => !(a.pos===pos && a.daGironeId===gironeId));
+  // Recupera giorno attuale per questa pos
+  const giornoAttuale = cat.accoppiamenti.find(a=>a.pos===pos)?.giorno ?? 1;
+  cat.accoppiamenti.push({pos, daGironeId:gironeId, daGironeName:gironeNome, aRound:round, giorno:giornoAttuale});
+}
+function ctSetGiornoPos(ci, pos, giorno) {
+  const cat = CT.categorie[ci];
+  // Aggiorna il giorno per tutti gli accoppiamenti di questa posizione
+  cat.accoppiamenti.forEach(a => { if(a.pos===pos) a.giorno=giorno; });
+  // Se non ci sono accoppiamenti per questa pos, salvalo comunque
+  if (!cat.accoppiamenti.find(a=>a.pos===pos)) {
+    const gironiNorm = cat.gironi.filter(g=>g.tipo==='normale');
+    gironiNorm.forEach(g => cat.accoppiamenti.push({pos, daGironeId:g.id, daGironeName:g.nome, aRound:'ROUND', giorno}));
+  }
+}
 function ctSetRoundPerPos(ci, pos, round) {
   const cat=CT.categorie[ci];
   const gironiNorm=cat.gironi.filter(g=>g.tipo==='normale');
-  // Rimuovi accoppiamenti esistenti per questa pos
   cat.accoppiamenti=cat.accoppiamenti.filter(a=>a.pos!==pos);
-  // Aggiungi nuovi
+  const giorno = cat.accoppiamenti.find(a=>a.pos===pos)?.giorno ?? 1;
   gironiNorm.forEach(g=>{
-    cat.accoppiamenti.push({pos,daGironeId:g.id,daGironeName:'Girone '+g.nome,aRound:round});
+    cat.accoppiamenti.push({pos,daGironeId:g.id,daGironeName:g.nome,aRound:round,giorno});
   });
 }
 function ctSetGiornoRound(ci, round, giorno) {
@@ -2235,6 +2264,15 @@ function ctGeneraCal() {
       rounds[a.aRound].squadre.push({pos:a.pos,girone:a.daGironeName});
     });
 
+    // Aggiungi squadre già qualificate agli accoppiamenti
+    if (cat.squadreFinale && cat.squadreFinale.length) {
+      cat.squadreFinale.forEach(sq => {
+        const r = sq.round || 'ARANCIO';
+        if (!rounds[r]) rounds[r] = {nome:r, giorno:1, squadre:[]};
+        rounds[r].squadre.push({pos:0, girone:'', nome:sq.nome, isFixed:true});
+      });
+    }
+
     Object.values(rounds).forEach(round=>{
       // Genera partite round-robin tra i qualificati
       const sq=round.squadre;
@@ -2248,8 +2286,8 @@ function ctGeneraCal() {
       let campo=1;
       for(let i=0;i<sq.length;i++) for(let j=i+1;j<sq.length;j++){
         if(oraMin>=pausaIni&&oraMin<pausaFin) oraMin=pausaFin;
-        const ph1=`${sq[i].pos}° ${sq[i].girone}`;
-        const ph2=`${sq[j].pos}° ${sq[j].girone}`;
+        const ph1=sq[i].isFixed ? sq[i].nome : `${sq[i].pos}° ${sq[i].girone}`;
+        const ph2=sq[j].isFixed ? sq[j].nome : `${sq[j].pos}° ${sq[j].girone}`;
         _ctFin.push({catNome:cat.nome,round:round.nome,sq1:ph1,sq2:ph2,
           ora:_ctMinToTime(oraMin),campo,giornata:dataTxt,dayIdx});
         campo++; if(campo>campi){campo=1; oraMin+=durata+pausa;}
