@@ -1102,10 +1102,33 @@ async function createTorneo() {
 }
 async function toggleTorneo(id,attivo) { await dbUpdateTorneo(id,{attivo:!attivo}); STATE.tornei=await dbGetTornei(); await renderAdminTornei(); toast(attivo?'Torneo archiviato':'Torneo riattivato'); }
 async function deleteTorneo(id) {
-  if (!confirm('Eliminare questo torneo e tutti i dati?')) return;
-  await dbDeleteTorneo(id); STATE.tornei=await dbGetTornei();
-  STATE.activeTorneo=STATE.tornei.find(t=>t.attivo)?.id||STATE.tornei[0]?.id||null;
-  await loadTorneo(); await renderAdminTornei(); toast('Torneo eliminato');
+  const t = STATE.tornei.find(x=>x.id===id);
+  if (!confirm(`Eliminare "${t?.nome||'questo torneo'}" e TUTTI i dati (squadre, partite, risultati)?`)) return;
+  try {
+    // Elimina categorie, gironi, partite, knockout, squadre
+    const cats = await dbGetCategorie(id);
+    for (const cat of cats) {
+      const gironi = await dbGetGironi(cat.id);
+      for (const g of gironi) {
+        await db.from('marcatori').delete().in('partita_id',
+          (await db.from('partite').select('id').eq('girone_id',g.id)).data?.map(p=>p.id)||[]);
+        await db.from('partite').delete().eq('girone_id', g.id);
+        await db.from('girone_squadre').delete().eq('girone_id', g.id);
+        await db.from('gironi').delete().eq('id', g.id);
+      }
+      await db.from('knockout').delete().eq('categoria_id', cat.id);
+      await db.from('categorie').delete().eq('id', cat.id);
+    }
+    await db.from('squadre').delete().eq('torneo_id', id);
+    await db.from('tornei').delete().eq('id', id);
+    STATE.tornei = await dbGetTornei();
+    STATE.activeTorneo = STATE.tornei.find(t=>t.attivo)?.id || STATE.tornei[0]?.id || null;
+    await loadTorneo(); await renderAdminTornei();
+    toast('✅ Torneo eliminato!');
+  } catch(e) {
+    console.error(e);
+    toast('❌ Errore eliminazione: ' + e.message);
+  }
 }
 async function editTorneo(id) {
   const t=STATE.tornei.find(x=>x.id===id);
@@ -1894,7 +1917,9 @@ function _ctNuovaCat(nome) {
     oraInizio: g.oraInizio||'09:00',
     pausaIni: g.pausaIni||'12:30',
     pausaFine: g.pausaFine||'14:00',
-    campi: g.campi||2
+    campi: g.campi||2,
+    durata: CT.torneo.durata||20,
+    pausa: CT.torneo.pausa||5
   }));
   return { nome, gironi:[], calendario:[], accoppiamenti:[], squadreExtra:[], gironiFinali:[], calendarioFinali:[], finali:[], oraPerGiorno, _fatto:false };
 }
@@ -2130,7 +2155,8 @@ function _ctFaseGironi(cat, ci) {
   if (!cat.oraPerGiorno || cat.oraPerGiorno.length !== CT.torneo.giorni.length) {
     cat.oraPerGiorno = CT.torneo.giorni.map(g => ({
       oraInizio:g.oraInizio||'09:00', pausaIni:g.pausaIni||'12:30',
-      pausaFine:g.pausaFine||'14:00', campi:g.campi||2
+      pausaFine:g.pausaFine||'14:00', campi:g.campi||2,
+      durata:CT.torneo.durata||20, pausa:CT.torneo.pausa||5
     }));
   }
 
@@ -2141,7 +2167,7 @@ function _ctFaseGironi(cat, ci) {
       ${CT.torneo.giorni.map((g,di)=>`
         <div style="border:1px solid var(--bordo);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${di%2===0?'white':'var(--sfondo)'};">
           <div style="font-size:12px;font-weight:700;color:var(--blu);margin-bottom:8px;">📅 ${g.data?_ctFmtData(g.data):'Giorno '+(di+1)}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:8px;">
             <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Inizio</label>
               <input type="time" value="${cat.oraPerGiorno[di]?.oraInizio||'09:00'}"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
@@ -2158,6 +2184,14 @@ function _ctFaseGironi(cat, ci) {
               <input type="number" value="${cat.oraPerGiorno[di]?.campi||2}" min="1" max="10"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].campi=parseInt(this.value)||1"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Durata (min)</label>
+              <input type="number" value="${cat.oraPerGiorno[di]?.durata||CT.torneo.durata||20}" min="5" max="90"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].durata=parseInt(this.value)||20"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Pausa (min)</label>
+              <input type="number" value="${cat.oraPerGiorno[di]?.pausa||CT.torneo.pausa||5}" min="0" max="30"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausa=parseInt(this.value)||5"></div>
           </div>
         </div>`).join('')}
     </div>`;
@@ -2232,18 +2266,18 @@ function _ctVaiCalendario(ci) {
 }
 
 function _ctAssegnaOrari(lista, cat) {
-  const durata = CT.torneo.durata || 20;
-  const pausa = CT.torneo.pausa || 5;
   const perGiorno = {};
   lista.forEach(p => { const k=p._giornoIdx??0; if(!perGiorno[k])perGiorno[k]=[]; perGiorno[k].push(p); });
   Object.entries(perGiorno).forEach(([dayIdx,partite]) => {
     const di = parseInt(dayIdx);
-    // Usa oraPerGiorno della categoria se disponibile, altrimenti globals del giorno
     const catDay = cat?.oraPerGiorno?.[di];
     const dayData = CT.torneo.giorni[di]||{};
-    const campi = catDay?.campi ?? dayData.campi ?? 2;
+    // Usa durata/pausa/campi della categoria per giorno, altrimenti globali torneo
+    const durata = catDay?.durata ?? CT.torneo.durata ?? 20;
+    const pausa  = catDay?.pausa  ?? CT.torneo.pausa  ?? 5;
+    const campi  = catDay?.campi  ?? dayData.campi ?? 2;
     let oraMin = _ctTimeToMin(catDay?.oraInizio ?? dayData.oraInizio ?? '09:00');
-    const pausaIni = _ctTimeToMin(catDay?.pausaIni ?? dayData.pausaIni ?? '12:30');
+    const pausaIni  = _ctTimeToMin(catDay?.pausaIni  ?? dayData.pausaIni  ?? '12:30');
     const pausaFine = _ctTimeToMin(catDay?.pausaFine ?? dayData.pausaFine ?? '14:00');
     partite.sort((a,b)=>a.ordine-b.ordine);
     let campo=1;
