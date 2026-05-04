@@ -1759,1021 +1759,900 @@ function loadScript(src) {
 window.addEventListener('DOMContentLoaded', init);
 
 // ============================================================
-//  CREA TORNEO — Wizard admin semplice
-//  Step 1: Info torneo  Step 2: Categorie + Squadre
-//  Step 3: Struttura    Step 4: Calendario + Orari
-//  Step 5: Salva + Esporta
+//  CREA TORNEO — Wizard admin completo v2
+//  Step 1: Info torneo + Giorni
+//  Step 2: Categorie + Gironi + Squadre + Priorità
+//  Step 3: Accoppiamenti qualificate (chi va dove)
+//  Step 4: Calendario + Orari per giorno
+//  Step 5: Fase finale (round personalizzabili)
+//  Step 6: Salva database + PDF + Excel
 // ============================================================
+
 let CT = {
   step: 1,
-  torneo: { nome: '', data: '', luogo: '', campi: 2, durata: 20, pausa: 5 },
-  categorie: [], // [{id, nome, qualificate, gironi:[{nome,tipo,squadre:[]}], finale:[{nome,partite:[]}]}]
+  torneo: { nome:'', luogo:'', campi:2, durata:20, pausa:5,
+    giorni: [{ data:'', oraInizio:'09:00', pausaInizio:'12:30', pausaFine:'14:00' }] },
+  categorie: []
+  // cat: { id, nome, qualificate, gironi:[{id,nome,tipo,squadre:[{nome,prio}],giorno}], accoppiamenti:[{pos,daGirone,aGirone}], finale:[{nome,partite:[{sq1,sq2,ora,campo,giorno}]}] }
 };
+let _ctCal = [];   // partite gironi generate
+let _ctFin = [];   // partite finale generate
 
+// ─── ENTRY POINT ─────────────────────────────────────────────
 async function renderAdminCreaTorneo() {
   const el = document.getElementById('sec-a-crea');
   if (!el) return;
 
-  const steps = [
-    { n:1, label:'🏆 Torneo' },
-    { n:2, label:'👕 Squadre' },
-    { n:3, label:'🏟️ Struttura' },
-    { n:4, label:'📅 Calendario' },
-    { n:5, label:'✅ Salva' },
+  const STEPS = [
+    { n:1, icon:'🏆', label:'Torneo & Giorni' },
+    { n:2, icon:'👕', label:'Gironi & Squadre' },
+    { n:3, icon:'🔀', label:'Accoppiamenti' },
+    { n:4, icon:'📅', label:'Calendario' },
+    { n:5, icon:'🏅', label:'Fase Finale' },
+    { n:6, icon:'✅', label:'Salva' },
   ];
 
-  const stepsHTML = `<div style="display:flex;gap:0;margin-bottom:20px;background:white;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
-    ${steps.map(s => {
+  const stepsBar = `<div style="display:flex;overflow-x:auto;gap:0;margin-bottom:20px;background:white;border-radius:12px;box-shadow:var(--shadow);flex-wrap:nowrap;">
+    ${STEPS.map(s => {
       const active = CT.step === s.n;
       const done = CT.step > s.n;
-      return `<div onclick="ctGoStep(${s.n})" style="flex:1;padding:10px 4px;text-align:center;cursor:pointer;
+      return `<div onclick="ctGoStep(${s.n})" style="flex:1;min-width:70px;padding:10px 4px;text-align:center;cursor:pointer;
         background:${active?'var(--blu)':done?'var(--verde-bg)':'white'};
-        color:${active?'white':done?'var(--verde)':'var(--testo-lt)'};
-        border-right:1px solid var(--bordo);font-size:11px;font-weight:${active||done?'700':'400'};transition:all .2s;">
-        <div style="font-size:18px;margin-bottom:2px;">${done?'✅':s.label.split(' ')[0]}</div>
-        <div>${s.label.split(' ').slice(1).join(' ')}</div>
+        color:${active?'white':done?'var(--verde)':'var(--testo-xs)'};
+        border-right:1px solid var(--bordo);font-size:11px;font-weight:${active?'800':'500'};
+        transition:all .18s;user-select:none;">
+        <div style="font-size:16px;margin-bottom:2px;">${done?'✅':s.icon}</div>
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px;">${s.label}</div>
       </div>`;
     }).join('')}
   </div>`;
 
   let body = '';
-  if (CT.step === 1) body = ctStep1();
-  else if (CT.step === 2) body = ctStep2();
-  else if (CT.step === 3) body = ctStep3();
-  else if (CT.step === 4) body = ctStep4();
-  else if (CT.step === 5) body = await ctStep5();
+  if (CT.step===1) body = ctStep1();
+  else if (CT.step===2) body = ctStep2();
+  else if (CT.step===3) body = ctStep3();
+  else if (CT.step===4) body = ctStep4();
+  else if (CT.step===5) body = ctStep5();
+  else if (CT.step===6) body = await ctStep6();
 
-  el.innerHTML = `
-    <div style="max-width:700px;margin:0 auto;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <div style="font-size:20px;font-weight:800;color:var(--testo);">🆕 Crea Torneo</div>
-        <button onclick="ctReset()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--testo-lt);">🗑 Ricomincia</button>
-      </div>
-      ${stepsHTML}
-      ${body}
-    </div>`;
+  el.innerHTML = `<div style="max-width:760px;margin:0 auto;padding-bottom:40px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <div style="font-size:20px;font-weight:800;">🆕 Crea Torneo</div>
+      <button onclick="ctReset()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--testo-lt);">🗑 Ricomincia</button>
+    </div>
+    ${stepsBar}
+    ${body}
+  </div>`;
 }
 
-function ctGoStep(n) {
-  // Salva i dati dello step corrente prima di cambiare
-  ctSaveCurrentStep();
-  CT.step = n;
+function ctGoStep(n) { _ctSalvaStep(); CT.step=n; renderAdminCreaTorneo(); }
+function ctReset() {
+  if (!confirm('Cancellare tutto e ricominciare?')) return;
+  CT = { step:1, torneo:{nome:'',luogo:'',campi:2,durata:20,pausa:5,
+    giorni:[{data:'',oraInizio:'09:00',pausaInizio:'12:30',pausaFine:'14:00'}]}, categorie:[] };
+  _ctCal=[]; _ctFin=[];
   renderAdminCreaTorneo();
 }
 
-function ctSaveCurrentStep() {
-  if (CT.step === 1) {
-    CT.torneo.nome = document.getElementById('ct-nome')?.value?.trim() || CT.torneo.nome;
-    CT.torneo.data = document.getElementById('ct-data')?.value || CT.torneo.data;
-    CT.torneo.luogo = document.getElementById('ct-luogo')?.value?.trim() || CT.torneo.luogo;
-    CT.torneo.campi = parseInt(document.getElementById('ct-campi')?.value) || 2;
-    CT.torneo.durata = parseInt(document.getElementById('ct-durata')?.value) || 20;
-    CT.torneo.pausa = parseInt(document.getElementById('ct-pausa')?.value) || 5;
+function _ctSalvaStep() {
+  // Salva dati dal DOM prima di cambiare step
+  if (CT.step===1) {
+    const n=document.getElementById('ct-nome'); if(n) CT.torneo.nome=n.value.trim();
+    const l=document.getElementById('ct-luogo'); if(l) CT.torneo.luogo=l.value.trim();
+    const c=document.getElementById('ct-campi'); if(c) CT.torneo.campi=parseInt(c.value)||2;
+    const d=document.getElementById('ct-durata'); if(d) CT.torneo.durata=parseInt(d.value)||20;
+    const p=document.getElementById('ct-pausa'); if(p) CT.torneo.pausa=parseInt(p.value)||5;
+    CT.torneo.giorni.forEach((_,i)=>{
+      const da=document.getElementById('ct-giorno-data-'+i); if(da) CT.torneo.giorni[i].data=da.value;
+      const oi=document.getElementById('ct-giorno-ora-'+i); if(oi) CT.torneo.giorni[i].oraInizio=oi.value;
+      const pi=document.getElementById('ct-giorno-pausa-'+i); if(pi) CT.torneo.giorni[i].pausaInizio=pi.value;
+      const pf=document.getElementById('ct-giorno-pausaf-'+i); if(pf) CT.torneo.giorni[i].pausaFine=pf.value;
+    });
   }
 }
 
-function ctReset() {
-  if (!confirm('Cancellare tutto e ricominciare?')) return;
-  CT = { step:1, torneo:{nome:'',data:'',luogo:'',campi:2,durata:20,pausa:5}, categorie:[] };
-  renderAdminCreaTorneo();
-}
-
-// ── STEP 1: Info torneo ──────────────────────────────────────
+// ─── STEP 1: TORNEO & GIORNI ─────────────────────────────────
 function ctStep1() {
-  return `
-    <div class="card">
-      <div class="card-title">🏆 Informazioni Torneo</div>
-      <div style="display:flex;flex-direction:column;gap:12px;">
+  const t = CT.torneo;
+  const giorniHTML = t.giorni.map((g,i)=>`
+    <div style="border:1.5px solid var(--bordo);border-radius:10px;padding:14px;margin-bottom:10px;background:${i%2===0?'white':'var(--sfondo)'};">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <div style="background:var(--blu);color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;">📅 Giorno ${i+1}</div>
+        ${t.giorni.length>1?`<button onclick="ctRimuoviGiorno(${i})" style="margin-left:auto;background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
         <div class="form-group">
-          <label class="form-label">Nome torneo *</label>
-          <input class="form-input" id="ct-nome" value="${CT.torneo.nome}" placeholder="es. Spring Cup 2026">
+          <label class="form-label">Data</label>
+          <input class="form-input" type="date" id="ct-giorno-data-${i}" value="${g.data}">
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div class="form-group">
-            <label class="form-label">Data (primo giorno)</label>
-            <input class="form-input" type="date" id="ct-data" value="${CT.torneo.data}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Luogo / Città</label>
-            <input class="form-input" id="ct-luogo" value="${CT.torneo.luogo}" placeholder="es. Andora (SV)">
-          </div>
+        <div class="form-group">
+          <label class="form-label">Ora inizio</label>
+          <input class="form-input" type="time" id="ct-giorno-ora-${i}" value="${g.oraInizio||'09:00'}">
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-          <div class="form-group">
-            <label class="form-label">N° Campi</label>
-            <input class="form-input" type="number" id="ct-campi" value="${CT.torneo.campi}" min="1" max="10">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Durata partita (min)</label>
-            <input class="form-input" type="number" id="ct-durata" value="${CT.torneo.durata}" min="5" max="90">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Pausa tra partite (min)</label>
-            <input class="form-input" type="number" id="ct-pausa" value="${CT.torneo.pausa}" min="0" max="30">
-          </div>
+        <div class="form-group">
+          <label class="form-label">Pausa pranzo inizio</label>
+          <input class="form-input" type="time" id="ct-giorno-pausa-${i}" value="${g.pausaInizio||'12:30'}">
         </div>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-      <button onclick="ctNext1()" class="btn btn-p">Avanti → Squadre</button>
-    </div>`;
-}
-
-function ctNext1() {
-  const nome = document.getElementById('ct-nome').value.trim();
-  if (!nome) { toast('Inserisci il nome del torneo'); return; }
-  CT.torneo.nome = nome;
-  CT.torneo.data = document.getElementById('ct-data').value;
-  CT.torneo.luogo = document.getElementById('ct-luogo').value.trim();
-  CT.torneo.campi = parseInt(document.getElementById('ct-campi').value) || 2;
-  CT.torneo.durata = parseInt(document.getElementById('ct-durata').value) || 20;
-  CT.torneo.pausa = parseInt(document.getElementById('ct-pausa').value) || 5;
-  // Se non ci sono categorie, aggiungi una default
-  if (!CT.categorie.length) CT.categorie.push(ctNuovaCategoria());
-  CT.step = 2;
-  renderAdminCreaTorneo();
-}
-
-function ctNuovaCategoria(nome = '') {
-  return { id: 'cat_' + Date.now() + '_' + Math.random(), nome, qualificate: 2,
-    gironi: [ctNuovoGirone('A'), ctNuovoGirone('B')], finale: [] };
-}
-
-function ctNuovoGirone(nome) {
-  return { nome, tipo: 'normale', squadre: '' };
-}
-
-// ── STEP 2: Categorie + Squadre ──────────────────────────────
-function ctStep2() {
-  const catsHTML = CT.categorie.map((cat, ci) => `
-    <div style="border:1.5px solid var(--bordo);border-radius:12px;margin-bottom:14px;overflow:hidden;">
-      <div style="background:var(--sfondo);padding:12px 16px;display:flex;align-items:center;gap:10px;">
-        <div style="font-size:14px;font-weight:700;color:var(--testo);flex:1;">
-          ${CT.categorie.length > 1 ? `Categoria ${ci+1}:` : ''}
-        </div>
-        <input class="form-input" style="flex:2;" value="${cat.nome}"
-          placeholder="es. PULCINI 2016 U11"
-          onchange="CT.categorie[${ci}].nome=this.value">
-        ${CT.categorie.length > 1 ? `<button onclick="ctRimuoviCat(${ci})"
-          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12px;">✕</button>` : ''}
-      </div>
-      <div style="padding:14px;">
-        <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:8px;">Gironi e squadre</div>
-        ${cat.gironi.map((g, gi) => `
-          <div style="margin-bottom:12px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-              <div style="background:var(--blu);color:white;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;">Girone ${g.nome}</div>
-              ${cat.gironi.length > 1 ? `<button onclick="ctRimuoviGirone(${ci},${gi})"
-                style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:13px;">✕</button>` : ''}
-            </div>
-            <textarea class="form-input" rows="4" style="font-size:13px;resize:vertical;"
-              placeholder="Una squadra per riga:&#10;RHODENSE&#10;CHISOLA&#10;BORGORATTI&#10;LIGORNA"
-              onchange="CT.categorie[${ci}].gironi[${gi}].squadre=this.value">${g.squadre}</textarea>
-          </div>`).join('')}
-        <div style="display:flex;gap:8px;margin-top:4px;">
-          <button onclick="ctAggiungiGirone(${ci})"
-            style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--blu);cursor:pointer;">
-            + Aggiungi girone
-          </button>
+        <div class="form-group">
+          <label class="form-label">Ripresa dopo pranzo</label>
+          <input class="form-input" type="time" id="ct-giorno-pausaf-${i}" value="${g.pausaFine||'14:00'}">
         </div>
       </div>
     </div>`).join('');
 
   return `
     <div class="card">
+      <div class="card-title">🏆 Informazioni Torneo</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label class="form-label">Nome torneo *</label>
+          <input class="form-input" id="ct-nome" value="${t.nome}" placeholder="es. Spring Cup 2026" style="font-size:16px;font-weight:700;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Luogo / Città</label>
+          <input class="form-input" id="ct-luogo" value="${t.luogo}" placeholder="es. Andora (SV)">
+        </div>
+        <div class="form-group">
+          <label class="form-label">N° Campi disponibili</label>
+          <input class="form-input" type="number" id="ct-campi" value="${t.campi}" min="1" max="10">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Durata partita (min)</label>
+          <input class="form-input" type="number" id="ct-durata" value="${t.durata}" min="5" max="90">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pausa tra partite (min)</label>
+          <input class="form-input" type="number" id="ct-pausa" value="${t.pausa}" min="0" max="30">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;margin-bottom:14px;">
+        <div class="card-title" style="margin:0;">📅 Piano Giorni</div>
+        <button onclick="ctAggiungiGiorno()" style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Aggiungi giorno</button>
+      </div>
+      ${giorniHTML}
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button onclick="ctNext1()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Gironi & Squadre ›</button>
+    </div>`;
+}
+
+function ctAggiungiGiorno() {
+  _ctSalvaStep();
+  CT.torneo.giorni.push({data:'',oraInizio:'09:00',pausaInizio:'12:30',pausaFine:'14:00'});
+  renderAdminCreaTorneo();
+}
+
+function ctRimuoviGiorno(i) {
+  _ctSalvaStep();
+  CT.torneo.giorni.splice(i,1);
+  renderAdminCreaTorneo();
+}
+
+function ctNext1() {
+  _ctSalvaStep();
+  if (!CT.torneo.nome.trim()) { toast('Inserisci il nome del torneo'); return; }
+  if (!CT.categorie.length) CT.categorie.push(_ctNuovaCat());
+  CT.step=2; renderAdminCreaTorneo();
+}
+
+function _ctNuovaCat(nome='') {
+  return { id:'cat_'+Date.now()+'_'+Math.random(), nome, qualificate:2,
+    gironi:[_ctNuovoGirone('A',0),_ctNuovoGirone('B',0)], accoppiamenti:[], finale:[] };
+}
+function _ctNuovoGirone(nome, giorno=0) {
+  return { id:'g_'+Date.now()+'_'+Math.random(), nome, tipo:'normale', squadre:[], giorno };
+}
+
+// ─── STEP 2: GIRONI & SQUADRE ────────────────────────────────
+function ctStep2() {
+  const nGiorni = CT.torneo.giorni.length;
+  const labelGiorno = (idx) => {
+    const g = CT.torneo.giorni[idx];
+    return g?.data ? _ctFmtData(g.data) : `Giorno ${idx+1}`;
+  };
+
+  const catsHTML = CT.categorie.map((cat,ci)=>`
+    <div style="border:1.5px solid var(--bordo);border-radius:12px;margin-bottom:16px;overflow:hidden;">
+
+      <!-- Header categoria -->
+      <div style="background:var(--blu);color:white;padding:10px 16px;display:flex;align-items:center;gap:10px;">
+        <input value="${cat.nome}" placeholder="Nome categoria (es. PULCINI 2016 U11)"
+          style="flex:1;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:7px;padding:6px 12px;color:white;font-size:14px;font-weight:700;font-family:inherit;"
+          onchange="CT.categorie[${ci}].nome=this.value">
+        <div style="font-size:12px;opacity:.7;">Qualificate per girone:</div>
+        ${[1,2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].qualificate=${n};renderAdminCreaTorneo()"
+          style="width:28px;height:28px;border-radius:50%;border:2px solid ${cat.qualificate===n?'white':'rgba(255,255,255,0.3)'};
+          background:${cat.qualificate===n?'white':'transparent'};color:${cat.qualificate===n?'var(--blu)':'white'};
+          font-weight:800;cursor:pointer;font-size:13px;">${n}</button>`).join('')}
+        ${CT.categorie.length>1?`<button onclick="ctRimuoviCat(${ci})"
+          style="background:rgba(220,38,38,0.25);border:1px solid rgba(220,38,38,0.4);color:white;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12px;">✕</button>`:''}
+      </div>
+
+      <!-- Gironi -->
+      <div style="padding:14px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">Gironi</div>
+          <button onclick="ctAggiungiGirone(${ci})" style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Girone</button>
+        </div>
+
+        ${cat.gironi.map((g,gi)=>`
+          <div style="border:1px solid var(--bordo);border-radius:10px;margin-bottom:10px;overflow:hidden;">
+
+            <!-- Header girone -->
+            <div style="background:var(--sfondo);padding:8px 12px;display:flex;align-items:center;gap:10px;">
+              <div style="background:var(--blu-bg);color:var(--blu);font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;">Girone ${g.nome}</div>
+              <div style="font-size:11px;color:var(--testo-xs);">Gioca nel:</div>
+              <select style="border:1px solid var(--bordo);border-radius:6px;padding:3px 8px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].gironi[${gi}].giorno=parseInt(this.value)">
+                ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${g.giorno===di?'selected':''}>${labelGiorno(di)}</option>`).join('')}
+              </select>
+              <div style="font-size:11px;color:var(--testo-xs);margin-left:auto;">${g.squadre.length} squadre</div>
+              ${cat.gironi.length>1?`<button onclick="ctRimuoviGirone(${ci},${gi})"
+                style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
+            </div>
+
+            <!-- Squadre -->
+            <div style="padding:10px 12px;">
+              ${g.squadre.length ? g.squadre.map((sq,si)=>`
+                <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--bordo-lt);">
+                  <span style="font-size:13px;color:var(--testo-xs);width:18px;text-align:right;">${si+1}.</span>
+                  <span style="flex:1;font-size:13px;font-weight:600;">${sq.nome}</span>
+                  <select style="border:1px solid var(--bordo);border-radius:5px;padding:2px 6px;font-size:11px;font-family:inherit;color:var(--testo-lt);"
+                    onchange="CT.categorie[${ci}].gironi[${gi}].squadre[${si}].prio=this.value">
+                    <option value="prima" ${sq.prio==='prima'?'selected':''}>⬆️ Prima</option>
+                    <option value="normale" ${sq.prio==='normale'||!sq.prio?'selected':''}>➡️ Normale</option>
+                    <option value="dopo" ${sq.prio==='dopo'?'selected':''}>⬇️ Dopo</option>
+                  </select>
+                  <button onclick="CT.categorie[${ci}].gironi[${gi}].squadre.splice(${si},1);renderAdminCreaTorneo()"
+                    style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:14px;padding:0 4px;">✕</button>
+                </div>`).join('') : `<div style="font-size:12px;color:#bbb;padding:6px 0;">Nessuna squadra — aggiungile sotto</div>`}
+
+              <!-- Input aggiungi squadra -->
+              <div style="display:flex;gap:6px;margin-top:8px;">
+                <input id="sq-input-${ci}-${gi}" class="form-input" style="flex:1;font-size:13px;" placeholder="Nome squadra..."
+                  onkeydown="if(event.key==='Enter')ctAggiungiSquadra(${ci},${gi})">
+                <button onclick="ctAggiungiSquadra(${ci},${gi})" class="btn btn-p btn-sm">+ Aggiungi</button>
+              </div>
+              <!-- Incolla lista -->
+              <div style="margin-top:6px;">
+                <textarea id="sq-bulk-${ci}-${gi}" class="form-input" rows="3" style="font-size:12px;resize:vertical;"
+                  placeholder="Oppure incolla lista (una squadra per riga):&#10;RHODENSE&#10;CHISOLA&#10;BORGORATTI"></textarea>
+                <button onclick="ctAggiungiBulk(${ci},${gi})" style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);cursor:pointer;margin-top:4px;">📋 Aggiungi lista</button>
+              </div>
+            </div>
+          </div>`).join('')}
+
+        <button onclick="ctAggiungiGirone(${ci})" style="width:100%;border:1.5px dashed var(--bordo);border-radius:8px;padding:8px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;background:var(--sfondo);margin-top:4px;">+ Aggiungi girone</button>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="card">
       <div style="display:flex;align-items:center;margin-bottom:16px;">
-        <div class="card-title" style="margin:0;">👕 Categorie e Squadre</div>
-        <button onclick="ctAggiungiCategoria()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Categoria</button>
+        <div class="card-title" style="margin:0;">👕 Gironi & Squadre</div>
+        <button onclick="ctAggiungiCat()" style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Categoria</button>
       </div>
       ${catsHTML}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
-      <button onclick="ctGoStep(1)" class="btn btn-secondary">← Indietro</button>
-      <button onclick="ctNext2()" class="btn btn-p">Avanti → Struttura</button>
+      <button onclick="ctGoStep(1)" class="btn btn-secondary">‹ Indietro</button>
+      <button onclick="ctNext2()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Accoppiamenti ›</button>
     </div>`;
 }
 
-function ctAggiungiCategoria() {
-  CT.categorie.push(ctNuovaCategoria());
-  renderAdminCreaTorneo();
-}
-
-function ctRimuoviCat(ci) {
-  if (!confirm('Eliminare questa categoria?')) return;
-  CT.categorie.splice(ci, 1);
-  renderAdminCreaTorneo();
-}
-
+function ctAggiungiCat() { CT.categorie.push(_ctNuovaCat()); renderAdminCreaTorneo(); }
+function ctRimuoviCat(ci) { if(!confirm('Eliminare?')) return; CT.categorie.splice(ci,1); renderAdminCreaTorneo(); }
 function ctAggiungiGirone(ci) {
-  const lettere = 'ABCDEFGHIJ';
-  const n = lettere[CT.categorie[ci].gironi.length] || (CT.categorie[ci].gironi.length + 1).toString();
-  CT.categorie[ci].gironi.push(ctNuovoGirone(n));
+  const lettere='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const n=lettere[CT.categorie[ci].gironi.length]||(CT.categorie[ci].gironi.length+1).toString();
+  CT.categorie[ci].gironi.push(_ctNuovoGirone(n,0));
   renderAdminCreaTorneo();
 }
-
-function ctRimuoviGirone(ci, gi) {
-  CT.categorie[ci].gironi.splice(gi, 1);
+function ctRimuoviGirone(ci,gi) { CT.categorie[ci].gironi.splice(gi,1); renderAdminCreaTorneo(); }
+function ctAggiungiSquadra(ci,gi) {
+  const input=document.getElementById('sq-input-'+ci+'-'+gi);
+  const nome=input?.value?.trim(); if(!nome) return;
+  CT.categorie[ci].gironi[gi].squadre.push({nome,prio:'normale'});
+  if(input) input.value='';
   renderAdminCreaTorneo();
 }
-
+function ctAggiungiBulk(ci,gi) {
+  const ta=document.getElementById('sq-bulk-'+ci+'-'+gi);
+  if(!ta) return;
+  const nomi=ta.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  nomi.forEach(nome=>CT.categorie[ci].gironi[gi].squadre.push({nome,prio:'normale'}));
+  ta.value='';
+  renderAdminCreaTorneo();
+}
 function ctNext2() {
-  // Salva squadre dai textarea
-  CT.categorie.forEach((cat, ci) => {
-    const nomeInput = document.querySelector(`#sec-a-crea input[value="${cat.nome}"]`);
-    cat.gironi.forEach((g, gi) => {
-      const ta = document.querySelectorAll('#sec-a-crea textarea')[ci * cat.gironi.length + gi];
-      if (ta) g.squadre = ta.value;
-    });
-  });
-  // Valida
   for (const cat of CT.categorie) {
     if (!cat.nome.trim()) { toast('Inserisci il nome di tutte le categorie'); return; }
     for (const g of cat.gironi) {
-      const sq = g.squadre.split('\n').map(s=>s.trim()).filter(Boolean);
-      if (sq.length < 2) { toast(`Girone ${g.nome}: inserisci almeno 2 squadre`); return; }
+      if (g.squadre.length<2) { toast('Girone '+g.nome+': inserisci almeno 2 squadre'); return; }
     }
   }
-  CT.step = 3;
-  renderAdminCreaTorneo();
+  // Auto-genera accoppiamenti se vuoti
+  CT.categorie.forEach(cat=>{
+    if (!cat.accoppiamenti.length) _ctAutoAccoppiamenti(cat);
+  });
+  CT.step=3; renderAdminCreaTorneo();
 }
 
-// ── STEP 3: Struttura finale ─────────────────────────────────
+// ─── STEP 3: ACCOPPIAMENTI ───────────────────────────────────
+function _ctAutoAccoppiamenti(cat) {
+  // Genera accoppiamenti automatici standard:
+  // 1°A→ARANCIO, 1°B→ARANCIO, 2°A→VERDE, 2°B→VERDE, 3°A→BLU, 3°B→BLU ecc.
+  const roundNames=['ARANCIO','VERDE','BLU','GIALLO','BIANCO','ROSSO'];
+  const maxPos = cat.qualificate;
+  const accs = [];
+  const gironiNorm = cat.gironi.filter(g=>g.tipo==='normale');
+  // Ragruppa per posizione
+  for (let pos=1; pos<=maxPos; pos++) {
+    gironiNorm.forEach((g,gi)=>{
+      const roundIdx = pos-1; // 1° tutti → round 0, 2° tutti → round 1
+      const round = roundNames[roundIdx] || `ROUND ${roundIdx+1}`;
+      accs.push({ pos, daGironeId:g.id, daGironeName:'Girone '+g.nome, aRound:round });
+    });
+  }
+  cat.accoppiamenti = accs;
+}
+
 function ctStep3() {
-  const catsHTML = CT.categorie.map((cat, ci) => {
-    const hasFinale = cat.finale && cat.finale.length > 0;
+  const roundNames=['ARANCIO','VERDE','BLU','GIALLO','BIANCO','ROSSO','PLATINO','ORO','ARGENTO'];
+
+  const catsHTML = CT.categorie.map((cat,ci)=>{
+    if (!cat.accoppiamenti.length) _ctAutoAccoppiamenti(cat);
+    const gironiNorm = cat.gironi.filter(g=>g.tipo==='normale');
+    const maxPos = Math.max(...gironiNorm.map(g=>g.squadre.length), cat.qualificate);
+
     return `
-      <div style="border:1.5px solid var(--bordo);border-radius:12px;margin-bottom:14px;overflow:hidden;">
-        <div style="background:var(--sfondo);padding:10px 16px;font-size:14px;font-weight:700;">${cat.nome}</div>
+      <div style="border:1.5px solid var(--bordo);border-radius:12px;margin-bottom:16px;overflow:hidden;">
+        <div style="background:var(--blu);color:white;padding:10px 16px;font-size:14px;font-weight:700;">${cat.nome}</div>
         <div style="padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:8px;">Quante squadre si qualificano per girone?</div>
-          <div style="display:flex;gap:8px;margin-bottom:14px;">
-            ${[1,2,3,4].map(n => `<button onclick="CT.categorie[${ci}].qualificate=${n};renderAdminCreaTorneo()"
-              style="padding:8px 16px;border-radius:8px;border:2px solid ${cat.qualificate===n?'var(--blu)':'var(--bordo)'};
-              background:${cat.qualificate===n?'var(--blu-bg)':'white'};color:${cat.qualificate===n?'var(--blu)':'var(--testo-lt)'};
-              font-weight:700;cursor:pointer;font-size:14px;">${n}°</button>`).join('')}
+
+          <div style="background:var(--blu-bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--blu);">
+            💡 Definisci dove va ogni classificato. Es: il 1° di ogni girone va nel girone <strong>ARANCIO</strong>, il 2° nel <strong>VERDE</strong>, ecc.
           </div>
-          <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:8px;">Fase finale</div>
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <button onclick="ctSetFinale(${ci},'nessuna')"
-              style="padding:10px 14px;border-radius:8px;border:2px solid ${!hasFinale?'var(--blu)':'var(--bordo)'};
-              background:${!hasFinale?'var(--blu-bg)':'white'};text-align:left;cursor:pointer;font-size:13px;font-weight:${!hasFinale?'700':'400'};">
-              🏅 Nessuna fase finale (solo classifica girone)
-            </button>
-            <button onclick="ctSetFinale(${ci},'finali_dirette')"
-              style="padding:10px 14px;border-radius:8px;border:2px solid ${hasFinale&&cat._finaleType==='finali_dirette'?'var(--blu)':'var(--bordo)'};
-              background:${hasFinale&&cat._finaleType==='finali_dirette'?'var(--blu-bg)':'white'};text-align:left;cursor:pointer;font-size:13px;font-weight:${hasFinale&&cat._finaleType==='finali_dirette'?'700':'400'};">
-              🥇 Finali dirette per posto (1°vs1°, 2°vs2°... fino a ${cat.gironi.length * Math.max(...cat.gironi.map(g=>g.squadre.split('\n').filter(s=>s.trim()).length)) || 6}°)
-            </button>
-            <button onclick="ctSetFinale(${ci},'gironi_finali')"
-              style="padding:10px 14px;border-radius:8px;border:2px solid ${hasFinale&&cat._finaleType==='gironi_finali'?'var(--blu)':'var(--bordo)'};
-              background:${hasFinale&&cat._finaleType==='gironi_finali'?'var(--blu-bg)':'white'};text-align:left;cursor:pointer;font-size:13px;font-weight:${hasFinale&&cat._finaleType==='gironi_finali'?'700':'400'};">
-              🏆 Gironi finali (ARANCIO/VERDE/BLU) → finali per posto
-            </button>
-            <button onclick="ctSetFinale(${ci},'semifinali')"
-              style="padding:10px 14px;border-radius:8px;border:2px solid ${hasFinale&&cat._finaleType==='semifinali'?'var(--blu)':'var(--bordo)'};
-              background:${hasFinale&&cat._finaleType==='semifinali'?'var(--blu-bg)':'white'};text-align:left;cursor:pointer;font-size:13px;font-weight:${hasFinale&&cat._finaleType==='semifinali'?'700':'400'};">
-              🎯 Semifinali → Finale 1°/2° e 3°/4°
-            </button>
-          </div>
-          ${hasFinale ? `<div style="margin-top:10px;background:var(--verde-bg);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--verde);font-weight:600;">
-            ✅ Fase finale impostata: ${cat._finaleType} (${cat.finale.length} round)
-          </div>` : ''}
+
+          <!-- Tabella accoppiamenti per posizione -->
+          ${Array.from({length:maxPos},(_,posIdx)=>{
+            const pos=posIdx+1;
+            const roundDefault = roundNames[posIdx] || 'ROUND '+(posIdx+1);
+            // Trova il round attuale per questa posizione
+            const accPerPos = cat.accoppiamenti.filter(a=>a.pos===pos);
+            const roundAttuale = accPerPos[0]?.aRound || roundDefault;
+            return `
+              <div style="border:1px solid var(--bordo);border-radius:10px;margin-bottom:10px;overflow:hidden;">
+                <div style="background:var(--sfondo);padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <div style="background:var(--arancio-bg);color:var(--arancio);font-size:12px;font-weight:800;padding:3px 10px;border-radius:20px;">${pos}° classificato</div>
+                  <div style="font-size:12px;color:var(--testo-lt);">di ogni girone va nel round:</div>
+                  <input value="${roundAttuale}" style="border:1.5px solid var(--bordo);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:700;font-family:inherit;width:120px;"
+                    onchange="ctSetRoundPerPos(${ci},${pos},this.value)">
+                  <div style="font-size:11px;color:var(--testo-xs);margin-left:auto;">
+                    ${gironiNorm.map(g=>`<span style="background:var(--blu-bg);color:var(--blu);padding:2px 7px;border-radius:12px;margin-right:4px;font-size:10px;font-weight:700;">Girone ${g.nome}</span>`).join('')}
+                    → <strong>${roundAttuale}</strong>
+                  </div>
+                </div>
+                <!-- Girone successivo (solo se ha squadre che aspettano) -->
+                ${posIdx<cat.qualificate?`
+                  <div style="padding:8px 14px;font-size:12px;color:var(--testo-lt);">
+                    Il giorno del round <strong>${roundAttuale}</strong>:
+                    <select style="border:1px solid var(--bordo);border-radius:6px;padding:3px 8px;font-size:12px;margin-left:6px;font-family:inherit;"
+                      onchange="ctSetGiornoRound(${ci},'${roundAttuale}',parseInt(this.value))">
+                      ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${ctGetGiornoRound(cat,'${roundAttuale}')===di?'selected':''}>${_ctFmtData(CT.torneo.giorni[di].data)||'Giorno '+(di+1)}</option>`).join('')}
+                    </select>
+                  </div>`:''}
+              </div>`;
+          }).join('')}
+
+          <!-- Squadre che non si qualificano -->
+          ${cat.gironi[0]?.squadre.length > cat.qualificate ? `
+            <div style="border:1px solid var(--bordo-lt);border-radius:10px;padding:10px 14px;background:var(--sfondo);">
+              <div style="font-size:12px;font-weight:700;color:var(--testo-xs);margin-bottom:6px;">⬇️ Non qualificate (${cat.gironi[0].squadre.length - cat.qualificate} per girone)</div>
+              <div style="font-size:12px;color:var(--testo-lt);">Giocano finali consolazione dal ${cat.gironi[0].squadre.length}° posto al ${(cat.gironi[0].squadre.length - cat.qualificate)*cat.gironi.length}° posto</div>
+            </div>` : ''}
         </div>
       </div>`;
   }).join('');
 
   return `
     <div class="card">
-      <div class="card-title">🏟️ Struttura Torneo</div>
+      <div class="card-title">🔀 Accoppiamenti Qualificate</div>
       ${catsHTML}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
-      <button onclick="ctGoStep(2)" class="btn btn-secondary">← Indietro</button>
-      <button onclick="ctGoStep(4);ctGeneraCalendario();" class="btn btn-p">Avanti → Calendario</button>
+      <button onclick="ctGoStep(2)" class="btn btn-secondary">‹ Indietro</button>
+      <button onclick="ctGoStep(4);ctGeneraCal();" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Calendario ›</button>
     </div>`;
 }
 
-function ctSetFinale(ci, tipo) {
-  const cat = CT.categorie[ci];
-  cat._finaleType = tipo;
-  if (tipo === 'nessuna') { cat.finale = []; renderAdminCreaTorneo(); return; }
-  // Calcola max squadre per girone
-  const maxSq = Math.max(...cat.gironi.map(g => g.squadre.split('\n').filter(s=>s.trim()).length));
-  const numGironi = cat.gironi.length;
-  cat.finale = [];
-  if (tipo === 'finali_dirette') {
-    // 1°vs1°, 2°vs2° ecc.
-    for (let pos = 1; pos <= maxSq; pos++) {
-      if (numGironi >= 2) {
-        const sq1 = `${pos}° Girone A`, sq2 = `${pos}° Girone B`;
-        const postoH = pos*2-1, postoB = pos*2;
-        cat.finale.push({ nome: `FINALE ${postoH}°/${postoB}°`, partite: [{ sq1, sq2, ora:'', campo:1 }] });
-      }
-    }
-  } else if (tipo === 'gironi_finali') {
-    const roundNames = ['ARANCIO','VERDE','BLU','GIALLO','BIANCO'];
-    const totSquadre = cat.gironi.reduce((s,g)=>s+g.squadre.split('\n').filter(x=>x.trim()).length, 0);
-    const numRound = Math.ceil(totSquadre / 4);
-    for (let r = 0; r < numRound; r++) {
-      const rn = roundNames[r] || `ROUND ${r+1}`;
-      // 6 partite (girone all'italiana da 4 squadre)
-      cat.finale.push({ nome: rn, partite: [
-        { sq1:'', sq2:'', ora:'', campo:1, _ph:true },
-        { sq1:'', sq2:'', ora:'', campo:1, _ph:true },
-        { sq1:'', sq2:'', ora:'', campo:1, _ph:true },
-        { sq1:'', sq2:'', ora:'', campo:1, _ph:true },
-        { sq1:'', sq2:'', ora:'', campo:1, _ph:true },
-        { sq1:'', sq2:'', ora:'', campo:1, _ph:true },
-      ]});
-    }
-    // Finali per posto
-    for (let pos = 1; pos <= totSquadre; pos+=2) {
-      cat.finale.push({ nome: `FINALE ${pos}°/${pos+1}°`, partite:[{sq1:`${pos}° ${roundNames[0]||'R1'}`, sq2:`${pos}° ${roundNames[1]||'R2'}`, ora:'', campo:1}] });
-    }
-  } else if (tipo === 'semifinali') {
-    cat.finale.push({ nome:'SEMIFINALE 01', partite:[{sq1:'1° Girone A',sq2:'2° Girone B',ora:'',campo:1}] });
-    cat.finale.push({ nome:'SEMIFINALE 02', partite:[{sq1:'1° Girone B',sq2:'2° Girone A',ora:'',campo:2}] });
-    cat.finale.push({ nome:'FINALE 3°/4°', partite:[{sq1:'Perdente SEMIFINALE 01',sq2:'Perdente SEMIFINALE 02',ora:'',campo:1}] });
-    cat.finale.push({ nome:'FINALE 1°/2°', partite:[{sq1:'Vincente SEMIFINALE 01',sq2:'Vincente SEMIFINALE 02',ora:'',campo:1}] });
-  }
-  renderAdminCreaTorneo();
+function ctSetRoundPerPos(ci, pos, round) {
+  const cat=CT.categorie[ci];
+  const gironiNorm=cat.gironi.filter(g=>g.tipo==='normale');
+  // Rimuovi accoppiamenti esistenti per questa pos
+  cat.accoppiamenti=cat.accoppiamenti.filter(a=>a.pos!==pos);
+  // Aggiungi nuovi
+  gironiNorm.forEach(g=>{
+    cat.accoppiamenti.push({pos,daGironeId:g.id,daGironeName:'Girone '+g.nome,aRound:round});
+  });
+}
+function ctSetGiornoRound(ci, round, giorno) {
+  const cat=CT.categorie[ci];
+  cat.accoppiamenti.forEach(a=>{ if(a.aRound===round) a.giorno=giorno; });
+}
+function ctGetGiornoRound(cat, round) {
+  return cat.accoppiamenti.find(a=>a.aRound===round)?.giorno || 1;
 }
 
-// ── STEP 4: Calendario ───────────────────────────────────────
-let _ctCalendario = []; // [{catNome,gironeNome,sq1,sq2,ora,campo,giornata}]
-let _ctFinale = [];     // [{catNome,round,sq1,sq2,ora,campo,giornata}]
+// ─── STEP 4: CALENDARIO ──────────────────────────────────────
+function ctGeneraCal() {
+  _ctCal=[]; _ctFin=[];
+  const campi=CT.torneo.campi||2;
+  const durata=CT.torneo.durata||20;
+  const pausa=CT.torneo.pausa||5;
 
-function ctGeneraCalendario() {
-  _ctCalendario = [];
-  _ctFinale = [];
-  const campi = CT.torneo.campi || 2;
-  const durata = CT.torneo.durata || 20;
-  const pausa = CT.torneo.pausa || 5;
+  CT.categorie.forEach(cat=>{
+    cat.gironi.forEach(g=>{
+      const dayIdx=g.giorno||0;
+      const dayData=CT.torneo.giorni[dayIdx]||{};
+      let oraMin=_ctTimeToMin(dayData.oraInizio||'09:00');
+      const pausaIni=_ctTimeToMin(dayData.pausaInizio||'12:30');
+      const pausaFin=_ctTimeToMin(dayData.pausaFine||'14:00');
+      const dataTxt=dayData.data?_ctFmtData(dayData.data):`Giorno ${dayIdx+1}`;
 
-  let oraMin = 9 * 60; // 09:00
+      // Round robin
+      const sq=g.squadre;
+      const partite=[];
+      for(let i=0;i<sq.length;i++) for(let j=i+1;j<sq.length;j++) partite.push({sq1:sq[i].nome,sq2:sq[j].nome});
 
-  CT.categorie.forEach(cat => {
-    cat.gironi.forEach(g => {
-      const squadre = g.squadre.split('\n').map(s=>s.trim()).filter(Boolean);
-      const partite = [];
-      // Round robin: ogni squadra gioca contro tutte le altre
-      for (let i = 0; i < squadre.length; i++) {
-        for (let j = i+1; j < squadre.length; j++) {
-          partite.push({ sq1: squadre[i], sq2: squadre[j] });
-        }
-      }
-      // Assegna orari su campi disponibili
-      let campo = 1;
-      partite.forEach(p => {
-        const ora = _ctMinToTime(oraMin);
-        _ctCalendario.push({ catNome: cat.nome, gironeNome: 'Girone ' + g.nome,
-          sq1: p.sq1, sq2: p.sq2, ora, campo, giornata: 'Giorno 1' });
-        campo++;
-        if (campo > campi) { campo = 1; oraMin += durata + pausa; }
+      // Ordina per priorità: prima le squadre con prio='prima'
+      partite.sort((a,b)=>{
+        const pA=sq.find(s=>s.nome===a.sq1)?.prio||'normale';
+        const pB=sq.find(s=>s.nome===b.sq1)?.prio||'normale';
+        const ord={prima:0,normale:1,dopo:2};
+        return (ord[pA]||1)-(ord[pB]||1);
+      });
+
+      let campo=1;
+      partite.forEach(p=>{
+        // Salta pausa pranzo
+        if(oraMin>=pausaIni && oraMin<pausaFin) oraMin=pausaFin;
+        _ctCal.push({catNome:cat.nome,gironeNome:'Girone '+g.nome,
+          sq1:p.sq1,sq2:p.sq2,ora:_ctMinToTime(oraMin),campo,giornata:dataTxt,dayIdx});
+        campo++; if(campo>campi){campo=1; oraMin+=durata+pausa;}
       });
     });
-    // Fase finale
-    if (cat.finale && cat.finale.length) {
-      oraMin += 30; // pausa prima delle finali
-      let campo = 1;
-      cat.finale.forEach(round => {
-        round.partite.forEach(p => {
-          const ora = _ctMinToTime(oraMin);
-          _ctFinale.push({ catNome: cat.nome, round: round.nome,
-            sq1: p.sq1||'', sq2: p.sq2||'', ora, campo, giornata: 'Giorno 2' });
-          campo++;
-          if (campo > campi) { campo = 1; oraMin += durata + pausa; }
-        });
-      });
-    }
+
+    // Accoppiamenti fase finale → round con placeholder
+    const rounds={};
+    cat.accoppiamenti.forEach(a=>{
+      if(!rounds[a.aRound]) rounds[a.aRound]={nome:a.aRound,giorno:a.giorno||1,squadre:[]};
+      rounds[a.aRound].squadre.push({pos:a.pos,girone:a.daGironeName});
+    });
+
+    Object.values(rounds).forEach(round=>{
+      // Genera partite round-robin tra i qualificati
+      const sq=round.squadre;
+      const dayIdx=round.giorno||1;
+      const dayData=CT.torneo.giorni[dayIdx]||{};
+      let oraMin=_ctTimeToMin(dayData.oraInizio||'09:00');
+      const pausaIni=_ctTimeToMin(dayData.pausaInizio||'12:30');
+      const pausaFin=_ctTimeToMin(dayData.pausaFine||'14:00');
+      const dataTxt=dayData.data?_ctFmtData(dayData.data):`Giorno ${dayIdx+1}`;
+
+      let campo=1;
+      for(let i=0;i<sq.length;i++) for(let j=i+1;j<sq.length;j++){
+        if(oraMin>=pausaIni&&oraMin<pausaFin) oraMin=pausaFin;
+        const ph1=`${sq[i].pos}° ${sq[i].girone}`;
+        const ph2=`${sq[j].pos}° ${sq[j].girone}`;
+        _ctFin.push({catNome:cat.nome,round:round.nome,sq1:ph1,sq2:ph2,
+          ora:_ctMinToTime(oraMin),campo,giornata:dataTxt,dayIdx});
+        campo++; if(campo>campi){campo=1; oraMin+=durata+pausa;}
+      }
+    });
   });
   renderAdminCreaTorneo();
-}
-
-function _ctMinToTime(min) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
 }
 
 function ctStep4() {
-  if (!_ctCalendario.length) ctGeneraCalendario();
+  if(!_ctCal.length&&!_ctFin.length) ctGeneraCal();
 
-  const gironiHTML = _ctCalendario.length ? `
-    <div style="margin-bottom:16px;">
-      <div style="font-size:13px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:8px;">⚽ Partite Gironi (${_ctCalendario.length})</div>
-      <div style="background:white;border-radius:10px;overflow:hidden;border:1px solid var(--bordo);">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead><tr style="background:var(--sfondo);">
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Ora</th>
-            <th style="padding:8px;border-bottom:1px solid var(--bordo);">Campo</th>
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Girone</th>
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra 1</th>
-            <th style="padding:8px;text-align:center;border-bottom:1px solid var(--bordo);">vs</th>
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra 2</th>
-          </tr></thead>
-          <tbody>
-            ${_ctCalendario.map((p,i) => `
-              <tr style="background:${i%2===0?'white':'var(--sfondo)'};">
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);">
-                  <input value="${p.ora}" style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:12px;"
-                    onchange="_ctCalendario[${i}].ora=this.value">
-                </td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
-                  <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}" style="width:40px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;"
-                    onchange="_ctCalendario[${i}].campo=parseInt(this.value)||1">
-                </td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--testo-lt);">${p.gironeNome}</td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq1}</td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq2}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : '';
-
-  const finaleHTML = _ctFinale.length ? `
-    <div>
-      <div style="font-size:13px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:8px;">🏆 Fase Finale (${_ctFinale.length})</div>
-      <div style="background:white;border-radius:10px;overflow:hidden;border:1px solid var(--bordo);">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead><tr style="background:var(--sfondo);">
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Ora</th>
-            <th style="padding:8px;border-bottom:1px solid var(--bordo);">Campo</th>
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Round</th>
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra 1</th>
-            <th style="padding:8px;text-align:center;border-bottom:1px solid var(--bordo);">vs</th>
-            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra 2</th>
-          </tr></thead>
-          <tbody>
-            ${_ctFinale.map((p,i) => `
-              <tr style="background:${i%2===0?'white':'#fffbeb'};">
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);">
-                  <input value="${p.ora}" style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:12px;"
-                    onchange="_ctFinale[${i}].ora=this.value">
-                </td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
-                  <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}" style="width:40px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;"
-                    onchange="_ctFinale[${i}].campo=parseInt(this.value)||1">
-                </td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--arancio);font-weight:600;">${p.round}</td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq1||'—'}</td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
-                <td style="padding:6px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq2||'—'}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : '';
+  const renderTabella = (partite, titolo, isFinale) => {
+    if(!partite.length) return '';
+    return `
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:6px;">${titolo} (${partite.length})</div>
+        <div style="background:white;border-radius:10px;overflow:hidden;border:1px solid var(--bordo);">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="background:var(--sfondo);">
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);width:60px;">Ora</th>
+              <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:44px;text-align:center;">Campo</th>
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);width:100px;">Giornata</th>
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);width:90px;">${isFinale?'Round':'Girone'}</th>
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra 1</th>
+              <th style="padding:7px 8px;text-align:center;border-bottom:1px solid var(--bordo);width:20px;"></th>
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra 2</th>
+            </tr></thead>
+            <tbody>
+              ${partite.map((p,i)=>{
+                const arr=isFinale?_ctFin:_ctCal;
+                return `<tr style="background:${i%2===0?'white':isFinale?'#fffbeb':'var(--sfondo)'};">
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
+                    <input value="${p.ora}" style="width:58px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;"
+                      onchange="${isFinale?`_ctFin`:`_ctCal`}[${i}].ora=this.value">
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+                    <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}" style="width:40px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+                      onchange="${isFinale?`_ctFin`:`_ctCal`}[${i}].campo=parseInt(this.value)||1">
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--testo-lt);">${p.giornata}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:${isFinale?'var(--arancio)':'var(--blu)'};font-weight:600;">${isFinale?p.round:p.gironeNome}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq1}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq2}</td>
+                </tr>`;}).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  };
 
   return `
     <div class="card">
-      <div style="display:flex;align-items:center;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;margin-bottom:14px;">
         <div class="card-title" style="margin:0;">📅 Calendario Generato</div>
-        <button onclick="ctGeneraCalendario()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">🔄 Rigenera</button>
+        <button onclick="ctGeneraCal()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">🔄 Rigenera</button>
       </div>
-      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--blu);">
-        💡 Puoi modificare orari e campi direttamente nella tabella. Poi clicca Salva.
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--blu);">
+        💡 Puoi modificare orario e campo direttamente nella tabella.
       </div>
-      ${gironiHTML}
-      ${finaleHTML}
+      ${renderTabella(_ctCal,'⚽ Partite Gironi',false)}
+      ${renderTabella(_ctFin,'🔀 Partite Fase Qualificazione / Round Finali',true)}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
-      <button onclick="ctGoStep(3)" class="btn btn-secondary">← Indietro</button>
-      <button onclick="ctGoStep(5)" class="btn btn-p">Avanti → Salva ✅</button>
+      <button onclick="ctGoStep(3)" class="btn btn-secondary">‹ Indietro</button>
+      <button onclick="ctGoStep(5)" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Fase Finale ›</button>
     </div>`;
 }
 
-// ── STEP 5: Salva nel database + Esporta ─────────────────────
-async function ctStep5() {
+// ─── STEP 5: FASE FINALE ─────────────────────────────────────
+function ctStep5() {
+  const catsHTML = CT.categorie.map((cat,ci)=>{
+    if(!cat.finale) cat.finale=[];
+    return `
+      <div style="border:1.5px solid var(--bordo);border-radius:12px;margin-bottom:16px;overflow:hidden;">
+        <div style="background:var(--blu);color:white;padding:10px 16px;font-size:14px;font-weight:700;">${cat.nome}</div>
+        <div style="padding:14px;">
+
+          <!-- Tipo finale rapido -->
+          <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:10px;">Tipo fase finale</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+            <button onclick="ctSetFinale(${ci},'nessuna')" style="padding:10px;border-radius:8px;border:2px solid ${!cat.finale.length?'var(--blu)':'var(--bordo)'};background:${!cat.finale.length?'var(--blu-bg)':'white'};cursor:pointer;text-align:left;font-size:13px;">
+              🏅 Nessuna finale (solo classifica)
+            </button>
+            <button onclick="ctSetFinale(${ci},'semifinali')" style="padding:10px;border-radius:8px;border:2px solid ${cat._ft==='semifinali'?'var(--blu)':'var(--bordo)'};background:${cat._ft==='semifinali'?'var(--blu-bg)':'white'};cursor:pointer;text-align:left;font-size:13px;">
+              🎯 Semifinali → Finale 1°/2° e 3°/4°
+            </button>
+            <button onclick="ctSetFinale(${ci},'finali_posto')" style="padding:10px;border-radius:8px;border:2px solid ${cat._ft==='finali_posto'?'var(--blu)':'var(--bordo)'};background:${cat._ft==='finali_posto'?'var(--blu-bg)':'white'};cursor:pointer;text-align:left;font-size:13px;">
+              🥇 Finali per posto (1°vs1°, 2°vs2°...)
+            </button>
+            <button onclick="ctSetFinale(${ci},'custom')" style="padding:10px;border-radius:8px;border:2px solid ${cat._ft==='custom'?'var(--blu)':'var(--bordo)'};background:${cat._ft==='custom'?'var(--blu-bg)':'white'};cursor:pointer;text-align:left;font-size:13px;">
+              ✏️ Personalizzata (aggiungo io i round)
+            </button>
+          </div>
+
+          <!-- Round finali -->
+          ${cat.finale.length ? `
+            <div style="font-size:12px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:8px;">Round finali</div>
+            ${cat.finale.map((r,ri)=>`
+              <div style="border:1px solid var(--bordo);border-radius:8px;margin-bottom:8px;overflow:hidden;">
+                <div style="background:var(--arancio-bg);padding:8px 12px;display:flex;align-items:center;gap:8px;">
+                  <input value="${r.nome}" style="border:1.5px solid var(--bordo);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:700;font-family:inherit;flex:1;max-width:200px;"
+                    onchange="CT.categorie[${ci}].finale[${ri}].nome=this.value">
+                  <div style="font-size:11px;color:var(--testo-lt);">${r.partite.length} partite</div>
+                  <button onclick="CT.categorie[${ci}].finale.splice(${ri},1);renderAdminCreaTorneo()"
+                    style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;margin-left:auto;">✕</button>
+                </div>
+                ${r.partite.map((p,pi)=>`
+                  <div style="padding:6px 12px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--bordo-lt);font-size:12px;">
+                    <input value="${p.sq1}" placeholder="Squadra 1 / Placeholder" style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
+                      onchange="CT.categorie[${ci}].finale[${ri}].partite[${pi}].sq1=this.value">
+                    <span style="color:var(--testo-xs);">vs</span>
+                    <input value="${p.sq2}" placeholder="Squadra 2 / Placeholder" style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
+                      onchange="CT.categorie[${ci}].finale[${ri}].partite[${pi}].sq2=this.value">
+                    <input value="${p.ora||''}" placeholder="Ora" style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                      onchange="CT.categorie[${ci}].finale[${ri}].partite[${pi}].ora=this.value">
+                    <input type="number" value="${p.campo||1}" min="1" style="width:44px;border:1px solid var(--bordo);border-radius:5px;padding:4px 4px;font-size:12px;text-align:center;font-family:inherit;"
+                      onchange="CT.categorie[${ci}].finale[${ri}].partite[${pi}].campo=parseInt(this.value)||1">
+                    <button onclick="CT.categorie[${ci}].finale[${ri}].partite.splice(${pi},1);renderAdminCreaTorneo()"
+                      style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:14px;">✕</button>
+                  </div>`).join('')}
+                <div style="padding:6px 12px;border-top:1px solid var(--bordo-lt);">
+                  <button onclick="CT.categorie[${ci}].finale[${ri}].partite.push({sq1:'',sq2:'',ora:'',campo:1});renderAdminCreaTorneo()"
+                    style="background:none;border:none;color:var(--blu);font-size:12px;font-weight:700;cursor:pointer;">+ Partita</button>
+                </div>
+              </div>`).join('')}
+            <button onclick="CT.categorie[${ci}].finale.push({nome:'FINALE',partite:[{sq1:'',sq2:'',ora:'',campo:1}]});renderAdminCreaTorneo()"
+              style="width:100%;border:1.5px dashed var(--bordo);border-radius:8px;padding:8px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;background:var(--sfondo);margin-top:4px;">+ Aggiungi round</button>
+          ` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
   return `
     <div class="card">
-      <div class="card-title">✅ Pronto per salvare!</div>
-      <div style="background:var(--verde-bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:13px;">
-        <div style="font-weight:700;color:var(--verde);font-size:15px;margin-bottom:8px;">🏆 ${CT.torneo.nome}</div>
-        <div style="color:var(--testo-lt);">📍 ${CT.torneo.luogo||'—'} &nbsp;|&nbsp; 📅 ${CT.torneo.data||'—'} &nbsp;|&nbsp; ⏱️ ${CT.torneo.durata} min</div>
-        <div style="margin-top:8px;">
-          ${CT.categorie.map(cat => {
-            const totSq = cat.gironi.reduce((s,g)=>s+g.squadre.split('\n').filter(x=>x.trim()).length, 0);
-            return `<div>📁 ${cat.nome}: ${cat.gironi.length} gironi, ${totSq} squadre${cat.finale.length?' + '+cat.finale.length+' round finali':''}</div>`;
-          }).join('')}
-        </div>
-        <div style="margin-top:6px;">⚽ ${_ctCalendario.length} partite gironi &nbsp;|&nbsp; 🏅 ${_ctFinale.length} partite finali</div>
+      <div class="card-title">🏅 Fase Finale</div>
+      ${catsHTML}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;">
+      <button onclick="ctGoStep(4)" class="btn btn-secondary">‹ Indietro</button>
+      <button onclick="ctGoStep(6)" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Salva ›</button>
+    </div>`;
+}
+
+function ctSetFinale(ci,tipo) {
+  const cat=CT.categorie[ci];
+  cat._ft=tipo;
+  if(tipo==='nessuna') { cat.finale=[]; renderAdminCreaTorneo(); return; }
+  const rounds=_ctGetRoundsUnici();
+  if(tipo==='semifinali') {
+    cat.finale=[
+      {nome:'SEMIFINALE 01',partite:[{sq1:'1° ARANCIO',sq2:'2° VERDE',ora:'',campo:1}]},
+      {nome:'SEMIFINALE 02',partite:[{sq1:'1° VERDE',sq2:'2° ARANCIO',ora:'',campo:2}]},
+      {nome:'FINALE 3°/4°',partite:[{sq1:'Perdente SEMIFINALE 01',sq2:'Perdente SEMIFINALE 02',ora:'',campo:1}]},
+      {nome:'FINALE 1°/2°',partite:[{sq1:'Vincente SEMIFINALE 01',sq2:'Vincente SEMIFINALE 02',ora:'',campo:1}]},
+    ];
+  } else if(tipo==='finali_posto') {
+    const maxSq=Math.max(...cat.gironi.map(g=>g.squadre.length));
+    cat.finale=[];
+    for(let pos=1;pos<=maxSq;pos++) {
+      const pH=pos*2-1,pB=pos*2;
+      cat.finale.push({nome:`FINALE ${pH}°/${pB}°`,partite:[{sq1:`${pos}° ARANCIO`,sq2:`${pos}° VERDE`,ora:'',campo:1}]});
+    }
+  } else if(tipo==='custom') {
+    cat.finale=[{nome:'FINALE 1°/2°',partite:[{sq1:'',sq2:'',ora:'',campo:1}]}];
+  }
+  renderAdminCreaTorneo();
+}
+
+function _ctGetRoundsUnici() {
+  const rounds=new Set();
+  CT.categorie.forEach(cat=>cat.accoppiamenti.forEach(a=>rounds.add(a.aRound)));
+  return [...rounds];
+}
+
+// ─── STEP 6: SALVA ───────────────────────────────────────────
+async function ctStep6() {
+  const totSq=CT.categorie.reduce((s,c)=>s+c.gironi.reduce((ss,g)=>ss+g.squadre.length,0),0);
+  const totFin=CT.categorie.reduce((s,c)=>s+c.finale.reduce((ss,r)=>ss+r.partite.length,0),0);
+
+  return `
+    <div class="card">
+      <div class="card-title">✅ Riepilogo e Salva</div>
+      <div style="background:var(--verde-bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:800;color:var(--verde);font-size:16px;margin-bottom:8px;">🏆 ${CT.torneo.nome||'—'}</div>
+        <div style="font-size:13px;color:var(--testo-lt);margin-bottom:4px;">📍 ${CT.torneo.luogo||'—'} &nbsp;|&nbsp; ⏱️ ${CT.torneo.durata} min &nbsp;|&nbsp; 🏟️ ${CT.torneo.campi} campi</div>
+        <div style="font-size:13px;color:var(--testo-lt);margin-bottom:8px;">📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
+        ${CT.categorie.map(cat=>{
+          const totSqC=cat.gironi.reduce((s,g)=>s+g.squadre.length,0);
+          return `<div style="margin-top:6px;padding:8px 10px;background:white;border-radius:8px;font-size:12px;">
+            <strong>${cat.nome}</strong> — ${cat.gironi.length} gironi, ${totSqC} squadre${cat.finale.length?' + '+cat.finale.length+' round finali':''}
+          </div>`;
+        }).join('')}
+        <div style="margin-top:10px;font-size:13px;color:var(--testo-lt);">⚽ ${_ctCal.length} partite gironi &nbsp;|&nbsp; 🔀 ${_ctFin.length} partite round &nbsp;|&nbsp; 🏅 ${totFin} partite finale</div>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <button onclick="ctSalvaDatabase()" style="background:var(--verde);color:white;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;">
+        <button onclick="ctSalvaDB()" style="background:var(--verde);color:white;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">
           💾 Salva nel Database
         </button>
-        <button onclick="ctEsportaExcel()" style="background:var(--blu);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
-          📊 Esporta Excel (per importazione)
-        </button>
-        <button onclick="ctStampaPDF()" style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;color:var(--testo);">
-          🖨️ Stampa Calendario PDF
-        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button onclick="ctExportExcel()" style="background:var(--blu);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
+            📊 Esporta Excel
+          </button>
+          <button onclick="ctStampaPDF()" style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
+            🖨️ Stampa PDF
+          </button>
+        </div>
       </div>
-      <div id="ct-save-log" style="margin-top:12px;"></div>
+      <div id="ct-log" style="margin-top:12px;"></div>
     </div>
-    <div style="display:flex;justify-content:flex-start;margin-top:12px;">
-      <button onclick="ctGoStep(4)" class="btn btn-secondary">← Modifica calendario</button>
+    <div style="margin-top:12px;">
+      <button onclick="ctGoStep(5)" class="btn btn-secondary">‹ Indietro</button>
     </div>`;
 }
 
-async function ctSalvaDatabase() {
-  const log = document.getElementById('ct-save-log');
-  if (log) log.innerHTML = '<div style="color:var(--testo-lt);font-size:13px;">⏳ Salvataggio in corso...</div>';
+async function ctSalvaDB() {
+  const log=document.getElementById('ct-log');
+  if(log) log.innerHTML='<div style="color:var(--testo-lt);font-size:13px;">⏳ Salvataggio...</div>';
   try {
-    // 1. Crea torneo
-    const torneo = await dbSaveTorneo({ nome: CT.torneo.nome, data: CT.torneo.data, attivo: true });
-    STATE.tornei = await dbGetTornei();
-    STATE.activeTorneo = torneo.id;
+    const torneo=await dbSaveTorneo({nome:CT.torneo.nome,data:CT.torneo.giorni[0]?.data||'',attivo:true});
+    STATE.tornei=await dbGetTornei();
+    STATE.activeTorneo=torneo.id;
 
-    for (const cat of CT.categorie) {
-      // 2. Crea categoria
-      const catSaved = await dbSaveCategoria({ nome: cat.nome, qualificate: cat.qualificate, formato: 'gironi', ordine: 0, torneo_id: torneo.id });
+    for(const cat of CT.categorie) {
+      const catDB=await dbSaveCategoria({nome:cat.nome,qualificate:cat.qualificate,formato:'gironi',ordine:0,torneo_id:torneo.id});
 
-      for (const g of cat.gironi) {
-        const squadre = g.squadre.split('\n').map(s=>s.trim()).filter(Boolean);
-        // 3. Crea girone
-        const girone = await dbSaveGirone({ categoria_id: catSaved.id, nome: 'Girone ' + g.nome });
-        // 4. Crea squadre
-        const sqIds = [];
-        for (const sqNome of squadre) {
-          let sq = (await dbGetSquadre(torneo.id)).find(s=>s.nome.toLowerCase()===sqNome.toLowerCase());
-          if (!sq) sq = await dbSaveSquadra({ nome: sqNome, torneo_id: torneo.id });
-          sqIds.push(sq.id);
+      for(const g of cat.gironi) {
+        const gironeDB=await dbSaveGirone({categoria_id:catDB.id,nome:'Girone '+g.nome});
+        const sqAll=await dbGetSquadre(torneo.id);
+        const sqIds=[];
+        for(const sq of g.squadre) {
+          let s=sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
+          if(!s) s=await dbSaveSquadra({nome:sq.nome,torneo_id:torneo.id});
+          sqIds.push(s.id);
         }
-        // 5. Assegna squadre al girone e genera partite
-        await dbSetGironeSquadre(girone.id, sqIds);
-        await dbGeneraPartite(girone.id, sqIds);
-
-        // 6. Aggiorna orari partite dal calendario generato
-        const { data: partiteDB } = await db.from('partite').select('id,home_id,away_id').eq('girone_id', girone.id);
-        const sqMap = {};
-        (await dbGetSquadre(torneo.id)).forEach(s => sqMap[s.nome.toLowerCase()] = s.id);
-
-        for (const calP of _ctCalendario.filter(p => p.catNome===cat.nome && p.gironeNome==='Girone '+g.nome)) {
-          const homeId = sqMap[calP.sq1.toLowerCase()];
-          const awayId = sqMap[calP.sq2.toLowerCase()];
-          const dbP = partiteDB?.find(p => p.home_id===homeId && p.away_id===awayId);
-          if (dbP) {
-            await db.from('partite').update({ orario: calP.ora, campo: String(calP.campo), giorno: calP.giornata }).eq('id', dbP.id);
-          }
+        await dbSetGironeSquadre(gironeDB.id,sqIds);
+        await dbGeneraPartite(gironeDB.id,sqIds);
+        // Aggiorna orari
+        const {data:partiteDB}=await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
+        const sqAll2=await dbGetSquadre(torneo.id);
+        const sqMap={};
+        sqAll2.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+        for(const p of _ctCal.filter(p=>p.catNome===cat.nome&&p.gironeNome==='Girone '+g.nome)) {
+          const hId=sqMap[p.sq1.toLowerCase()],aId=sqMap[p.sq2.toLowerCase()];
+          const dbP=partiteDB?.find(x=>x.home_id===hId&&x.away_id===aId);
+          if(dbP) await db.from('partite').update({orario:p.ora,campo:String(p.campo),giorno:p.giornata}).eq('id',dbP.id);
         }
       }
 
-      // 7. Fase finale — inserisci nel knockout
-      if (cat.finale && cat.finale.length) {
-        const sqMap2 = {};
-        (await dbGetSquadre(torneo.id)).forEach(s => sqMap2[s.nome.toLowerCase()] = s.id);
-        for (const round of cat.finale) {
-          for (const finP of _ctFinale.filter(p => p.catNome===cat.nome && p.round===round.nome)) {
-            const homeId = sqMap2[finP.sq1?.toLowerCase()] || null;
-            const awayId = sqMap2[finP.sq2?.toLowerCase()] || null;
-            await db.from('knockout').insert({
-              categoria_id: catSaved.id, round_name: round.nome,
-              home_id: homeId, away_id: awayId,
-              note_home: homeId ? null : (finP.sq1||null),
-              note_away: awayId ? null : (finP.sq2||null),
-              orario: finP.ora||null, campo: finP.campo||1,
-              giocata: false, gol_home: 0, gol_away: 0
-            });
-          }
-        }
+      // Knockout — round accoppiamenti + fase finale
+      const allKO=[..._ctFin.filter(p=>p.catNome===cat.nome),...cat.finale.flatMap(r=>r.partite.map(p=>({...p,round:r.nome,catNome:cat.nome,giornata:'Finale'})))];
+      const sqAll3=await dbGetSquadre(torneo.id);
+      const sqMap3={};
+      sqAll3.forEach(s=>sqMap3[s.nome.toLowerCase()]=s.id);
+      for(const p of allKO) {
+        const hId=sqMap3[p.sq1?.toLowerCase()]||null;
+        const aId=sqMap3[p.sq2?.toLowerCase()]||null;
+        await db.from('knockout').insert({
+          categoria_id:catDB.id,round_name:p.round||p.catNome,
+          home_id:hId,away_id:aId,
+          note_home:hId?null:(p.sq1||null),note_away:aId?null:(p.sq2||null),
+          orario:p.ora||null,campo:p.campo||1,giocata:false,gol_home:0,gol_away:0
+        });
       }
     }
 
-    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
-    STATE.activeCat = STATE.categorie[0]?.id || null;
+    STATE.categorie=await dbGetCategorie(STATE.activeTorneo);
+    STATE.activeCat=STATE.categorie[0]?.id||null;
     renderCatBar(); renderTorneoBar();
-
-    if (log) log.innerHTML = `<div style="background:var(--verde-bg);border-radius:8px;padding:12px;color:var(--verde);font-weight:700;font-size:14px;">
-      ✅ Torneo salvato con successo!<br>
-      <span style="font-size:12px;font-weight:400;">Vai su Classifiche o Risultati per vedere il torneo.</span>
-    </div>`;
+    if(log) log.innerHTML=`<div style="background:var(--verde-bg);border-radius:8px;padding:12px;color:var(--verde);font-weight:700;">✅ Torneo "${CT.torneo.nome}" creato con successo!</div>`;
     toast('✅ Torneo creato!');
   } catch(e) {
     console.error(e);
-    if (log) log.innerHTML = `<div style="background:var(--rosso-bg);border-radius:8px;padding:12px;color:var(--rosso);font-size:13px;">❌ Errore: ${e.message}</div>`;
-    toast('❌ Errore salvataggio: ' + e.message);
+    if(log) log.innerHTML=`<div style="background:var(--rosso-bg);border-radius:8px;padding:12px;color:var(--rosso);font-size:13px;">❌ Errore: ${e.message}</div>`;
+    toast('❌ '+e.message);
   }
 }
 
-function ctEsportaExcel() {
-  if (typeof XLSX === 'undefined') {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-    s.onload = () => _ctEsportaExcelCore();
-    document.head.appendChild(s);
-  } else {
-    _ctEsportaExcelCore();
-  }
+function ctExportExcel() {
+  if(typeof XLSX==='undefined') {
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload=_ctExcel; document.head.appendChild(s);
+  } else _ctExcel();
 }
 
-function _ctEsportaExcelCore() {
-  const wb = XLSX.utils.book_new();
-  // CATEGORIE
-  const catRows = [['nome','qualificate','formato','ordine']];
-  CT.categorie.forEach((cat,i) => catRows.push([cat.nome, cat.qualificate, 'gironi', i+1]));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(catRows), 'CATEGORIE');
-  // GIRONI
-  const girRows = [['categoria','girone','squadra','ordine']];
-  CT.categorie.forEach(cat => {
-    cat.gironi.forEach(g => {
-      g.squadre.split('\n').map(s=>s.trim()).filter(Boolean).forEach((sq,i) => {
-        girRows.push([cat.nome, 'Girone '+g.nome, sq, i+1]);
-      });
-    });
-  });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(girRows), 'GIRONI');
-  // PARTITE_FASE1
-  const p1Rows = [['categoria','girone','squadra_casa','squadra_trasferta','gol_casa','gol_trasferta','campo','orario','giornata']];
-  _ctCalendario.forEach(p => p1Rows.push([p.catNome, p.gironeNome, p.sq1, p.sq2, '', '', p.campo, p.ora, p.giornata]));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(p1Rows), 'PARTITE_FASE1');
-  // FASE_FINALE
-  const ffRows = [['categoria','round','squadra_casa','squadra_trasferta','gol_casa','gol_trasferta','campo','orario','giornata']];
-  _ctFinale.forEach(p => ffRows.push([p.catNome, p.round, p.sq1, p.sq2, '', '', p.campo, p.ora, p.giornata]));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ffRows), 'FASE_FINALE');
+function _ctExcel() {
+  const wb=XLSX.utils.book_new();
+  const catRows=[['nome','qualificate','formato','ordine']];
+  CT.categorie.forEach((c,i)=>catRows.push([c.nome,c.qualificate,'gironi',i+1]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(catRows),'CATEGORIE');
 
-  const nome = (CT.torneo.nome || 'torneo').replace(/\s+/g, '_');
-  XLSX.writeFile(wb, nome + '_sistema.xlsx');
+  const girRows=[['categoria','girone','squadra','ordine']];
+  CT.categorie.forEach(c=>c.gironi.forEach(g=>g.squadre.forEach((sq,i)=>girRows.push([c.nome,'Girone '+g.nome,sq.nome,i+1]))));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(girRows),'GIRONI');
+
+  const p1Rows=[['categoria','girone','squadra_casa','squadra_trasferta','gol_casa','gol_trasferta','campo','orario','giornata']];
+  _ctCal.forEach(p=>p1Rows.push([p.catNome,p.gironeNome,p.sq1,p.sq2,'','',p.campo,p.ora,p.giornata]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(p1Rows),'PARTITE_FASE1');
+
+  const ffRows=[['categoria','round','squadra_casa','squadra_trasferta','gol_casa','gol_trasferta','campo','orario','giornata']];
+  _ctFin.forEach(p=>ffRows.push([p.catNome,p.round,p.sq1,p.sq2,'','',p.campo,p.ora,p.giornata]));
+  CT.categorie.forEach(c=>c.finale.forEach(r=>r.partite.forEach(p=>ffRows.push([c.nome,r.nome,p.sq1||'',p.sq2||'','','',p.campo||1,p.ora||'','Finale']))));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ffRows),'FASE_FINALE');
+
+  XLSX.writeFile(wb,(CT.torneo.nome||'torneo').replace(/\s+/g,'_')+'_sistema.xlsx');
   toast('📊 Excel esportato!');
 }
 
 function ctStampaPDF() {
-  const durata = CT.torneo.durata || 20;
-  const nome = CT.torneo.nome || 'Torneo';
-  const luogo = CT.torneo.luogo || '';
+  const nome=CT.torneo.nome||'Torneo';
+  const luogo=CT.torneo.luogo||'';
+  const durata=CT.torneo.durata||20;
 
-  // Gironi header
-  const gironiHTML = CT.categorie.map(cat => {
-    return `<div style="margin-bottom:12px;">
+  const gironiHdr=CT.categorie.map(cat=>`
+    <div style="margin-bottom:10px;">
       <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-size:13px;padding:5px 12px;font-style:italic;text-transform:uppercase;">${cat.nome}</div>
       <table style="width:100%;border-collapse:collapse;">
         <tr>${cat.gironi.map(g=>`<td style="border:1px solid #b8c8e8;padding:8px 12px;vertical-align:top;font-size:11px;">
-          <div style="font-weight:800;font-size:13px;color:#1a3a6e;margin-bottom:4px;font-style:italic;">GIRONE ${g.nome}</div>
-          ${g.squadre.split('\n').filter(s=>s.trim()).map(s=>`<div style="padding:3px 0;border-bottom:1px solid #eef0f5;font-weight:600;">${s}</div>`).join('')}
+          <div style="font-weight:800;font-size:12px;color:#1a3a6e;margin-bottom:4px;font-style:italic;">GIRONE ${g.nome}</div>
+          ${g.squadre.map(s=>`<div style="padding:3px 0;border-bottom:1px solid #eef0f5;font-weight:600;">${s.nome}</div>`).join('')}
         </td>`).join('')}</tr>
       </table>
-    </div>`;
-  }).join('');
+    </div>`).join('');
 
-  // Tabella partite
-  let counter = 0;
-  const giorniPartite = {};
-  [..._ctCalendario, ..._ctFinale.map(p=>({...p,gironeNome:p.round,isFinale:true}))].forEach(p => {
-    const g = p.giornata || 'Giorno 1';
-    if (!giorniPartite[g]) giorniPartite[g] = [];
-    giorniPartite[g].push(p);
-  });
+  // Raggruppa per giornata
+  const allP=[..._ctCal.map(p=>({...p,tipo:'girone'})),..._ctFin.map(p=>({...p,tipo:'round'}))];
+  CT.categorie.forEach(cat=>cat.finale.forEach(r=>r.partite.forEach(p=>allP.push({...p,catNome:cat.nome,gironeNome:r.nome,round:r.nome,giornata:'Finale',tipo:'finale'}))));
+  const perGiorno={};
+  allP.forEach(p=>{ const g=p.giornata||'—'; if(!perGiorno[g])perGiorno[g]=[]; perGiorno[g].push(p); });
 
-  const partiteHTML = Object.entries(giorniPartite).map(([giorno, partite]) => `
-    <div style="margin-bottom:20px;">
+  let cnt=0;
+  const partiteHdr=Object.entries(perGiorno).map(([giorno,partite])=>`
+    <div style="margin-bottom:18px;">
       <div style="background:#1a3a6e;color:#fff;padding:8px 14px;font-weight:800;font-size:14px;font-style:italic;text-transform:uppercase;">${giorno} — 1X${durata} MIN — ${luogo}</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr style="background:#e8eef8;">
-          <th style="padding:6px 8px;border:1px solid #b8c8e8;width:30px;">N°</th>
-          <th style="padding:6px 8px;border:1px solid #b8c8e8;width:55px;">ORA</th>
-          <th style="padding:6px 8px;border:1px solid #b8c8e8;width:40px;">CAMPO</th>
-          <th style="padding:6px 8px;border:1px solid #b8c8e8;width:90px;">GRUPPO</th>
+          <th style="padding:6px 8px;border:1px solid #b8c8e8;">N°</th>
+          <th style="padding:6px 8px;border:1px solid #b8c8e8;">ORA</th>
+          <th style="padding:6px 8px;border:1px solid #b8c8e8;">CAMPO</th>
+          <th style="padding:6px 8px;border:1px solid #b8c8e8;">GIRONE/ROUND</th>
           <th style="padding:6px 8px;border:1px solid #b8c8e8;">SQUADRA 1</th>
           <th style="padding:6px 8px;border:1px solid #b8c8e8;">SQUADRA 2</th>
-          <th style="padding:6px 8px;border:1px solid #b8c8e8;width:70px;text-align:center;">RIS</th>
+          <th style="padding:6px 8px;border:1px solid #b8c8e8;text-align:center;">RIS</th>
         </tr></thead>
-        <tbody>
-          ${partite.map((p,i) => { counter++;
-            return `<tr style="background:${p.isFinale?'#fffbeb':(i%2===0?'#fff':'#f4f7fd')};">
-              <td style="padding:5px 8px;border:1px solid #d0daf0;text-align:center;color:#999;font-weight:700;">${counter}</td>
-              <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:700;">${p.ora||''}</td>
-              <td style="padding:5px 8px;border:1px solid #d0daf0;text-align:center;">C${p.campo||1}</td>
-              <td style="padding:5px 8px;border:1px solid #d0daf0;font-size:10px;">${p.gironeNome||''}</td>
-              <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:600;">${p.sq1||'—'}</td>
-              <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:600;">${p.sq2||'—'}</td>
-              <td style="padding:5px 8px;border:1px solid #d0daf0;">
-                <div style="display:flex;align-items:center;justify-content:center;gap:3px;">
-                  <span style="display:inline-block;width:24px;height:18px;border:1.5px solid #aaa;border-radius:3px;"></span>
-                  <span style="color:#aaa;font-size:10px;">—</span>
-                  <span style="display:inline-block;width:24px;height:18px;border:1.5px solid #aaa;border-radius:3px;"></span>
-                </div>
-              </td>
-            </tr>`;}).join('')}
+        <tbody>${partite.map((p,i)=>{ cnt++;
+          return `<tr style="background:${p.tipo==='finale'?'#fffbeb':i%2===0?'#fff':'#f4f7fd'};">
+            <td style="padding:5px 8px;border:1px solid #d0daf0;text-align:center;color:#999;font-weight:700;">${cnt}</td>
+            <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:700;">${p.ora||''}</td>
+            <td style="padding:5px 8px;border:1px solid #d0daf0;text-align:center;">C${p.campo||1}</td>
+            <td style="padding:5px 8px;border:1px solid #d0daf0;font-size:10px;">${p.gironeNome||p.round||''}</td>
+            <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:600;">${p.sq1||'—'}</td>
+            <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:600;">${p.sq2||'—'}</td>
+            <td style="padding:5px 8px;border:1px solid #d0daf0;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:3px;">
+                <span style="display:inline-block;width:24px;height:18px;border:1.5px solid #aaa;border-radius:3px;"></span>
+                <span style="color:#aaa;font-size:10px;">—</span>
+                <span style="display:inline-block;width:24px;height:18px;border:1.5px solid #aaa;border-radius:3px;"></span>
+              </div>
+            </td>
+          </tr>`; }).join('')}
         </tbody>
       </table>
     </div>`).join('');
 
-  const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
-    <title>${nome}</title>
-    <style>
-      body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:20px;background:#fff;color:#111;}
-      @media print{.no-print{display:none!important;}@page{margin:.8cm;size:A4;}}
-    </style></head><body>
-    <div class="no-print" style="margin-bottom:16px;">
+  const win=window.open('','_blank','width=1000,height=800');
+  win.document.write(`<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>${nome}</title>
+    <style>body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:20px;background:#fff;color:#111;}
+    @media print{.np{display:none!important;}@page{margin:.8cm;size:A4;}}</style></head><body>
+    <div class="np" style="margin-bottom:14px;">
       <button onclick="window.print()" style="background:#1a3a6e;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Stampa / Salva PDF</button>
     </div>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
       <tr>
         <td style="background:#1a3a6e;color:#fff;padding:14px 18px;" colspan="2">
-          <div style="font-size:26px;font-weight:900;font-style:italic;color:#FFD700;text-transform:uppercase;">${nome}</div>
-        </td>
-        <td style="background:#1a3a6e;color:#fff;padding:14px 18px;text-align:right;white-space:nowrap;">
-          <div>📍 ${luogo}</div>
-          <div>📅 ${CT.torneo.data||'—'}</div>
+          <div style="font-size:24px;font-weight:900;font-style:italic;color:#FFD700;text-transform:uppercase;">${nome}</div>
+          <div style="font-size:13px;margin-top:4px;">📍 ${luogo} &nbsp;|&nbsp; 📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
         </td>
       </tr>
     </table>
     <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-style:italic;font-size:15px;padding:6px 14px;text-transform:uppercase;margin-bottom:10px;">GIRONI</div>
-    ${gironiHTML}
-    <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-style:italic;font-size:15px;padding:6px 14px;text-transform:uppercase;margin-bottom:10px;margin-top:16px;">PROGRAMMA PARTITE</div>
-    ${partiteHTML}
-    </body></html>`;
-
-  const win = window.open('','_blank','width=1000,height=800');
-  win.document.write(html);
+    ${gironiHdr}
+    <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-style:italic;font-size:15px;padding:6px 14px;text-transform:uppercase;margin:14px 0 10px;">PROGRAMMA PARTITE</div>
+    ${partiteHdr}
+    </body></html>`);
   win.document.close();
   toast('🖨️ PDF aperto!');
 }
 
-// ============================================================
-//  TV MODE
-// ============================================================
-let _tvState = { active: false, section: 'classifiche', catIndex: 0, scrollTimer: null, catTimer: null, clockTimer: null };
-
-function openTV() {
-  const tv = document.getElementById('tv-mode'); if (!tv) return;
-  _tvState.active = true; _tvState.catIndex = 0;
-  tv.classList.add('active');
-  _tvRenderCatBar(); _tvShowCat(0); _tvStartClock(); _tvStartAutoscroll();
+// ─── HELPERS ─────────────────────────────────────────────────
+function _ctTimeToMin(t) {
+  if(!t) return 540;
+  const parts=String(t).split(':');
+  return parseInt(parts[0]||9)*60+parseInt(parts[1]||0);
 }
-
-function closeTV() {
-  _tvState.active = false;
-  const tv = document.getElementById('tv-mode'); if (tv) tv.classList.remove('active');
-  clearInterval(_tvState.scrollTimer); clearInterval(_tvState.catTimer); clearInterval(_tvState.clockTimer);
-  const prog = document.getElementById('tv-scroll-progress'); if (prog) prog.style.width = '0%';
+function _ctMinToTime(min) {
+  const h=Math.floor(min/60),m=min%60;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
 }
-
-function _tvCategorieFiltrate() { return STATE.categorie; }
-
-function _tvRenderCatBar() {
-  const bar = document.getElementById('tv-cat-bar'); if (!bar) return;
-  const cats = _tvCategorieFiltrate();
-  bar.innerHTML = cats.map((c, i) => `<button class="tv-cat-btn ${i === _tvState.catIndex ? 'active' : ''}" onclick="_tvShowCat(${i})">${_abbreviaNomeCat(c.nome)}</button>`).join('');
-}
-
-async function _tvShowCat(idx) {
-  _tvState.catIndex = idx; _tvRenderCatBar();
-  const cats = _tvCategorieFiltrate(); if (!cats[idx]) return;
-  const cat = cats[idx]; const oggi = _tvGetOggi();
-  const content = document.getElementById('tv-content'); if (!content) return;
-  content.innerHTML = '<div style="color:rgba(255,255,255,0.3);padding:40px;text-align:center;">Caricamento...</div>';
+function _ctFmtData(iso) {
+  if(!iso) return '';
   try {
-    if (_tvState.section === 'classifiche') await _tvRenderClassifiche(cat, oggi, content);
-    else await _tvRenderRisultati(cat, oggi, content);
-    content.scrollTop = 0;
-  } catch(e) { console.error(e); }
-}
-
-function _tvGetOggi() { return _trovaGiornataOggi(STATE._giornateDisponibili || []); }
-
-async function _tvRenderClassifiche(cat, oggi, container) {
-  const gironi = await getGironiWithData(cat.id);
-  let html = '';
-  if (oggi) html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;letter-spacing:.04em;">📅 ${oggi} — Classifica in tempo reale</div>`;
-  html += '<div class="tv-gironi-grid">';
-  for (const g of gironi) {
-    const cl = calcGironeClassifica(g);
-    html += `<div class="tv-girone-card"><div class="tv-girone-title">${g.nome}<span style="font-size:11px;font-weight:600;opacity:.5;margin-left:auto;">${g.partite.filter(p=>p.giocata).length}/${g.partite.length}</span></div><table class="tv-standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>Pt</th></tr></thead><tbody>`;
-    cl.forEach((row, idx) => {
-      const q = idx < (cat.qualificate || 1);
-      html += `<tr class="${q ? 'qualifies' : ''}"><td><span class="${q ? 'q-dot' : 'nq-dot'}"></span></td><td>${logoHTML(row.sq, 'sm')}</td><td>${row.sq.nome}</td><td style="color:rgba(255,255,255,0.5)">${row.g}</td><td class="tv-pts">${row.pts}</td></tr>`;
-    });
-    html += '</tbody></table></div>';
-  }
-  html += '</div>';
-  container.innerHTML = html;
-}
-
-async function _tvRenderRisultati(cat, oggi, container) {
-  const gironi = await getGironiWithData(cat.id);
-  let tuttePartite = [];
-  for (const g of gironi) for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome });
-  if (oggi) { const f = tuttePartite.filter(p => p.giorno === oggi); if (f.length) tuttePartite = f; }
-  tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
-  const giocate = tuttePartite.filter(p => p.giocata); const daFare = tuttePartite.filter(p => !p.giocata);
-  let html = '';
-  if (oggi) html += `<div style="background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);border-radius:10px;padding:8px 16px;margin-bottom:20px;font-size:13px;color:#fb923c;font-weight:600;">📅 ${oggi}</div>`;
-  const renderTvMatch = (p, pending) => {
-    const hm = p.home; const am = p.away;
-    return `<div class="tv-match-card"><div class="tv-match-header">${p.orario?'🕐 '+p.orario:''}${p.campo?' · '+p.campo:''}<span style="margin-left:auto">${p._girone}</span></div><div class="tv-match-body"><div class="tv-match-team">${hm?.logo?`<img src="${hm.logo}" class="tv-team-logo-lg">`:`<div class="tv-team-avatar-lg">${(hm?.nome||'?').substring(0,2).toUpperCase()}</div>`}<div class="tv-team-name">${hm?.nome||'?'}</div></div><div class="tv-score-box">${pending?`<span class="tv-score-pending">vs</span>`:`<span class="tv-score">${p.gol_home}</span><span class="tv-score-sep">—</span><span class="tv-score">${p.gol_away}</span>`}</div><div class="tv-match-team">${am?.logo?`<img src="${am.logo}" class="tv-team-logo-lg">`:`<div class="tv-team-avatar-lg">${(am?.nome||'?').substring(0,2).toUpperCase()}</div>`}<div class="tv-team-name">${am?.nome||'?'}</div></div></div></div>`;
-  };
-  if (giocate.length) { html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">✅ Risultati</div><div class="tv-results-grid">`; giocate.forEach(p => html += renderTvMatch(p, false)); html += '</div>'; }
-  if (daFare.length) { html += `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 12px;">🕐 Programma</div><div class="tv-results-grid">`; daFare.forEach(p => html += renderTvMatch(p, true)); html += '</div>'; }
-  if (!giocate.length && !daFare.length) html += '<div style="color:rgba(255,255,255,0.3);text-align:center;padding:60px;">Nessuna partita</div>';
-  container.innerHTML = html;
-}
-
-function _tvSwitchSection(section, btn) {
-  _tvState.section = section;
-  document.querySelectorAll('.tv-nav-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  _tvShowCat(_tvState.catIndex);
-}
-
-function _tvStartClock() {
-  const update = () => {
-    const now = new Date();
-    const el = document.getElementById('tv-clock'); if (el) el.textContent = now.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
-    const del = document.getElementById('tv-date-str'); if (del) del.textContent = now.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' });
-  };
-  update(); _tvState.clockTimer = setInterval(update, 1000);
-}
-
-function _tvStartAutoscroll() {
-  const SCROLL_INTERVAL = 30000; let elapsed = 0; const TICK = 200;
-  clearInterval(_tvState.scrollTimer);
-  _tvState.scrollTimer = setInterval(() => {
-    elapsed += TICK;
-    const pct = (elapsed / SCROLL_INTERVAL) * 100;
-    const prog = document.getElementById('tv-scroll-progress'); if (prog) prog.style.width = Math.min(pct, 100) + '%';
-    const content = document.getElementById('tv-content');
-    if (content) {
-      content.scrollTop += 2;
-      if (content.scrollTop + content.clientHeight >= content.scrollHeight - 10) elapsed = SCROLL_INTERVAL;
-    }
-    if (elapsed >= SCROLL_INTERVAL) {
-      elapsed = 0; if (prog) prog.style.width = '0%';
-      const cats = _tvCategorieFiltrate();
-      _tvShowCat((_tvState.catIndex + 1) % cats.length);
-    }
-  }, TICK);
-}
-
-// ============================================================
-//  🎮 SIMULAZIONE
-// ============================================================
-const _SIM_PWD = '19880204';
-let _simUnlocked = false;
-
-function toggleSimulazione() {
-  if (_simUnlocked) { _renderSimPanel(); return; }
-  const pwd = prompt('🔐 Inserisci la password per la modalità simulazione:');
-  if (!pwd) return;
-  if (pwd !== _SIM_PWD) { alert('❌ Password errata'); return; }
-  _simUnlocked = true; toast('✅ Modalità simulazione attivata!'); _renderSimPanel();
-}
-
-function _renderSimPanel() {
-  const existing = document.getElementById('sim-panel'); if (existing) { existing.remove(); return; }
-  const panel = document.createElement('div'); panel.id = 'sim-panel';
-  panel.style.cssText = 'position:fixed;bottom:80px;right:16px;z-index:8000;background:#0f172a;border:2px solid #f59e0b;border-radius:14px;padding:16px;width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:var(--font-display,sans-serif);';
-  panel.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">🎮 SIMULAZIONE</div>
-      <button onclick="document.getElementById('sim-panel').remove()" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit;">✕</button>
-    </div>
-    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">Genera risultati casuali per testare il sistema. Solo per sviluppo!</div>
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      <button onclick="simulaRisultati()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;">⚽ SIMULA RISULTATI</button>
-      <button onclick="simulaRisultatiGirone()" style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚽ Simula solo girone attivo</button>
-      <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
-      <button onclick="resetRisultati()" style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 RESET — Azzera tutti i risultati</button>
-      <button onclick="resetRisultatiGirone()" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Reset solo girone attivo</button>
-    </div>
-    <div id="sim-log" style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.4);max-height:80px;overflow-y:auto;line-height:1.6;"></div>`;
-  document.body.appendChild(panel);
-}
-
-function _simLog(msg) { const log = document.getElementById('sim-log'); if (log) { log.innerHTML += msg + '<br>'; log.scrollTop = log.scrollHeight; } }
-
-function _golCasuale() {
-  const r = Math.random();
-  if (r < 0.15) return 0; if (r < 0.35) return 1; if (r < 0.55) return 2;
-  if (r < 0.70) return 3; if (r < 0.82) return 4; if (r < 0.91) return 5;
-  if (r < 0.96) return 6; return 7;
-}
-
-async function simulaRisultati() {
-  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
-  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
-  _simLog('⏳ Avvio simulazione multi-passaggio...');
-  try {
-    const catId = STATE.activeCat || STATE.categorie[0]?.id;
-    let totale = 0; const MAX = 6;
-    for (let pass = 1; pass <= MAX; pass++) {
-      if (catId) {
-        await verificaEGeneraTriangolari(catId);
-        // Forza svuotamento cache DOPO la risoluzione placeholder
-        if (typeof _cacheClear === 'function') _cacheClear();
-        if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
-      }
-      const gironi = await getGironiWithData(catId); let nuovi = 0;
-      for (const g of gironi) {
-        const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
-        if (!daGiocare.length) continue;
-        _simLog('Pass ' + pass + ' — ' + g.nome + ': ' + daGiocare.length + ' partite');
-        for (const p of daGiocare) {
-          const gh = _golCasuale(), ga = _golCasuale();
-          await dbSavePartita({ id:p.id, girone_id:p.girone_id, gol_home:gh, gol_away:ga, giocata:true, inserito_da:'🤖 Simulazione' });
-          nuovi++; totale++;
-          _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
-        }
-      }
-      if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
-    }
-    if (catId) await verificaEGeneraTriangolari(catId);
-    _simLog('\n✅ ' + totale + ' risultati simulati!');
-    toast('✅ ' + totale + ' risultati simulati!');
-    await renderCurrentSection();
-  } catch(e) { console.error(e); _simLog('❌ Errore: ' + e.message); toast('Errore: ' + e.message); }
-}
-
-async function simulaRisultatiGirone() {
-  if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
-  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
-  try {
-    const gironi = await getGironiWithData(STATE.activeCat); let totale = 0;
-    for (const g of gironi) {
-      const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
-      if (!daGiocare.length) continue;
-      _simLog('📋 Simulo ' + g.nome + ' (' + daGiocare.length + ' partite)...');
-      for (const p of daGiocare) {
-        const gh = _golCasuale(), ga = _golCasuale();
-        await dbSavePartita({ id: p.id, girone_id: p.girone_id, gol_home: gh, gol_away: ga, giocata: true, inserito_da: '🤖 Simulazione' });
-        totale++;
-      }
-      break;
-    }
-    _simLog('✅ ' + totale + ' risultati simulati!');
-    toast('✅ ' + totale + ' risultati simulati!');
-    if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
-    await renderCurrentSection();
-  } catch(e) { _simLog('❌ ' + e.message); }
-}
-
-async function resetRisultati() {
-  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
-  if (!confirm('⚠️ Azzerare TUTTI i risultati del torneo? Questa operazione non può essere annullata.')) return;
-  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
-  _simLog('⏳ Reset in corso...');
-  try {
-    const cats = STATE.activeCat ? [STATE.activeCat] : STATE.categorie.map(c => c.id); let totale = 0;
-    for (const catId of cats) {
-      const gironi = await dbGetGironi(catId);
-      for (const g of gironi) { const { error } = await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id); if (!error) totale++; }
-      await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('categoria_id', catId);
-      const gironiIds = gironi.map(g => g.id);
-      if (gironiIds.length) {
-        const { data: partite } = await db.from('partite').select('id').in('girone_id', gironiIds);
-        if (partite?.length) await db.from('marcatori').delete().in('partita_id', partite.map(p => p.id));
-      }
-    }
-    if (typeof _cacheClear === 'function') _cacheClear();
-    _simLog('✅ Reset completato!'); toast('✅ Tutti i risultati azzerati!'); await renderCurrentSection();
-  } catch(e) { console.error(e); _simLog('❌ Errore: ' + e.message); toast('Errore reset: ' + e.message); }
-}
-
-async function resetRisultatiGirone() {
-  if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
-  if (!confirm('⚠️ Azzerare i risultati della categoria attiva?')) return;
-  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
-  try {
-    const gironi = await dbGetGironi(STATE.activeCat);
-    for (const g of gironi) await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
-    await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false }).eq('categoria_id', STATE.activeCat);
-    if (typeof _cacheClear === 'function') _cacheClear();
-    _simLog('✅ Reset categoria completato!'); toast('✅ Risultati categoria azzerati!'); await renderCurrentSection();
-  } catch(e) { _simLog('❌ ' + e.message); }
-}
-
-// ── MODIFICA CAMPO GIORNATA ──────────────────────────────────
-function mostraEditCampoGiornata(giorno) {
-  const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-  const div = document.getElementById('edit-campo-' + keyId); if (!div) return;
-  if (div.style.display !== 'none') { div.style.display='none'; return; }
-  const esistente = (STATE._campiGiornate||{})[giorno] || {};
-  div.innerHTML = `
-    <div style="background:white;border:1px solid var(--bordo);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;">
-      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">📍 Luogo partite — ${giorno}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input id="edit-nome-${keyId}" class="form-input" style="flex:1;min-width:120px;font-size:13px;" placeholder="Nome campo (es. Campo Comunale)" value="${esistente.nome_campo||''}">
-        <input id="edit-addr-${keyId}" class="form-input" style="flex:2;min-width:200px;font-size:13px;" placeholder="Indirizzo (es. Via Roma 1, Trino)" value="${esistente.indirizzo||''}">
-        <button onclick="salvaCampoGiornata('${giorno}')" style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">✓ Salva</button>
-      </div>
-    </div>`;
-  div.style.display = 'block';
-}
-
-async function salvaCampoGiornata(giorno) {
-  const keyId = giorno.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-  const nomeCampo = document.getElementById('edit-nome-' + keyId)?.value?.trim() || '';
-  const indirizzo = document.getElementById('edit-addr-' + keyId)?.value?.trim() || '';
-  try {
-    await dbSaveCampoGiornata(STATE.activeTorneo, giorno, nomeCampo, indirizzo);
-    if (!STATE._campiGiornate) STATE._campiGiornate = {};
-    STATE._campiGiornate[giorno] = { nome_campo: nomeCampo, indirizzo };
-    toast('✅ Luogo salvato!');
-    if (STATE.currentSection === 'risultati') await renderRisultati();
-    await renderAdminRisultati();
-  } catch(e) { toast('❌ Errore: ' + e.message); }
+    return new Date(iso+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  } catch(e) { return iso; }
 }
