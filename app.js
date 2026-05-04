@@ -1840,8 +1840,6 @@ function _ctHtmlStep1() {
         </div>
         <div class="form-group"><label class="form-label">Luogo</label>
           <input class="form-input" id="ct-luogo" value="${t.luogo}" placeholder="es. Andora (SV)"></div>
-        <div class="form-group"><label class="form-label">N° Campi</label>
-          <input class="form-input" type="number" id="ct-campi" value="${t.campi}" min="1" max="10"></div>
         <div class="form-group"><label class="form-label">Durata partita (min)</label>
           <input class="form-input" type="number" id="ct-durata" value="${t.durata}" min="5" max="90"></div>
         <div class="form-group"><label class="form-label">Pausa tra partite (min)</label>
@@ -1891,7 +1889,14 @@ function ctSalva1EAvanti() {
 //  STEP 2: CATEGORIE
 // ══════════════════════════════════════════════════════════════
 function _ctNuovaCat(nome) {
-  return { nome, gironi:[], calendario:[], accoppiamenti:[], squadreExtra:[], gironiFinali:[], calendarioFinali:[], finali:[], _fatto:false };
+  // oraPerGiorno: array, uno per ogni giorno del torneo
+  const oraPerGiorno = CT.torneo.giorni.map(g => ({
+    oraInizio: g.oraInizio||'09:00',
+    pausaIni: g.pausaIni||'12:30',
+    pausaFine: g.pausaFine||'14:00',
+    campi: g.campi||2
+  }));
+  return { nome, gironi:[], calendario:[], accoppiamenti:[], squadreExtra:[], gironiFinali:[], calendarioFinali:[], finali:[], oraPerGiorno, _fatto:false };
 }
 
 function _ctHtmlStep2() {
@@ -2121,7 +2126,44 @@ function _ctFaseGironi(cat, ci) {
     </div>`;
   }).join('');
 
+  // Assicura oraPerGiorno inizializzato
+  if (!cat.oraPerGiorno || cat.oraPerGiorno.length !== CT.torneo.giorni.length) {
+    cat.oraPerGiorno = CT.torneo.giorni.map(g => ({
+      oraInizio:g.oraInizio||'09:00', pausaIni:g.pausaIni||'12:30',
+      pausaFine:g.pausaFine||'14:00', campi:g.campi||2
+    }));
+  }
+
+  const oraCatHTML = `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">⏰ Orari e Campi per questa Categoria</div>
+      <div style="font-size:12px;color:var(--testo-lt);margin-bottom:10px;">Personalizza orari e campi per questa categoria — sovrascrivono i valori globali del giorno.</div>
+      ${CT.torneo.giorni.map((g,di)=>`
+        <div style="border:1px solid var(--bordo);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${di%2===0?'white':'var(--sfondo)'};">
+          <div style="font-size:12px;font-weight:700;color:var(--blu);margin-bottom:8px;">📅 ${g.data?_ctFmtData(g.data):'Giorno '+(di+1)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Inizio</label>
+              <input type="time" value="${cat.oraPerGiorno[di]?.oraInizio||'09:00'}"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].oraInizio=this.value"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Pausa pranzo</label>
+              <input type="time" value="${cat.oraPerGiorno[di]?.pausaIni||'12:30'}"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausaIni=this.value"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Ripresa</label>
+              <input type="time" value="${cat.oraPerGiorno[di]?.pausaFine||'14:00'}"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausaFine=this.value"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">N° Campi</label>
+              <input type="number" value="${cat.oraPerGiorno[di]?.campi||2}" min="1" max="10"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].campi=parseInt(this.value)||1"></div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+
   return `
+    ${oraCatHTML}
     <div class="card">
       <div style="display:flex;align-items:center;margin-bottom:12px;">
         <div class="card-title" style="margin:0;">👕 Gironi e Squadre</div>
@@ -2195,11 +2237,14 @@ function _ctAssegnaOrari(lista, cat) {
   const perGiorno = {};
   lista.forEach(p => { const k=p._giornoIdx??0; if(!perGiorno[k])perGiorno[k]=[]; perGiorno[k].push(p); });
   Object.entries(perGiorno).forEach(([dayIdx,partite]) => {
-    const dayData = CT.torneo.giorni[parseInt(dayIdx)]||{};
-    const campi = dayData.campi || 2; // campi specifici per questo giorno
-    let oraMin = _ctTimeToMin(dayData.oraInizio||'09:00');
-    const pausaIni = _ctTimeToMin(dayData.pausaIni||'12:30');
-    const pausaFine = _ctTimeToMin(dayData.pausaFine||'14:00');
+    const di = parseInt(dayIdx);
+    // Usa oraPerGiorno della categoria se disponibile, altrimenti globals del giorno
+    const catDay = cat?.oraPerGiorno?.[di];
+    const dayData = CT.torneo.giorni[di]||{};
+    const campi = catDay?.campi ?? dayData.campi ?? 2;
+    let oraMin = _ctTimeToMin(catDay?.oraInizio ?? dayData.oraInizio ?? '09:00');
+    const pausaIni = _ctTimeToMin(catDay?.pausaIni ?? dayData.pausaIni ?? '12:30');
+    const pausaFine = _ctTimeToMin(catDay?.pausaFine ?? dayData.pausaFine ?? '14:00');
     partite.sort((a,b)=>a.ordine-b.ordine);
     let campo=1;
     partite.forEach(p => {
