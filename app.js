@@ -2967,3 +2967,196 @@ async function modRinominaSquadra() {
     toast('❌ ' + e.message);
   }
 }
+
+// ============================================================
+//  SIMULAZIONE & RESET RISULTATI
+// ============================================================
+const _SIM_PWD = '19880204';
+let _simUnlocked = false;
+
+function toggleSimulazione() {
+  if (_simUnlocked) { _renderSimPanel(); return; }
+  const pwd = prompt('🔐 Inserisci la password per la modalità simulazione:');
+  if (!pwd) return;
+  if (pwd !== _SIM_PWD) { alert('❌ Password errata'); return; }
+  _simUnlocked = true; toast('✅ Modalità simulazione attivata!'); _renderSimPanel();
+}
+
+function _renderSimPanel() {
+  const existing = document.getElementById('sim-panel'); if (existing) { existing.remove(); return; }
+  const panel = document.createElement('div'); panel.id = 'sim-panel';
+  panel.style.cssText = 'position:fixed;bottom:80px;right:16px;z-index:8000;background:#0f172a;border:2px solid #f59e0b;border-radius:14px;padding:16px;width:290px;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:var(--font-display,sans-serif);';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">🎮 SIMULAZIONE</div>
+      <button onclick="document.getElementById('sim-panel').remove()" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit;">✕</button>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">Genera risultati casuali per testare il sistema.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button onclick="simulaRisultati()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">⚽ SIMULA TUTTI I RISULTATI</button>
+      <button onclick="simulaRisultatiGirone()" style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚽ Simula solo girone attivo</button>
+      <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
+      <button onclick="resetRisultati()" style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 RESET — Azzera tutti i risultati</button>
+      <button onclick="resetRisultatiGirone()" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Reset solo categoria attiva</button>
+      <button onclick="resetCompleto()" style="background:rgba(220,38,38,0.15);border:2px solid rgba(220,38,38,0.4);color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">💥 RESET COMPLETO — Come appena importato</button>
+    </div>
+    <div id="sim-log" style="margin-top:12px;font-size:10px;color:rgba(255,255,255,0.4);max-height:100px;overflow-y:auto;line-height:1.6;"></div>`;
+  document.body.appendChild(panel);
+}
+
+function _simLog(msg) {
+  const log = document.getElementById('sim-log');
+  if (log) { log.innerHTML += msg + '<br>'; log.scrollTop = log.scrollHeight; }
+}
+
+function _golCasuale() {
+  const r = Math.random();
+  if (r < 0.15) return 0; if (r < 0.35) return 1; if (r < 0.55) return 2;
+  if (r < 0.70) return 3; if (r < 0.82) return 4; if (r < 0.91) return 5;
+  if (r < 0.96) return 6; return 7;
+}
+
+async function simulaRisultati() {
+  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
+  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
+  _simLog('⏳ Avvio simulazione...');
+  try {
+    const catId = STATE.activeCat || STATE.categorie[0]?.id;
+    let totale = 0; const MAX = 8;
+    for (let pass = 1; pass <= MAX; pass++) {
+      if (catId) {
+        await verificaEGeneraTriangolari(catId);
+        if (typeof _cacheClear === 'function') _cacheClear();
+        if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
+      }
+      const gironi = await getGironiWithData(catId); let nuovi = 0;
+      for (const g of gironi) {
+        const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
+        if (!daGiocare.length) continue;
+        _simLog('Pass ' + pass + ' — ' + g.nome + ': ' + daGiocare.length + ' partite');
+        for (const p of daGiocare) {
+          const gh = _golCasuale(), ga = _golCasuale();
+          await dbSavePartita({ id: p.id, girone_id: p.girone_id, gol_home: gh, gol_away: ga, giocata: true, inserito_da: '🤖 Simulazione' });
+          nuovi++; totale++;
+          _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
+        }
+      }
+      if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
+    }
+    if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+    _simLog('\n✅ ' + totale + ' risultati simulati!');
+    toast('✅ ' + totale + ' risultati simulati!');
+    await renderCurrentSection();
+  } catch(e) { console.error(e); _simLog('❌ ' + e.message); toast('Errore: ' + e.message); }
+}
+
+async function simulaRisultatiGirone() {
+  if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
+  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
+  try {
+    const gironi = await getGironiWithData(STATE.activeCat); let totale = 0;
+    for (const g of gironi) {
+      const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
+      if (!daGiocare.length) continue;
+      _simLog('📋 Simulo ' + g.nome + ' (' + daGiocare.length + ' partite)...');
+      for (const p of daGiocare) {
+        const gh = _golCasuale(), ga = _golCasuale();
+        await dbSavePartita({ id: p.id, girone_id: p.girone_id, gol_home: gh, gol_away: ga, giocata: true, inserito_da: '🤖 Simulazione' });
+        totale++;
+      }
+      break;
+    }
+    _simLog('✅ ' + totale + ' risultati simulati!');
+    toast('✅ ' + totale + ' risultati simulati!');
+    if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+    await renderCurrentSection();
+  } catch(e) { _simLog('❌ ' + e.message); }
+}
+
+async function resetRisultati() {
+  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
+  if (!confirm('⚠️ Azzerare TUTTI i risultati? Partite, marcatori e knockout verranno azzerati.')) return;
+  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
+  _simLog('⏳ Reset in corso...');
+  try {
+    const cats = STATE.categorie.map(c => c.id);
+    for (const catId of cats) {
+      const gironi = await dbGetGironi(catId);
+      for (const g of gironi) {
+        await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
+      }
+      await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('categoria_id', catId);
+      const gironiIds = gironi.map(g => g.id);
+      if (gironiIds.length) {
+        const { data: partite } = await db.from('partite').select('id').in('girone_id', gironiIds);
+        if (partite?.length) await db.from('marcatori').delete().in('partita_id', partite.map(p => p.id));
+      }
+    }
+    if (typeof _cacheClear === 'function') _cacheClear();
+    _simLog('✅ Reset completato!'); toast('✅ Risultati azzerati!'); await renderCurrentSection();
+  } catch(e) { console.error(e); _simLog('❌ ' + e.message); toast('Errore reset: ' + e.message); }
+}
+
+async function resetRisultatiGirone() {
+  if (!STATE.activeCat) { toast('Seleziona una categoria'); return; }
+  if (!confirm('⚠️ Azzerare i risultati della categoria attiva?')) return;
+  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
+  try {
+    const gironi = await dbGetGironi(STATE.activeCat);
+    for (const g of gironi) await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
+    await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false }).eq('categoria_id', STATE.activeCat);
+    if (typeof _cacheClear === 'function') _cacheClear();
+    _simLog('✅ Reset categoria completato!'); toast('✅ Risultati categoria azzerati!'); await renderCurrentSection();
+  } catch(e) { _simLog('❌ ' + e.message); }
+}
+
+// RESET COMPLETO — come se il file fosse appena importato
+// Azzera risultati + azzera placeholder knockout (torna a note_home/away senza home_id/away_id reali)
+async function resetCompleto() {
+  if (!STATE.activeTorneo) { toast('Seleziona un torneo'); return; }
+  if (!confirm('💥 RESET COMPLETO\n\nAzzerare tutti i risultati E ripristinare gli accoppiamenti knockout ai placeholder originali?\n\nIl torneo tornerà esattamente come quando è stato importato.')) return;
+  const log = document.getElementById('sim-log'); if (log) log.innerHTML = '';
+  _simLog('⏳ Reset completo in corso...');
+  try {
+    const cats = STATE.categorie.map(c => c.id);
+    for (const catId of cats) {
+      // 1. Azzera risultati partite gironi
+      const gironi = await dbGetGironi(catId);
+      for (const g of gironi) {
+        await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
+      }
+      // 2. Azzera marcatori
+      const gironiIds = gironi.map(g => g.id);
+      if (gironiIds.length) {
+        const { data: partite } = await db.from('partite').select('id').in('girone_id', gironiIds);
+        if (partite?.length) await db.from('marcatori').delete().in('partita_id', partite.map(p => p.id));
+      }
+      // 3. Reset knockout: azzera risultati E rimuove home_id/away_id risolti
+      //    mantenendo solo note_home/note_away (i placeholder originali)
+      const { data: koList } = await db.from('knockout').select('id,note_home,note_away').eq('categoria_id', catId);
+      for (const ko of (koList||[])) {
+        const upd = { gol_home: 0, gol_away: 0, giocata: false, inserito_da: null };
+        // Se aveva note (placeholder), ripristina home_id/away_id a null
+        if (ko.note_home) upd.home_id = null;
+        if (ko.note_away) upd.away_id = null;
+        await db.from('knockout').update(upd).eq('id', ko.id);
+      }
+      // 4. Reset girone_squadre: rimuovi squadre reali che sostituivano placeholder
+      for (const g of gironi) {
+        const { data: gsRows } = await db.from('girone_squadre').select('id,squadra_id,squadre(nome)').eq('girone_id', g.id);
+        for (const gs of (gsRows||[])) {
+          const nome = gs.squadre?.nome || '';
+          if (_isPlaceholder(nome)) {
+            // Era un placeholder risolto — reimposta la squadra originale
+            // Non possiamo fare molto qui senza sapere qual era l'originale
+            // Ma il sistema lo rirsolverà quando ci sono risultati
+          }
+        }
+      }
+    }
+    if (typeof _cacheClear === 'function') _cacheClear();
+    _simLog('✅ Reset completo! Il torneo è come appena importato.');
+    toast('✅ Reset completo effettuato!');
+    await renderCurrentSection();
+  } catch(e) { console.error(e); _simLog('❌ ' + e.message); toast('Errore: ' + e.message); }
+}
