@@ -1755,7 +1755,7 @@ window.addEventListener('DOMContentLoaded', init);
 let CT = {
   step: 1,           // step globale 1-4
   subStep: null,     // {catIdx, fase: 'gironi'|'calendario'|'accoppiamenti'|'gironifinali'|'finali'}
-  torneo: { nome:'', luogo:'', campi:2, durata:20, pausa:5, giorni:[{data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00'}] },
+  torneo: { nome:'', luogo:'', durata:20, pausa:5, giorni:[{data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2}] },
   categorie: []
   // cat: { nome, gironi:[{nome,giorno,squadre:[{nome,prio}]}], calendario:[{gironeNome,sq1,sq2,ora,campo,giornata,ordine}],
   //        accoppiamenti:[{pos,gironeNome,aGirone,giorno}], squadreExtra:[{nome,aGirone}],
@@ -1786,7 +1786,7 @@ async function renderAdminCreaTorneo() {
 
 function ctReset() {
   if (!confirm('Cancellare tutto?')) return;
-  CT = { step:1, subStep:null, torneo:{nome:'',luogo:'',campi:2,durata:20,pausa:5,giorni:[{data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00'}]}, categorie:[] };
+  CT = { step:1, subStep:null, torneo:{nome:'',luogo:'',durata:20,pausa:5,giorni:[{data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2}]}, categorie:[] };
   renderAdminCreaTorneo();
 }
 
@@ -1816,7 +1816,7 @@ function _ctHtmlStep1() {
         <span style="background:var(--blu);color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;">📅 Giorno ${i+1}</span>
         ${t.giorni.length>1?`<button onclick="ctRimuoviGiorno(${i})" style="margin-left:auto;background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;">
         <div class="form-group"><label class="form-label">Data</label>
           <input class="form-input" type="date" id="ctg-data-${i}" value="${g.data}"></div>
         <div class="form-group"><label class="form-label">Inizio</label>
@@ -1825,6 +1825,8 @@ function _ctHtmlStep1() {
           <input class="form-input" type="time" id="ctg-pi-${i}" value="${g.pausaIni||'12:30'}"></div>
         <div class="form-group"><label class="form-label">Ripresa</label>
           <input class="form-input" type="time" id="ctg-pf-${i}" value="${g.pausaFine||'14:00'}"></div>
+        <div class="form-group"><label class="form-label">N° Campi</label>
+          <input class="form-input" type="number" id="ctg-campi-${i}" value="${g.campi||2}" min="1" max="10"></div>
       </div>
     </div>`).join('');
 
@@ -1860,7 +1862,7 @@ function _ctHtmlStep1() {
 
 function ctAggiungiGiorno() {
   _ctSalvaGiorni();
-  CT.torneo.giorni.push({data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00'});
+  CT.torneo.giorni.push({data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2});
   renderAdminCreaTorneo();
 }
 function ctRimuoviGiorno(i) { _ctSalvaGiorni(); CT.torneo.giorni.splice(i,1); renderAdminCreaTorneo(); }
@@ -1870,6 +1872,7 @@ function _ctSalvaGiorni() {
     const oi=document.getElementById('ctg-ini-'+i); if(oi) CT.torneo.giorni[i].oraInizio=oi.value;
     const pi=document.getElementById('ctg-pi-'+i); if(pi) CT.torneo.giorni[i].pausaIni=pi.value;
     const pf=document.getElementById('ctg-pf-'+i); if(pf) CT.torneo.giorni[i].pausaFine=pf.value;
+    const ca=document.getElementById('ctg-campi-'+i); if(ca) CT.torneo.giorni[i].campi=parseInt(ca.value)||2;
   });
 }
 function ctSalva1EAvanti() {
@@ -1877,7 +1880,6 @@ function ctSalva1EAvanti() {
   if (!n) { toast('Inserisci il nome del torneo'); return; }
   CT.torneo.nome=n;
   CT.torneo.luogo=document.getElementById('ct-luogo')?.value?.trim()||'';
-  CT.torneo.campi=parseInt(document.getElementById('ct-campi')?.value)||2;
   CT.torneo.durata=parseInt(document.getElementById('ct-durata')?.value)||20;
   CT.torneo.pausa=parseInt(document.getElementById('ct-pausa')?.value)||5;
   _ctSalvaGiorni();
@@ -2108,13 +2110,12 @@ function _ctFaseGironi(cat, ci) {
           </div>`).join('')}
         <div style="display:flex;gap:6px;margin-top:8px;">
           <input id="sq-in-${ci}-${gi}" class="form-input" style="flex:1;font-size:13px;" placeholder="Nome squadra..."
-            onkeydown="if(event.key==='Enter'){CT.categorie[${ci}].gironi[${gi}].squadre.push({nome:this.value.trim(),prio:'normale'});this.value='';renderAdminCreaTorneo();}">
-          <button onclick="var inp=document.getElementById('sq-in-${ci}-${gi}');if(inp&&inp.value.trim()){CT.categorie[${ci}].gironi[${gi}].squadre.push({nome:inp.value.trim(),prio:'normale'});inp.value='';renderAdminCreaTorneo();}"
-            class="btn btn-p btn-sm">+ Aggiungi</button>
+            onkeydown="if(event.key==='Enter')ctAddSquadra(${ci},${gi})">
+          <button onclick="ctAddSquadra(${ci},${gi})" class="btn btn-p btn-sm">+ Aggiungi</button>
         </div>
         <textarea id="bulk-${ci}-${gi}" class="form-input" rows="3" style="font-size:12px;resize:vertical;margin-top:6px;"
           placeholder="Incolla lista (una per riga):&#10;RHODENSE&#10;CHISOLA&#10;BORGORATTI"></textarea>
-        <button onclick="var ta=document.getElementById('bulk-${ci}-${gi}');ta.value.split('\n').map(s=>s.trim()).filter(Boolean).forEach(n=>CT.categorie[${ci}].gironi[${gi}].squadre.push({nome:n,prio:'normale'}));ta.value='';renderAdminCreaTorneo()"
+        <button onclick="ctBulkAggiungi(${ci},${gi})"
           style="margin-top:4px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);cursor:pointer;">📋 Aggiungi lista</button>
       </div>
     </div>`;
@@ -2189,13 +2190,13 @@ function _ctVaiCalendario(ci) {
 }
 
 function _ctAssegnaOrari(lista, cat) {
-  const campi = CT.torneo.campi || 2;
   const durata = CT.torneo.durata || 20;
   const pausa = CT.torneo.pausa || 5;
   const perGiorno = {};
   lista.forEach(p => { const k=p._giornoIdx??0; if(!perGiorno[k])perGiorno[k]=[]; perGiorno[k].push(p); });
   Object.entries(perGiorno).forEach(([dayIdx,partite]) => {
     const dayData = CT.torneo.giorni[parseInt(dayIdx)]||{};
+    const campi = dayData.campi || 2; // campi specifici per questo giorno
     let oraMin = _ctTimeToMin(dayData.oraInizio||'09:00');
     const pausaIni = _ctTimeToMin(dayData.pausaIni||'12:30');
     const pausaFine = _ctTimeToMin(dayData.pausaFine||'14:00');
@@ -2203,7 +2204,6 @@ function _ctAssegnaOrari(lista, cat) {
     let campo=1;
     partite.forEach(p => {
       if (p._oraManuale && p.ora) {
-        // Ora già inserita manualmente — non sovrascrivere, ma aggiorna oraMin
         oraMin = _ctTimeToMin(p.ora) + durata + pausa;
         campo = (p.campo||1) % campi + 1;
         return;
@@ -2898,6 +2898,37 @@ function ctStampaPDF() {
 // ─── HELPERS ─────────────────────────────────────────────────
 function _ctTimeToMin(t){if(!t)return 540;const p=String(t).split(':');return parseInt(p[0]||9)*60+parseInt(p[1]||0);}
 function _ctMinToTime(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
+
+function ctAddSquadra(ci, gi) {
+  const inp = document.getElementById('sq-in-'+ci+'-'+gi);
+  if (!inp || !inp.value.trim()) return;
+  CT.categorie[ci].gironi[gi].squadre.push({nome:inp.value.trim(), prio:'normale'});
+  inp.value = '';
+  renderAdminCreaTorneo();
+  setTimeout(()=>{ const el=document.getElementById('sq-in-'+ci+'-'+gi); if(el)el.focus(); },120);
+}
+
+function ctBulkAggiungi(ci, gi) {
+  const ta = document.getElementById('bulk-'+ci+'-'+gi);
+  if (!ta) return;
+  const nomi = ta.value.split(/[\n,;]/).map(s=>s.trim()).filter(Boolean);
+  if (!nomi.length) { toast('Nessuna squadra trovata'); return; }
+  nomi.forEach(nome => CT.categorie[ci].gironi[gi].squadre.push({nome, prio:'normale'}));
+  ta.value = '';
+  toast('✅ '+nomi.length+' squadre aggiunte!');
+  renderAdminCreaTorneo();
+}
+
+function ctRimuoviGirone(ci, gi) {
+  CT.categorie[ci].gironi.splice(gi,1);
+  renderAdminCreaTorneo();
+}
+
+function ctRimuoviCat(ci) {
+  if (!confirm('Eliminare questa categoria?')) return;
+  CT.categorie.splice(ci,1);
+  renderAdminCreaTorneo();
+}
 function _ctFmtData(iso){if(!iso)return '';try{return new Date(iso+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}catch(e){return iso;}}
 
 
