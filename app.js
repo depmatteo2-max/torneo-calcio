@@ -2620,12 +2620,12 @@ function _ctFaseFinali(cat, ci) {
           style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>
       </div>
       <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <input value="${f.sq1}" placeholder="Squadra 1 (es. 1° ARANCIO)"
-          style="flex:1;min-width:120px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
+        <input value="${f.sq1}" placeholder="es. 1° GIRONE A oppure Vincente SEMIFINALE 01"
+          style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
           onchange="CT.categorie[${ci}].finali[${fi}].sq1=this.value">
         <span style="color:var(--testo-xs);font-size:12px;">vs</span>
-        <input value="${f.sq2}" placeholder="Squadra 2 (es. 1° VERDE)"
-          style="flex:1;min-width:120px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
+        <input value="${f.sq2}" placeholder="es. 1° GIRONE B oppure Vincente SEMIFINALE 02"
+          style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
           onchange="CT.categorie[${ci}].finali[${fi}].sq2=this.value">
         <input value="${f.ora||''}" placeholder="Ora"
           style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
@@ -2651,7 +2651,12 @@ function _ctFaseFinali(cat, ci) {
     <div class="card">
       <div class="card-title">🏅 Round Finali (Semifinali, Finali per posto...)</div>
       <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
-        💡 Usa i template oppure aggiungi round manualmente. I placeholder (es. <strong>1° ARANCIO</strong>, <strong>Vincente SEMIFINALE 01</strong>) vengono risolti automaticamente.
+        💡 Usa i template oppure aggiungi round manualmente.<br>
+        <strong>Formato placeholder:</strong>
+        <span style="background:white;border-radius:4px;padding:1px 6px;margin:0 3px;font-family:monospace;">1° GIRONE A</span>
+        <span style="background:white;border-radius:4px;padding:1px 6px;margin:0 3px;font-family:monospace;">Vincente SEMIFINALE 01</span>
+        <span style="background:white;border-radius:4px;padding:1px 6px;margin:0 3px;font-family:monospace;">Perdente SEMIFINALE 02</span>
+        — vengono risolti automaticamente dopo i risultati.
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
         ${templates.map(t=>`<button onclick="${t.click}"
@@ -2668,11 +2673,18 @@ function _ctFaseFinali(cat, ci) {
 
 function ctTemplateFinali(ci, tipo) {
   const cat = CT.categorie[ci];
-  const rounds = [...new Set(cat.gironiFinali.map(g=>g.nome))];
-  const giornatoLabel = CT.torneo.giorni.length>1 ? (CT.torneo.giorni[1]?.data?_ctFmtData(CT.torneo.giorni[1].data):'Giorno 2') : (CT.torneo.giorni[0]?.data?_ctFmtData(CT.torneo.giorni[0].data):'Giorno 1');
+  // Usa nomi reali dei gironi finali
+  const gironiF = cat.gironiFinali.map(g=>g.nome);
+  const gironiQ = cat.gironi.map(g=>g.nome);
+  // Preferisci gironi finali, altrimenti gironi qualifiche
+  const r0 = gironiF[0] || gironiQ[0] || 'GIRONE A';
+  const r1 = gironiF[1] || gironiQ[1] || 'GIRONE B';
+
+  // Giorno delle finali = ultimo giorno del torneo
+  const lastDay = CT.torneo.giorni[CT.torneo.giorni.length-1];
+  const giornatoLabel = lastDay?.data ? _ctFmtData(lastDay.data) : `Giorno ${CT.torneo.giorni.length}`;
 
   if (tipo==='semi') {
-    const r0=rounds[0]||'ARANCIO', r1=rounds[1]||'VERDE';
     cat.finali = [
       {nome:'SEMIFINALE 01', sq1:`1° ${r0}`, sq2:`2° ${r1}`, ora:'', campo:1, giornata:giornatoLabel},
       {nome:'SEMIFINALE 02', sq1:`1° ${r1}`, sq2:`2° ${r0}`, ora:'', campo:2, giornata:giornatoLabel},
@@ -2680,11 +2692,10 @@ function ctTemplateFinali(ci, tipo) {
       {nome:'FINALE 1°/2°', sq1:'Vincente SEMIFINALE 01', sq2:'Vincente SEMIFINALE 02', ora:'', campo:1, giornata:giornatoLabel},
     ];
   } else {
-    const maxSq = Math.max(...(cat.gironiFinali.map(g=>g.squadre.length)||[4]));
+    const maxSq = cat.gironiFinali.length ? Math.max(...cat.gironiFinali.map(g=>g.squadre.length)) : 4;
     cat.finali = [];
     for (let pos=1; pos<=maxSq; pos++) {
       const p1=pos*2-1, p2=pos*2;
-      const r0=rounds[0]||'ARANCIO', r1=rounds[1]||'VERDE';
       cat.finali.push({nome:`FINALE ${p1}°/${p2}°`, sq1:`${pos}° ${r0}`, sq2:`${pos}° ${r1}`, ora:'', campo:1, giornata:giornatoLabel});
     }
   }
