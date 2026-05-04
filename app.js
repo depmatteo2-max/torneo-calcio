@@ -1986,11 +1986,57 @@ function _ctFaseGironi(cat, ci) {
     return g?.data ? _ctFmtData(g.data) : `Giorno ${idx+1}`;
   };
 
-  const gironiHTML = cat.gironi.map((g,gi) => `
-    <div style="border:1.5px solid var(--bordo);border-radius:10px;margin-bottom:12px;overflow:hidden;">
-      <div style="background:var(--sfondo);padding:8px 12px;display:flex;align-items:center;gap:8px;">
-        <input value="${g.nome}" placeholder="Nome girone (es. Girone A)"
-          style="flex:1;border:1.5px solid var(--blu);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:800;font-family:inherit;background:var(--blu-bg);color:var(--blu);"
+  const tipoLabel = {
+    'solo': '🏅 Solo qualifiche',
+    'finali_posto': '🥇 Qualifiche + Finali per posto (1°vs2°, 3°vs4°...)',
+    'gironi_finali': '🏆 Qualifiche + Gironi finali (es. GIRONE A, GIRONE B...)'
+  };
+
+  const gironiHTML = cat.gironi.map((g,gi) => {
+    const tipo = g.tipo || 'solo';
+    // Finali per posto: mostra sezione per configurarle
+    const finaliPostoHTML = tipo === 'finali_posto' ? `
+      <div style="background:#fffbeb;border-radius:8px;padding:10px 12px;margin-top:10px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:8px;">🥇 Finali per posto — stesso giorno</div>
+        <div style="font-size:11px;color:#92400e;margin-bottom:8px;">Quante finali vuoi? (1°vs2°, 3°vs4°, 5°vs6°...)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${[2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].gironi[${gi}].numFinali=${n};renderAdminCreaTorneo()"
+            style="padding:5px 12px;border-radius:6px;border:2px solid ${(g.numFinali||2)===n?'#d97706':'var(--bordo)'};background:${(g.numFinali||2)===n?'#fef3c7':'white'};color:${(g.numFinali||2)===n?'#92400e':'var(--testo-lt)'};cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">
+            Fino al ${n*2}° posto
+          </button>`).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:#92400e;">
+          ${Array.from({length:g.numFinali||2},(_,i)=>{
+            const p1=i*2+1,p2=i*2+2;
+            return `<span style="background:#fef3c7;border-radius:6px;padding:2px 8px;margin-right:4px;margin-bottom:4px;display:inline-block;">${p1}°vs${p2}°</span>`;
+          }).join('')}
+          <span style="color:#aaa;">→ si aggiungono al calendario del giorno</span>
+        </div>
+      </div>` : '';
+
+    const gironiFinaliHTML = tipo === 'gironi_finali' ? `
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 12px;margin-top:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--blu);text-transform:uppercase;margin-bottom:8px;">🏆 Gironi Finali — configura nella sezione Accoppiamenti</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div>
+            <label style="font-size:11px;color:var(--testo-lt);">Quante si qualificano per girone?</label>
+            <div style="display:flex;gap:4px;margin-top:4px;">
+              ${[1,2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].gironi[${gi}].qualificate=${n};renderAdminCreaTorneo()"
+                style="width:28px;height:28px;border-radius:50%;border:2px solid ${(g.qualificate||2)===n?'var(--blu)':'var(--bordo)'};background:${(g.qualificate||2)===n?'var(--blu)':'white'};color:${(g.qualificate||2)===n?'white':'var(--testo-lt)'};cursor:pointer;font-size:13px;font-weight:800;font-family:inherit;">${n}</button>`).join('')}
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--testo-lt);">
+            Il ${g.qualificate||2}° si qualifica • il ${(g.qualificate||2)+1}° in poi gioca le finali consolazione
+          </div>
+        </div>
+      </div>` : '';
+
+    return `
+    <div style="border:1.5px solid var(--bordo);border-radius:10px;margin-bottom:14px;overflow:hidden;">
+      <!-- Header girone -->
+      <div style="background:var(--sfondo);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input value="${g.nome}" placeholder="Nome girone (es. Girone Q)"
+          style="flex:1;min-width:120px;border:1.5px solid var(--blu);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:800;font-family:inherit;background:var(--blu-bg);color:var(--blu);"
           onchange="CT.categorie[${ci}].gironi[${gi}].nome=this.value">
         <span style="font-size:11px;color:var(--testo-xs);">Gioca il:</span>
         <select style="border:1px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;"
@@ -2000,6 +2046,22 @@ function _ctFaseGironi(cat, ci) {
         ${cat.gironi.length>1?`<button onclick="CT.categorie[${ci}].gironi.splice(${gi},1);renderAdminCreaTorneo()"
           style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
       </div>
+
+      <!-- Tipo girone -->
+      <div style="padding:8px 12px;background:white;border-bottom:1px solid var(--bordo-lt);">
+        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:6px;">Tipo</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          ${Object.entries(tipoLabel).map(([k,v])=>`
+            <button onclick="CT.categorie[${ci}].gironi[${gi}].tipo='${k}';renderAdminCreaTorneo()"
+              style="text-align:left;padding:8px 12px;border-radius:8px;border:2px solid ${tipo===k?'var(--blu)':'var(--bordo)'};background:${tipo===k?'var(--blu-bg)':'white'};color:${tipo===k?'var(--blu)':'var(--testo-lt)'};cursor:pointer;font-size:12px;font-weight:${tipo===k?'700':'400'};font-family:inherit;transition:all .15s;">
+              ${v}
+            </button>`).join('')}
+        </div>
+        ${finaliPostoHTML}
+        ${gironiFinaliHTML}
+      </div>
+
+      <!-- Squadre -->
       <div style="padding:10px 12px;">
         <div style="font-size:11px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre</div>
         ${g.squadre.map((sq,si)=>`
@@ -2024,16 +2086,17 @@ function _ctFaseGironi(cat, ci) {
         </div>
         <textarea id="bulk-${ci}-${gi}" class="form-input" rows="3" style="font-size:12px;resize:vertical;margin-top:6px;"
           placeholder="Incolla lista (una per riga):&#10;RHODENSE&#10;CHISOLA&#10;BORGORATTI"></textarea>
-        <button onclick="var ta=document.getElementById('bulk-${ci}-${gi}');ta.value.split('\\n').map(s=>s.trim()).filter(Boolean).forEach(n=>CT.categorie[${ci}].gironi[${gi}].squadre.push({nome:n,prio:'normale'}));ta.value='';renderAdminCreaTorneo()"
+        <button onclick="var ta=document.getElementById('bulk-${ci}-${gi}');ta.value.split('\n').map(s=>s.trim()).filter(Boolean).forEach(n=>CT.categorie[${ci}].gironi[${gi}].squadre.push({nome:n,prio:'normale'}));ta.value='';renderAdminCreaTorneo()"
           style="margin-top:4px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);cursor:pointer;">📋 Aggiungi lista</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   return `
     <div class="card">
       <div style="display:flex;align-items:center;margin-bottom:12px;">
         <div class="card-title" style="margin:0;">👕 Gironi e Squadre</div>
-        <button onclick="CT.categorie[${ci}].gironi.push({nome:'Girone '+'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[CT.categorie[${ci}].gironi.length]||'',giorno:0,squadre:[]});renderAdminCreaTorneo()"
+        <button onclick="CT.categorie[${ci}].gironi.push({nome:'Girone '+'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[CT.categorie[${ci}].gironi.length]||'',giorno:0,squadre:[],tipo:'solo',qualificate:2,numFinali:2});renderAdminCreaTorneo()"
           style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Girone</button>
       </div>
       ${cat.gironi.length===0?`<div style="text-align:center;padding:20px;color:var(--testo-xs);">Clicca <strong>+ Girone</strong> per iniziare</div>`:gironiHTML}
@@ -2054,11 +2117,37 @@ function _ctVaiCalendario(ci) {
   cat.gironi.forEach(g => {
     const sq = g.squadre;
     let ordine = cat.calendario.length + 1;
+    const dayIdx = g.giorno||0;
+    const giornata = CT.torneo.giorni[dayIdx]?.data ? _ctFmtData(CT.torneo.giorni[dayIdx].data) : `Giorno ${dayIdx+1}`;
+    // Partite round-robin
     for (let i=0;i<sq.length;i++) for (let j=i+1;j<sq.length;j++) {
-      cat.calendario.push({gironeNome:g.nome, sq1:sq[i].nome, sq2:sq[j].nome, ora:'', campo:1, giornata:CT.torneo.giorni[g.giorno||0]?.data?_ctFmtData(CT.torneo.giorni[g.giorno||0].data):`Giorno ${(g.giorno||0)+1}`, ordine:ordine++, _giornoIdx:g.giorno||0});
+      cat.calendario.push({gironeNome:g.nome, sq1:sq[i].nome, sq2:sq[j].nome, ora:'', campo:1, giornata, ordine:ordine++, _giornoIdx:dayIdx});
+    }
+    // Se tipo = finali_posto → aggiungi finali con placeholder nello stesso giorno
+    if (g.tipo === 'finali_posto') {
+      const nFin = g.numFinali || 2;
+      for (let f=0;f<nFin;f++) {
+        const p1=f*2+1, p2=f*2+2;
+        cat.calendario.push({
+          gironeNome: `FINALE ${p1}°/${p2}°`,
+          sq1: `${p1}° ${g.nome}`, sq2: `${p2}° ${g.nome}`,
+          ora:'', campo:1, giornata, ordine:ordine++, _giornoIdx:dayIdx,
+          _isFinale:true
+        });
+      }
     }
   });
   _ctAssegnaOrari(cat.calendario, cat);
+  // Pre-inizializza accoppiamenti per gironi con tipo gironi_finali
+  cat.accoppiamenti = [];
+  const roundNames = ['ARANCIO','VERDE','BLU','GIALLO','BIANCO','ROSSO'];
+  cat.gironi.filter(g=>g.tipo==='gironi_finali').forEach(g => {
+    const q = g.qualificate||2;
+    for (let pos=1; pos<=g.squadre.length; pos++) {
+      const round = roundNames[pos-1]||`ROUND ${pos}`;
+      cat.accoppiamenti.push({pos, gironeNome:g.nome, aGirone:round, giorno:Math.min((g.giorno||0)+1, CT.torneo.giorni.length-1)});
+    }
+  });
   CT.subStep.fase = 'calendario';
   renderAdminCreaTorneo();
 }
