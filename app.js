@@ -2982,8 +2982,142 @@ async function renderAdminModifica() {
   if (!el) return;
   if (!STATE.activeTorneo) { el.innerHTML = '<div class="empty-state">Seleziona prima un torneo.</div>'; return; }
 
+  // Mostra pagina scelta: modifica con wizard o modifica rapida
+  el.innerHTML = `<div style="max-width:700px;margin:0 auto;padding:20px 0;">
+    <div style="font-size:20px;font-weight:800;margin-bottom:20px;">✏️ Modifica Torneo</div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <button onclick="ctCaricaDaDatabase()" 
+        style="background:var(--blu);color:white;border:none;border-radius:12px;padding:20px 24px;text-align:left;cursor:pointer;font-family:inherit;">
+        <div style="font-size:16px;font-weight:800;margin-bottom:4px;">🆕 Apri nel Wizard Crea</div>
+        <div style="font-size:13px;opacity:.8;">Modifica tutto: struttura, gironi, squadre, orari, finali — esattamente come quando l'hai creato</div>
+      </button>
+      <button onclick="modShowVeloce()" 
+        style="background:white;border:2px solid var(--bordo);border-radius:12px;padding:20px 24px;text-align:left;cursor:pointer;font-family:inherit;">
+        <div style="font-size:16px;font-weight:800;margin-bottom:4px;color:var(--testo);">⚡ Modifica Rapida</div>
+        <div style="font-size:13px;color:var(--testo-lt);">Cambia solo orari, campi, sposta squadre — veloce per correzioni minori</div>
+      </button>
+    </div>
+    <div id="mod-veloce-content" style="margin-top:16px;"></div>
+  </div>`;
+}
+
+async function ctCaricaDaDatabase() {
+  toast('⏳ Caricamento torneo...');
+  try {
+    const torneo = STATE.tornei.find(t => t.id === STATE.activeTorneo);
+    if (!torneo) { toast('Nessun torneo selezionato'); return; }
+
+    // Carica struttura dal DB
+    const categorie = await dbGetCategorie(STATE.activeTorneo);
+    const tutteSquadre = await dbGetSquadre(STATE.activeTorneo);
+    const sqMap = {}; tutteSquadre.forEach(s => sqMap[s.id] = s);
+
+    // Ricostruisci CT
+    CT = {
+      step: 2,
+      subStep: null,
+      torneo: {
+        nome: torneo.nome || '',
+        luogo: torneo.luogo || '',
+        durata: 20,
+        pausa: 5,
+        giorni: [{data: torneo.data||'', oraInizio:'09:00', pausaIni:'12:30', pausaFine:'14:00', campi:2}]
+      },
+      categorie: []
+    };
+
+    for (const cat of categorie) {
+      const gironiDB = await dbGetGironi(cat.id);
+      const gironi = [];
+      const calendario = [];
+
+      for (const g of gironiDB) {
+        const {data: gsRows} = await db.from('girone_squadre')
+          .select('squadra_id').eq('girone_id', g.id);
+        const squadreGirone = (gsRows||[]).map(r => ({
+          nome: sqMap[r.squadra_id]?.nome || '?',
+          prio: 'normale'
+        }));
+
+        const {data: partite} = await db.from('partite')
+          .select('id,home_id,away_id,orario,campo,giorno,giocata,gol_home,gol_away')
+          .eq('girone_id', g.id)
+          .order('orario');
+
+        // Aggiungi al calendario
+        (partite||[]).forEach((p,i) => {
+          calendario.push({
+            gironeNome: g.nome,
+            sq1: sqMap[p.home_id]?.nome || '?',
+            sq2: sqMap[p.away_id]?.nome || '?',
+            ora: p.orario||'',
+            campo: parseInt(p.campo)||1,
+            giornata: p.giorno||'',
+            ordine: i+1,
+            _giornoIdx: 0,
+            _partitaId: p.id
+          });
+        });
+
+        gironi.push({
+          nome: g.nome,
+          giorno: 0,
+          squadre: squadreGirone,
+          tipo: 'solo',
+          qualificate: cat.qualificate||2,
+          numFinali: 2
+        });
+      }
+
+      // Knockout / finali
+      const koList = await dbGetKnockout(cat.id);
+      const finali = (koList||[]).map(ko => ({
+        nome: ko.round_name||'',
+        sq1: ko.home_id ? (sqMap[ko.home_id]?.nome||'') : (ko.note_home||''),
+        sq2: ko.away_id ? (sqMap[ko.away_id]?.nome||'') : (ko.note_away||''),
+        ora: ko.orario||'',
+        campo: ko.campo||1,
+        giornata: '',
+        _koId: ko.id
+      }));
+
+      CT.categorie.push({
+        nome: cat.nome,
+        gironi,
+        calendario,
+        accoppiamenti: [],
+        squadreExtra: [],
+        gironiFinali: [],
+        calendarioFinali: [],
+        finali,
+        oraPerGiorno: CT.torneo.giorni.map(g=>({
+          oraInizio:g.oraInizio,pausaIni:g.pausaIni,
+          pausaFine:g.pausaFine,campi:g.campi
+        })),
+        _fatto: true,
+        _catId: cat.id
+      });
+    }
+
+    // Vai al wizard Crea
+    const btnCrea = document.querySelector('[data-section="a-crea"]');
+    showSection('a-crea', btnCrea);
+    await renderAdminCreaTorneo();
+    toast('✅ Torneo caricato nel wizard!');
+  } catch(e) {
+    console.error(e);
+    toast('❌ Errore: ' + e.message);
+  }
+}
+
+async function modShowVeloce() {
+  const el = document.getElementById('mod-veloce-content');
+  if (!el) return;
+
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
 
+  if (!STATE.activeTorneo) { el.innerHTML = '<div class="empty-state">Seleziona un torneo.</div>'; return; }
   const cat = STATE.activeCat ? STATE.categorie.find(c => c.id === STATE.activeCat) : STATE.categorie[0];
   if (!cat) { el.innerHTML = '<div class="empty-state">Nessuna categoria.</div>'; return; }
 
