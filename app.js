@@ -77,7 +77,7 @@ async function selezionaTorneoPublic(id) {
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
-    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div>';
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div><div id="sec-a-modifica" class="sec"></div>';
   document.getElementById('pub-nav').style.display = 'flex';
   document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
   const btnClass = document.querySelector('[data-section="classifiche"]');
@@ -138,7 +138,7 @@ function mostraSelezioneCat() {
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
-    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div>';
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div><div id="sec-a-modifica" class="sec"></div>';
 
   const el = document.getElementById('sec-classifiche');
   el.classList.add('active');
@@ -306,7 +306,7 @@ async function cambiaCategoria() {
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
-    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div>';
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div><div id="sec-a-modifica" class="sec"></div>';
   STATE.currentSection = 'classifiche';
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector('[data-section="classifiche"]');
@@ -329,7 +329,7 @@ async function cambiaTorneo() {
     '<div id="sec-classifiche" class="sec active"></div><div id="sec-risultati" class="sec"></div>' +
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
-    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div>';
+    '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div><div id="sec-a-modifica" class="sec"></div>';
   mostraSelezioneTeorneo();
 }
 
@@ -349,7 +349,7 @@ function showSection(name, btn) {
   const sec = document.getElementById('sec-' + name); if (sec) sec.classList.add('active');
   document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.getElementById('cat-bar').style.display = ['a-setup','a-tornei','a-crea'].includes(name) ? 'none' : '';
+  document.getElementById('cat-bar').style.display = ['a-setup','a-tornei','a-crea','a-modifica'].includes(name) ? 'none' : '';
   renderCurrentSection();
 }
 
@@ -365,6 +365,7 @@ async function renderCurrentSection() {
   else if (s === 'a-risultati') await renderAdminRisultati();
   else if (s === 'a-knockout') await renderAdminKnockout();
   else if (s === 'a-crea') await renderAdminCreaTorneo();
+  else if (s === 'a-modifica') await renderAdminModifica();
   _renderFooter();
 }
 
@@ -2655,5 +2656,314 @@ function _ctFmtData(iso) {
   try {
     return new Date(iso+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   } catch(e) { return iso; }
-  
+}
+
+// ============================================================
+//  MODIFICA CALENDARIO — Pannello admin per modificare
+//  orari, campi, gironi, squadre delle partite già importate
+// ============================================================
+
+async function renderAdminModifica() {
+  const el = document.getElementById('sec-a-modifica');
+  if (!el) return;
+  if (!STATE.activeTorneo) { el.innerHTML = '<div class="empty-state">Seleziona prima un torneo.</div>'; return; }
+
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+
+  const cat = STATE.activeCat ? STATE.categorie.find(c => c.id === STATE.activeCat) : STATE.categorie[0];
+  if (!cat) { el.innerHTML = '<div class="empty-state">Nessuna categoria.</div>'; return; }
+
+  const gironi = await getGironiWithData(cat.id);
+  const ko = await dbGetKnockout(cat.id);
+  const squadre = await dbGetSquadre(STATE.activeTorneo);
+  const sqMap = {}; squadre.forEach(s => sqMap[s.id] = s);
+
+  // Tab selector
+  const tabHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <button id="mod-tab-partite" onclick="modShowTab('partite')"
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--blu);background:var(--blu);color:white;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;">
+        ⚽ Partite Gironi
+      </button>
+      <button id="mod-tab-knockout" onclick="modShowTab('knockout')"
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bordo);background:white;color:var(--testo-lt);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;">
+        🏆 Fase Finale
+      </button>
+      <button id="mod-tab-squadre" onclick="modShowTab('squadre')"
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bordo);background:white;color:var(--testo-lt);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;">
+        👕 Sposta Squadre
+      </button>
+    </div>`;
+
+  // Categoria selector
+  const catSel = STATE.categorie.length > 1 ? `
+    <div style="margin-bottom:14px;">
+      <label class="form-label">Categoria</label>
+      <select class="form-input" onchange="STATE.activeCat=parseInt(this.value);renderAdminModifica()">
+        ${STATE.categorie.map(c => `<option value="${c.id}" ${c.id===cat.id?'selected':''}>${c.nome}</option>`).join('')}
+      </select>
+    </div>` : '';
+
+  // Tab partite gironi
+  let partiteHTML = '';
+  let counter = 0;
+  for (const g of gironi) {
+    const partite = g.partite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
+    partiteHTML += `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="background:var(--blu-bg);padding:10px 14px;margin:-16px -16px 12px;border-radius:10px 10px 0 0;">
+          <span style="color:var(--blu);font-weight:800;">${g.nome}</span>
+          <span class="badge badge-gray" style="margin-left:8px;">${partite.length} partite</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--sfondo);">
+            <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Orario</th>
+            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:center;">Campo</th>
+            <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Giornata</th>
+            <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra Casa</th>
+            <th style="padding:7px 8px;text-align:center;border-bottom:1px solid var(--bordo);"></th>
+            <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra Ospite</th>
+            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:70px;"></th>
+          </tr></thead>
+          <tbody>
+            ${partite.map((p, i) => {
+              counter++;
+              return `<tr style="background:${i%2===0?'white':'var(--sfondo)'};" id="mod-row-${p.id}">
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
+                  <input id="mod-ora-${p.id}" value="${p.orario||''}" placeholder="09:00"
+                    style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:12px;font-family:inherit;font-weight:700;">
+                </td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+                  <input id="mod-campo-${p.id}" value="${p.campo||''}" placeholder="1"
+                    style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;">
+                </td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
+                  <input id="mod-giorno-${p.id}" value="${p.giorno||''}" placeholder="Sabato 25 Apr"
+                    style="width:110px;border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;">
+                </td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.home?.nome||'?'}</td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.away?.nome||'?'}</td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
+                  <button onclick="modSalvaPartita(${p.id},'${g.id}')"
+                    style="background:var(--verde);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">
+                    ✓ Salva
+                  </button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // Tab knockout
+  let koHTML = '';
+  if (ko.length) {
+    const rounds = {};
+    ko.forEach(m => { if(!rounds[m.round_name]) rounds[m.round_name]=[]; rounds[m.round_name].push(m); });
+    for (const [rname, matches] of Object.entries(rounds)) {
+      koHTML += `
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title" style="background:var(--arancio-bg);padding:10px 14px;margin:-16px -16px 12px;border-radius:10px 10px 0 0;">
+            <span style="color:var(--arancio);font-weight:800;">${rname}</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="background:var(--sfondo);">
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Orario</th>
+              <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:center;">Campo</th>
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra Casa</th>
+              <th style="padding:7px 8px;text-align:center;border-bottom:1px solid var(--bordo);"></th>
+              <th style="padding:7px 8px;text-align:left;border-bottom:1px solid var(--bordo);">Squadra Ospite</th>
+              <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:70px;"></th>
+            </tr></thead>
+            <tbody>
+              ${matches.map((m, i) => {
+                const hm = m.home_id ? sqMap[m.home_id] : null;
+                const am = m.away_id ? sqMap[m.away_id] : null;
+                return `<tr style="background:${i%2===0?'white':'var(--sfondo)'};">
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
+                    <input id="mod-ko-ora-${m.id}" value="${m.orario||''}" placeholder="09:00"
+                      style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:12px;font-family:inherit;font-weight:700;">
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+                    <input id="mod-ko-campo-${m.id}" value="${m.campo||''}" placeholder="1"
+                      style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;">
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${hm?.nome||(m.note_home||'?')}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${am?.nome||(m.note_away||'?')}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
+                    <button onclick="modSalvaKO(${m.id})"
+                      style="background:var(--verde);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+                      ✓ Salva
+                    </button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+  } else {
+    koHTML = '<div class="empty-state">Nessuna partita fase finale.</div>';
+  }
+
+  // Tab sposta squadre
+  let squadreHTML = `
+    <div class="card">
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--blu);">
+        💡 Seleziona una squadra e spostala in un altro girone. Le partite del girone originale verranno aggiornate automaticamente.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:start;">
+        <div>
+          <div class="form-label" style="margin-bottom:6px;">Squadra da spostare</div>
+          <select id="mod-sq-source" class="form-input" style="font-size:13px;">
+            <option value="">-- Seleziona squadra --</option>
+            ${gironi.map(g => g.squadre.map(sq => `<option value="${sq.id}|${g.id}">${sq.nome} (${g.nome})</option>`).join('')).join('')}
+          </select>
+        </div>
+        <div style="padding-top:24px;font-size:20px;text-align:center;">→</div>
+        <div>
+          <div class="form-label" style="margin-bottom:6px;">Girone destinazione</div>
+          <select id="mod-girone-dest" class="form-input" style="font-size:13px;">
+            <option value="">-- Seleziona girone --</option>
+            ${gironi.map(g => `<option value="${g.id}">${g.nome}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <button onclick="modSpostaSquadra()"
+          style="background:var(--blu);color:white;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;">
+          🔀 Sposta Squadra
+        </button>
+      </div>
+      <div id="mod-sposta-log" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="card-title">✏️ Rinomina Squadra</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label class="form-label">Squadra</label>
+          <select id="mod-sq-rename" class="form-input" style="font-size:13px;">
+            <option value="">-- Seleziona squadra --</option>
+            ${squadre.map(sq => `<option value="${sq.id}">${sq.nome}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Nuovo nome</label>
+          <input id="mod-sq-newnome" class="form-input" placeholder="Nuovo nome squadra" style="font-size:13px;">
+        </div>
+        <button onclick="modRinominaSquadra()"
+          style="background:var(--blu);color:white;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
+          ✓ Rinomina
+        </button>
+      </div>
+    </div>`;
+
+  el.innerHTML = `
+    <div style="max-width:900px;margin:0 auto;">
+      <div style="font-size:20px;font-weight:800;margin-bottom:16px;">✏️ Modifica Calendario</div>
+      ${catSel}
+      ${tabHTML}
+      <div id="mod-tab-content-partite">${partiteHTML || '<div class="empty-state">Nessuna partita.</div>'}</div>
+      <div id="mod-tab-content-knockout" style="display:none;">${koHTML}</div>
+      <div id="mod-tab-content-squadre" style="display:none;">${squadreHTML}</div>
+    </div>`;
+}
+
+function modShowTab(tab) {
+  ['partite','knockout','squadre'].forEach(t => {
+    const cont = document.getElementById('mod-tab-content-' + t);
+    const btn = document.getElementById('mod-tab-' + t);
+    if (cont) cont.style.display = t === tab ? '' : 'none';
+    if (btn) {
+      btn.style.background = t === tab ? 'var(--blu)' : 'white';
+      btn.style.color = t === tab ? 'white' : 'var(--testo-lt)';
+      btn.style.borderColor = t === tab ? 'var(--blu)' : 'var(--bordo)';
+      btn.style.fontWeight = t === tab ? '700' : '600';
+    }
+  });
+}
+
+async function modSalvaPartita(partitaId, gironeId) {
+  const ora = document.getElementById('mod-ora-' + partitaId)?.value?.trim() || '';
+  const campo = document.getElementById('mod-campo-' + partitaId)?.value?.trim() || '';
+  const giorno = document.getElementById('mod-giorno-' + partitaId)?.value?.trim() || '';
+  try {
+    await db.from('partite').update({ orario: ora, campo, giorno }).eq('id', partitaId);
+    // Feedback visivo rapido
+    const row = document.getElementById('mod-row-' + partitaId);
+    if (row) {
+      row.style.background = 'var(--verde-bg)';
+      setTimeout(() => { if(row) row.style.background = ''; }, 1500);
+    }
+    toast('✅ Partita aggiornata!');
+    // Invalida cache
+    if (typeof _cacheClear === 'function') _cacheClear();
+  } catch(e) {
+    toast('❌ Errore: ' + e.message);
+  }
+}
+
+async function modSalvaKO(matchId) {
+  const ora = document.getElementById('mod-ko-ora-' + matchId)?.value?.trim() || '';
+  const campo = document.getElementById('mod-ko-campo-' + matchId)?.value?.trim() || '';
+  try {
+    await db.from('knockout').update({ orario: ora, campo }).eq('id', matchId);
+    toast('✅ Partita finale aggiornata!');
+    if (typeof _cacheClear === 'function') _cacheClear();
+  } catch(e) {
+    toast('❌ Errore: ' + e.message);
+  }
+}
+
+async function modSpostaSquadra() {
+  const log = document.getElementById('mod-sposta-log');
+  const sourceVal = document.getElementById('mod-sq-source')?.value;
+  const destGironeId = document.getElementById('mod-girone-dest')?.value;
+  if (!sourceVal || !destGironeId) { toast('Seleziona squadra e girone destinazione'); return; }
+  const [sqId, srcGironeId] = sourceVal.split('|').map(v => isNaN(v) ? v : parseInt(v));
+  if (srcGironeId === destGironeId) { toast('La squadra è già in questo girone'); return; }
+  if (!confirm('Spostare la squadra nel nuovo girone? Le partite del girone originale verranno eliminate e rigenerate.')) return;
+  if (log) log.innerHTML = '<div style="font-size:12px;color:var(--testo-lt);">⏳ Spostamento in corso...</div>';
+  try {
+    // 1. Rimuovi dal girone originale
+    await db.from('girone_squadre').delete().eq('girone_id', srcGironeId).eq('squadra_id', sqId);
+    // 2. Elimina partite del girone originale che coinvolgono questa squadra
+    const { data: partiteOld } = await db.from('partite').select('id').eq('girone_id', srcGironeId);
+    const partiteConSq = partiteOld?.filter(p => true) || []; // elimina tutte e rigenera
+    // 3. Elimina tutte le partite del girone origine e rigenera
+    await db.from('partite').delete().eq('girone_id', srcGironeId);
+    // 4. Aggiungi al girone destinazione
+    await db.from('girone_squadre').insert({ girone_id: destGironeId, squadra_id: sqId, posizione: 0 });
+    // 5. Rigenera partite per entrambi i gironi
+    const { data: sqSrc } = await db.from('girone_squadre').select('squadra_id').eq('girone_id', srcGironeId);
+    const { data: sqDest } = await db.from('girone_squadre').select('squadra_id').eq('girone_id', destGironeId);
+    if (sqSrc?.length >= 2) await dbGeneraPartite(srcGironeId, sqSrc.map(r => r.squadra_id));
+    if (sqDest?.length >= 2) await dbGeneraPartite(destGironeId, sqDest.map(r => r.squadra_id));
+    if (typeof _cacheClear === 'function') _cacheClear();
+    if (log) log.innerHTML = '<div style="background:var(--verde-bg);border-radius:8px;padding:8px 12px;color:var(--verde);font-size:12px;font-weight:700;">✅ Squadra spostata! Le partite sono state rigenerate.</div>';
+    toast('✅ Squadra spostata con successo!');
+    // Ricarica la sezione
+    setTimeout(() => renderAdminModifica(), 1000);
+  } catch(e) {
+    if (log) log.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
+    toast('❌ ' + e.message);
+  }
+}
+
+async function modRinominaSquadra() {
+  const sqId = document.getElementById('mod-sq-rename')?.value;
+  const nuovoNome = document.getElementById('mod-sq-newnome')?.value?.trim();
+  if (!sqId || !nuovoNome) { toast('Seleziona squadra e inserisci il nuovo nome'); return; }
+  try {
+    await db.from('squadre').update({ nome: nuovoNome }).eq('id', sqId);
+    if (typeof _cacheClear === 'function') _cacheClear();
+    toast('✅ Squadra rinominata!');
+    renderAdminModifica();
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
 }
