@@ -1995,23 +1995,51 @@ function _ctFaseGironi(cat, ci) {
   const gironiHTML = cat.gironi.map((g,gi) => {
     const tipo = g.tipo || 'solo';
     // Finali per posto: mostra sezione per configurarle
+    // Assicura che finaliOrari esista
+    if (!g.finaliOrari) g.finaliOrari = {};
+
     const finaliPostoHTML = tipo === 'finali_posto' ? `
       <div style="background:#fffbeb;border-radius:8px;padding:10px 12px;margin-top:10px;">
         <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:8px;">🥇 Finali per posto — stesso giorno</div>
-        <div style="font-size:11px;color:#92400e;margin-bottom:8px;">Quante finali vuoi? (1°vs2°, 3°vs4°, 5°vs6°...)</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <div style="font-size:11px;color:#92400e;margin-bottom:8px;">Quante finali vuoi?</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
           ${[2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].gironi[${gi}].numFinali=${n};renderAdminCreaTorneo()"
             style="padding:5px 12px;border-radius:6px;border:2px solid ${(g.numFinali||2)===n?'#d97706':'var(--bordo)'};background:${(g.numFinali||2)===n?'#fef3c7':'white'};color:${(g.numFinali||2)===n?'#92400e':'var(--testo-lt)'};cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">
             Fino al ${n*2}° posto
           </button>`).join('')}
         </div>
-        <div style="margin-top:8px;font-size:11px;color:#92400e;">
-          ${Array.from({length:g.numFinali||2},(_,i)=>{
-            const p1=i*2+1,p2=i*2+2;
-            return `<span style="background:#fef3c7;border-radius:6px;padding:2px 8px;margin-right:4px;margin-bottom:4px;display:inline-block;">${p1}°vs${p2}°</span>`;
-          }).join('')}
-          <span style="color:#aaa;">→ si aggiungono al calendario del giorno</span>
-        </div>
+        <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:6px;">Orari e campi delle finali:</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#fef3c7;">
+            <th style="padding:5px 8px;text-align:left;border:1px solid #fcd34d;">Finale</th>
+            <th style="padding:5px 8px;text-align:left;border:1px solid #fcd34d;">Squadra 1</th>
+            <th style="padding:5px 8px;text-align:left;border:1px solid #fcd34d;">Squadra 2</th>
+            <th style="padding:5px 8px;border:1px solid #fcd34d;width:64px;">Ora</th>
+            <th style="padding:5px 8px;border:1px solid #fcd34d;width:44px;">Campo</th>
+          </tr></thead>
+          <tbody>
+            ${Array.from({length:g.numFinali||2},(_,fi)=>{
+              const p1=fi*2+1,p2=fi*2+2;
+              const key=p1+'vs'+p2;
+              const finInfo = g.finaliOrari?.[key] || {};
+              return `<tr style="background:${fi%2===0?'white':'#fffbeb'};">
+                <td style="padding:5px 8px;border:1px solid #fcd34d;font-weight:700;color:#92400e;white-space:nowrap;">${p1}°/${p2}°</td>
+                <td style="padding:5px 8px;border:1px solid #fcd34d;font-size:11px;color:#aaa;">${p1}° ${g.nome}</td>
+                <td style="padding:5px 8px;border:1px solid #fcd34d;font-size:11px;color:#aaa;">${p2}° ${g.nome}</td>
+                <td style="padding:4px 6px;border:1px solid #fcd34d;">
+                  <input value="${finInfo.ora||''}" placeholder="es. 16:45"
+                    style="width:100%;border:1px solid #fcd34d;border-radius:4px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
+                    onchange="if(!CT.categorie[${ci}].gironi[${gi}].finaliOrari)CT.categorie[${ci}].gironi[${gi}].finaliOrari={};CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}']={...CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}'],ora:this.value}">
+                </td>
+                <td style="padding:4px 6px;border:1px solid #fcd34d;">
+                  <input type="number" value="${finInfo.campo||1}" min="1" max="${CT.torneo.campi}"
+                    style="width:100%;border:1px solid #fcd34d;border-radius:4px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+                    onchange="if(!CT.categorie[${ci}].gironi[${gi}].finaliOrari)CT.categorie[${ci}].gironi[${gi}].finaliOrari={};CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}']={...CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}'],campo:parseInt(this.value)||1}">
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
       </div>` : '';
 
     const gironiFinaliHTML = tipo === 'gironi_finali' ? `
@@ -2123,18 +2151,26 @@ function _ctVaiCalendario(ci) {
     for (let i=0;i<sq.length;i++) for (let j=i+1;j<sq.length;j++) {
       cat.calendario.push({gironeNome:g.nome, sq1:sq[i].nome, sq2:sq[j].nome, ora:'', campo:1, giornata, ordine:ordine++, _giornoIdx:dayIdx});
     }
-    // Se tipo = finali_posto → aggiungi finali con placeholder nello stesso giorno
+    // Se tipo = finali_posto → aggiungi finali con orari già inseriti
     if (g.tipo === 'finali_posto') {
       const nFin = g.numFinali || 2;
-      for (let f=0;f<nFin;f++) {
+      // Prima le finali consolazione (3°/4°, 5°/6° ecc.) poi la finale principale (1°/2°)
+      const ordineFinali = [];
+      for (let f=0;f<nFin;f++) ordineFinali.push(f);
+      // Inverti: prima 3°/4°, poi 1°/2°
+      ordineFinali.sort((a,b)=>b-a);
+      ordineFinali.forEach(f => {
         const p1=f*2+1, p2=f*2+2;
+        const key=p1+'vs'+p2;
+        const finInfo = g.finaliOrari?.[key] || {};
         cat.calendario.push({
           gironeNome: `FINALE ${p1}°/${p2}°`,
           sq1: `${p1}° ${g.nome}`, sq2: `${p2}° ${g.nome}`,
-          ora:'', campo:1, giornata, ordine:ordine++, _giornoIdx:dayIdx,
-          _isFinale:true
+          ora: finInfo.ora||'', campo: finInfo.campo||1,
+          giornata, ordine:ordine++, _giornoIdx:dayIdx,
+          _isFinale:true, _oraManuale: !!(finInfo.ora)
         });
-      }
+      });
     }
   });
   _ctAssegnaOrari(cat.calendario, cat);
@@ -2156,7 +2192,6 @@ function _ctAssegnaOrari(lista, cat) {
   const campi = CT.torneo.campi || 2;
   const durata = CT.torneo.durata || 20;
   const pausa = CT.torneo.pausa || 5;
-  // Per ogni giorno
   const perGiorno = {};
   lista.forEach(p => { const k=p._giornoIdx??0; if(!perGiorno[k])perGiorno[k]=[]; perGiorno[k].push(p); });
   Object.entries(perGiorno).forEach(([dayIdx,partite]) => {
@@ -2167,6 +2202,12 @@ function _ctAssegnaOrari(lista, cat) {
     partite.sort((a,b)=>a.ordine-b.ordine);
     let campo=1;
     partite.forEach(p => {
+      if (p._oraManuale && p.ora) {
+        // Ora già inserita manualmente — non sovrascrivere, ma aggiorna oraMin
+        oraMin = _ctTimeToMin(p.ora) + durata + pausa;
+        campo = (p.campo||1) % campi + 1;
+        return;
+      }
       if (oraMin>=pausaIni && oraMin<pausaFine) oraMin=pausaFine;
       p.ora = _ctMinToTime(oraMin);
       p.campo = campo;
