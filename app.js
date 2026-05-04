@@ -2655,4 +2655,5 @@ function _ctFmtData(iso) {
   try {
     return new Date(iso+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   } catch(e) { return iso; }
+  
 }
