@@ -2088,63 +2088,89 @@ function _ctAssegnaOrari(lista, cat) {
 
 // ── FASE: CALENDARIO ─────────────────────────────────────────
 function _ctFaseCalendario(cat, ci) {
-  const partite = [...cat.calendario].sort((a,b)=>a.ordine-b.ordine);
+  return _ctRenderCalendarioUI(cat, ci, 'calendario', 'accoppiamenti', 'gironi');
+}
 
-  const righe = partite.map((p,i) => `
-    <tr style="background:${i%2===0?'white':'var(--sfondo)'};">
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
-        <input type="number" value="${p.ordine}" min="1"
-          style="width:44px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
-          onchange="CT.categorie[${ci}].calendario[${i}].ordine=parseInt(this.value)||${i+1};_ctRicalcolaOrari(${ci});renderAdminCreaTorneo()">
+function _ctRicalcolaOrari(ci) {
+  _ctAssegnaOrari(CT.categorie[ci].calendario, CT.categorie[ci]);
+}
+
+function _ctSpostaPartita(ci, chiave, fromIdx, dir) {
+  // chiave = 'calendario' o 'calendarioFinali'
+  const lista = CT.categorie[ci][chiave];
+  const toIdx = fromIdx + dir;
+  if (toIdx < 0 || toIdx >= lista.length) return;
+  // Swap ordine
+  const tmp = lista[fromIdx].ordine;
+  lista[fromIdx].ordine = lista[toIdx].ordine;
+  lista[toIdx].ordine = tmp;
+  // Riassegna orari
+  _ctAssegnaOrari(lista, CT.categorie[ci]);
+  renderAdminCreaTorneo();
+}
+
+function _ctRenderCalendarioUI(cat, ci, chiave, faseAvanti, faseIndietro) {
+  const lista = [...(cat[chiave]||[])].sort((a,b)=>a.ordine-b.ordine);
+  const isFin = chiave === 'calendarioFinali';
+
+  const righe = lista.map((p,i) => `
+    <tr id="cal-row-${ci}-${chiave}-${i}" style="background:${i%2===0?'white':'var(--sfondo)'};transition:background .15s;">
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;white-space:nowrap;">
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <button onclick="_ctSpostaPartita(${ci},'${chiave}',${i},-1)"
+            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===0?'disabled':''}>▲</button>
+          <button onclick="_ctSpostaPartita(${ci},'${chiave}',${i},1)"
+            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===lista.length-1?'disabled':''}>▼</button>
+        </div>
       </td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
-        <input value="${p.ora}" style="width:58px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;"
-          onchange="CT.categorie[${ci}].calendario[${i}].ora=this.value">
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--testo-xs);font-weight:700;">${i+1}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);">
+        <input value="${p.ora}" style="width:56px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
+          onchange="CT.categorie[${ci}]['${chiave}'][${i}].ora=this.value">
       </td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
         <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}"
-          style="width:38px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
-          onchange="CT.categorie[${ci}].calendario[${i}].campo=parseInt(this.value)||1">
+          style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+          onchange="CT.categorie[${ci}]['${chiave}'][${i}].campo=parseInt(this.value)||1">
       </td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--blu);font-weight:700;">${p.gironeNome}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq1}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
-      <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.sq2}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:${isFin?'var(--arancio,#ea580c)':'var(--blu)'};font-weight:700;white-space:nowrap;">${p.gironeNome}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
     </tr>`).join('');
+
+  const titolo = isFin ? '📅 Calendario Gironi Finali' : '📅 Calendario';
 
   return `
     <div class="card">
       <div style="display:flex;align-items:center;margin-bottom:12px;">
-        <div class="card-title" style="margin:0;">📅 Calendario</div>
-        <button onclick="_ctRicalcolaOrari(${ci});renderAdminCreaTorneo()"
+        <div class="card-title" style="margin:0;">${titolo}</div>
+        <button onclick="_ctAssegnaOrari(CT.categorie[${ci}]['${chiave}'],CT.categorie[${ci}]);renderAdminCreaTorneo()"
           style="margin-left:8px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🔄 Rigenera orari</button>
       </div>
-      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
-        💡 Cambia il <strong>N°</strong> per riordinare le partite. Clicca 🔄 per ricalcolare gli orari in base all'ordine.
+      <div style="background:var(--blu-bg);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
+        💡 Usa <strong>▲ ▼</strong> per spostare le partite. Clicca <strong>🔄 Rigenera orari</strong> per aggiornare gli orari.
       </div>
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead><tr style="background:var(--sfondo);">
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:44px;">N°</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:20px;"></th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:40px;"></th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:28px;">N°</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:20px;"></th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
           </tr></thead>
           <tbody>${righe}</tbody>
         </table>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
-      <button onclick="CT.subStep.fase='gironi';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Gironi</button>
-      <button onclick="CT.subStep.fase='accoppiamenti';renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Accoppiamenti ›</button>
+      <button onclick="CT.subStep.fase='${faseIndietro}';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Indietro</button>
+      <button onclick="CT.subStep.fase='${faseAvanti}';renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti ›</button>
     </div>`;
-}
-
-function _ctRicalcolaOrari(ci) {
-  _ctAssegnaOrari(CT.categorie[ci].calendario, CT.categorie[ci]);
 }
 
 // ── FASE: ACCOPPIAMENTI ──────────────────────────────────────
@@ -2328,51 +2354,59 @@ function _ctFaseGironiFinali(cat, ci) {
     </div>`).join('');
 
   // Tabella calendario gironi finali
-  const partiteOrdinate = [...cat.calendarioFinali].sort((a,b)=>a.ordine-b.ordine);
-  const calHTML = partiteOrdinate.length ? `
-    <div class="card" style="margin-top:12px;">
+  const calHTML = cat.calendarioFinali.length ? _ctRenderCalendarioUI(cat, ci, 'calendarioFinali', 'finali', 'accoppiamenti') : '';
+
+  // calHTML ora è una stringa HTML completa con navigazione
+  // ma noi vogliamo i gironi sopra e il calendario sotto con navigazione separata
+  const calTabellaOnly = cat.calendarioFinali.length ? (() => {
+    const lista = [...cat.calendarioFinali].sort((a,b)=>a.ordine-b.ordine);
+    const isFin = true;
+    const righe = lista.map((p,i) => `
+      <tr style="background:${i%2===0?'white':'var(--sfondo)'};">
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;white-space:nowrap;">
+          <div style="display:flex;flex-direction:column;gap:1px;">
+            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},-1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===0?'disabled':''}>▲</button>
+            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===lista.length-1?'disabled':''}>▼</button>
+          </div>
+        </td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--testo-xs);font-weight:700;">${i+1}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);">
+          <input value="${p.ora}" style="width:56px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
+            onchange="CT.categorie[${ci}].calendarioFinali[${i}].ora=this.value">
+        </td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+          <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}" style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+            onchange="CT.categorie[${ci}].calendarioFinali[${i}].campo=parseInt(this.value)||1">
+        </td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--arancio,#ea580c);font-weight:700;">${p.gironeNome}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
+      </tr>`).join('');
+    return `<div class="card" style="margin-top:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
         <div class="card-title" style="margin:0;">📅 Calendario Gironi Finali</div>
-        <button onclick="_ctRicalcolaOrariFinali(${ci});renderAdminCreaTorneo()"
+        <button onclick="_ctAssegnaOrari(CT.categorie[${ci}].calendarioFinali,CT.categorie[${ci}]);renderAdminCreaTorneo()"
           style="margin-left:8px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🔄 Rigenera orari</button>
       </div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead><tr style="background:var(--sfondo);">
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:44px;">N°</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);width:20px;"></th>
-            <th style="padding:7px 8px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
-          </tr></thead>
-          <tbody>
-            ${partiteOrdinate.map((p,i)=>`
-              <tr style="background:${i%2===0?'white':'var(--sfondo)'};">
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
-                  <input type="number" value="${p.ordine}" min="1"
-                    style="width:44px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
-                    onchange="CT.categorie[${ci}].calendarioFinali[${i}].ordine=parseInt(this.value)||${i+1};_ctRicalcolaOrariFinali(${ci});renderAdminCreaTorneo()">
-                </td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
-                  <input value="${p.ora}" style="width:58px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;"
-                    onchange="CT.categorie[${ci}].calendarioFinali[${i}].ora=this.value">
-                </td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
-                  <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}"
-                    style="width:38px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
-                    onchange="CT.categorie[${ci}].calendarioFinali[${i}].campo=parseInt(this.value)||1">
-                </td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--arancio,#ea580c);font-weight:700;">${p.gironeNome}</td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
+      <div style="background:var(--blu-bg);border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--blu);">
+        💡 Usa <strong>▲ ▼</strong> per spostare le partite, poi clicca 🔄 per aggiornare gli orari.
       </div>
-    </div>` : '';
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:var(--sfondo);">
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:40px;"></th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:28px;">N°</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:20px;"></th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
+        </tr></thead>
+        <tbody>${righe}</tbody>
+      </table></div>
+    </div>`;
+  })() : '';
 
   return `
     <div class="card">
@@ -2386,7 +2420,7 @@ function _ctFaseGironiFinali(cat, ci) {
       </div>
       ${gironiHTML}
     </div>
-    ${calHTML}
+    ${calTabellaOnly}
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
       <button onclick="CT.subStep.fase='accoppiamenti';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Accoppiamenti</button>
       <button onclick="CT.subStep.fase='finali';renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Finali ›</button>
