@@ -1103,31 +1103,36 @@ async function createTorneo() {
 async function toggleTorneo(id,attivo) { await dbUpdateTorneo(id,{attivo:!attivo}); STATE.tornei=await dbGetTornei(); await renderAdminTornei(); toast(attivo?'Torneo archiviato':'Torneo riattivato'); }
 async function deleteTorneo(id) {
   const t = STATE.tornei.find(x=>x.id===id);
-  if (!confirm(`Eliminare "${t?.nome||'questo torneo'}" e TUTTI i dati (squadre, partite, risultati)?`)) return;
+  if (!confirm(`Eliminare "${t?.nome||'questo torneo'}" e TUTTI i dati?`)) return;
   try {
-    // Elimina categorie, gironi, partite, knockout, squadre
-    const cats = await dbGetCategorie(id);
-    for (const cat of cats) {
-      const gironi = await dbGetGironi(cat.id);
-      for (const g of gironi) {
-        await db.from('marcatori').delete().in('partita_id',
-          (await db.from('partite').select('id').eq('girone_id',g.id)).data?.map(p=>p.id)||[]);
+    toast('⏳ Eliminazione in corso...');
+    // Elimina nell'ordine giusto per i vincoli FK
+    const {data:cats} = await db.from('categorie').select('id').eq('torneo_id', id);
+    for (const cat of (cats||[])) {
+      const {data:gironi} = await db.from('gironi').select('id').eq('categoria_id', cat.id);
+      for (const g of (gironi||[])) {
+        const {data:partite} = await db.from('partite').select('id').eq('girone_id', g.id);
+        const pIds = (partite||[]).map(p=>p.id);
+        if (pIds.length) await db.from('marcatori').delete().in('partita_id', pIds);
         await db.from('partite').delete().eq('girone_id', g.id);
         await db.from('girone_squadre').delete().eq('girone_id', g.id);
-        await db.from('gironi').delete().eq('id', g.id);
       }
+      await db.from('gironi').delete().eq('categoria_id', cat.id);
       await db.from('knockout').delete().eq('categoria_id', cat.id);
-      await db.from('categorie').delete().eq('id', cat.id);
     }
+    await db.from('categorie').delete().eq('torneo_id', id);
     await db.from('squadre').delete().eq('torneo_id', id);
-    await db.from('tornei').delete().eq('id', id);
+    const {error} = await db.from('tornei').delete().eq('id', id);
+    if (error) throw error;
     STATE.tornei = await dbGetTornei();
     STATE.activeTorneo = STATE.tornei.find(t=>t.attivo)?.id || STATE.tornei[0]?.id || null;
-    await loadTorneo(); await renderAdminTornei();
+    STATE.categorie = []; STATE.activeCat = null;
+    renderCatBar(); renderTorneoBar();
+    await renderAdminTornei();
     toast('✅ Torneo eliminato!');
   } catch(e) {
     console.error(e);
-    toast('❌ Errore eliminazione: ' + e.message);
+    toast('❌ ' + (e.message||'Errore eliminazione'));
   }
 }
 async function editTorneo(id) {
@@ -2304,6 +2309,36 @@ function _ctRicalcolaOrari(ci) {
   _ctAssegnaOrari(CT.categorie[ci].calendario, CT.categorie[ci]);
 }
 
+function _ctOrdinaPerGirone(chiave, ci) {
+  // Raggruppa le partite per girone, mantenendo l'ordine interno
+  const lista = CT.categorie[ci][chiave];
+  const gironi = [...new Set(lista.map(p=>p.gironeNome))];
+  let ordine = 1;
+  gironi.forEach(g => {
+    lista.filter(p=>p.gironeNome===g).forEach(p => { p.ordine=ordine++; });
+  });
+  _ctAssegnaOrari(lista, CT.categorie[ci]);
+  renderAdminCreaTorneo();
+}
+
+function _ctOrdinaAlternato(chiave, ci) {
+  // Alterna le partite dei diversi gironi: A1, B1, A2, B2...
+  // Così due gironi giocano contemporaneamente su campi diversi
+  const lista = CT.categorie[ci][chiave];
+  const gironi = [...new Set(lista.map(p=>p.gironeNome))];
+  const perGirone = {};
+  gironi.forEach(g => { perGirone[g] = lista.filter(p=>p.gironeNome===g); });
+  const maxLen = Math.max(...gironi.map(g=>perGirone[g].length));
+  let ordine = 1;
+  for (let i=0; i<maxLen; i++) {
+    gironi.forEach(g => {
+      if (perGirone[g][i]) perGirone[g][i].ordine = ordine++;
+    });
+  }
+  _ctAssegnaOrari(lista, CT.categorie[ci]);
+  renderAdminCreaTorneo();
+}
+
 function _ctSpostaPartita(ci, chiave, fromIdx, dir) {
   // chiave = 'calendario' o 'calendarioFinali'
   const lista = CT.categorie[ci][chiave];
@@ -2358,7 +2393,11 @@ function _ctRenderCalendarioUI(cat, ci, chiave, faseAvanti, faseIndietro) {
           style="margin-left:8px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🔄 Rigenera orari</button>
       </div>
       <div style="background:var(--blu-bg);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
-        💡 Usa <strong>▲ ▼</strong> per spostare le partite. Clicca <strong>🔄 Rigenera orari</strong> per aggiornare gli orari.
+        💡 Usa <strong>▲ ▼</strong> per spostare le partite. Clicca <strong>🔄 Rigenera orari</strong> per aggiornare gli orari.<br>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          <button onclick="_ctOrdinaPerGirone('${chiave}',${ci})" style="background:white;border:1.5px solid var(--blu);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">📋 Raggruppa per girone</button>
+          <button onclick="_ctOrdinaAlternato('${chiave}',${ci})" style="background:white;border:1.5px solid var(--blu);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">⚡ Alterna gironi (no stesso campo)</button>
+        </div>
       </div>
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
