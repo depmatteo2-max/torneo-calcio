@@ -1268,6 +1268,12 @@ function _fileSelezionato(event, idx) {
   _parseExcelRiga(file, idx);
 }
 
+// Wrapper sicuri per le funzioni di import.js
+function _safeCall(fn, ...args) {
+  if (typeof fn === 'function') return fn(...args);
+  return [];
+}
+
 async function _parseExcelRiga(file, idx) {
   const preview = document.getElementById(`cat-preview-${idx}`); const btnDiv = document.getElementById(`cat-btn-${idx}`);
   if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
@@ -1277,7 +1283,11 @@ async function _parseExcelRiga(file, idx) {
     }
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
-    const dati = { categorie: leggiCategorie(wb), gironi: leggiGironi(wb), partite: leggiPartiteFase1(wb), fase2: leggiPartiteFase2(wb) };
+    const leggiCat  = typeof leggiCategorie    === 'function' ? leggiCategorie    : () => [];
+    const leggiGir  = typeof leggiGironi       === 'function' ? leggiGironi       : () => [];
+    const leggiP1   = typeof leggiPartiteFase1 === 'function' ? leggiPartiteFase1 : () => [];
+    const leggiP2   = typeof leggiPartiteFase2 === 'function' ? leggiPartiteFase2 : () => [];
+    const dati = { categorie: leggiCat(wb), gironi: leggiGir(wb), partite: leggiP1(wb), fase2: leggiP2(wb) };
     _fileRighe[idx] = dati;
     const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) nomeCatInput.value = dati.categorie[0].nome;
