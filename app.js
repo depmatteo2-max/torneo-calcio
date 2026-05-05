@@ -477,8 +477,11 @@ async function _caricaGiornate() {
       return (meseEntry ? meseEntry[1] : 0) * 100 + giorno;
     };
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
-    const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
-    STATE.activeGiornata = oggi || 'tutte';
+    // Non filtrare automaticamente — mostra sempre tutte le giornate
+    // L'utente può filtrare manualmente cliccando sulla giornata
+    if (STATE.activeGiornata !== 'tutte' && !STATE._giornateDisponibili.includes(STATE.activeGiornata)) {
+      STATE.activeGiornata = 'tutte';
+    }
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
 }
 
