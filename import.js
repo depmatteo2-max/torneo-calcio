@@ -31,22 +31,13 @@ const ROUND_META = {
 function _getRoundMeta(roundRaw) {
   const r = roundRaw.toUpperCase().trim();
   if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
-  if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
-  if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '🏆', desc: r } };
-  if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '⚔️', desc: r } };
-  const mG = r.match(/^FINALE\s+(\d+)[°º]?[\/]?(\d+)?[°º]?/);
-  if (mG) { const p1=parseInt(mG[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'🏆':p1===3?'🥉':'🎖️', desc: r } }; }
-  if (r.startsWith('FINALE')) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
-  // Formato con gradi: FINALE 1°/2°, FINALE 3°/4°, FINALE 5°/6° ecc.
-  const mGrado = r.match(/^FINALE\s+(\d+)[°º]?[\/]?(\d+)?[°º]?/);
-  if (mGrado) { const p1=parseInt(mGrado[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'🏆':p1===3?'🥉':'🎖️', desc: r } }; }
-  // Girone finale: "A", "B", "ARANCIO" ecc.
-  if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '🏟️', desc: r } };
-  if (r.startsWith('FINALE')) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
-  const mGrado = r.match(/^FINALE\s+(\d+)[°º]?[\/-]?(\d+)[°º]?/);
-  if (mGrado) { const p1=parseInt(mGrado[1]); const isC=p1>2; return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: isC, emoji: p1===1?'🏆':p1===3?'🥉':'🎖️', desc: r } }; }
-  if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '🏟️', desc: r } };
-  if (r.startsWith('FINALE')) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
+  if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
+  if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '\uD83C\uDFC6', desc: r } };
+  if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '\u2694\uFE0F', desc: r } };
+  const mGrado = r.match(/^FINALE\s+(\d+)[\u00b0\u00ba]?[\/\-]?(\d+)?[\u00b0\u00ba]?/);
+  if (mGrado) { const p1=parseInt(mGrado[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'\uD83C\uDFC6':p1===3?'\uD83E\uDD49':'\uD83C\uDF96\uFE0F', desc: r } }; }
+  if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '\uD83C\uDFDF\uFE0F', desc: r } };
+  if (r.startsWith('FINALE')) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
   return null;
 }
 
@@ -70,10 +61,6 @@ function _isPlaceholder(nome) {
   const n = nome.trim();
   // Formato "N° Girone X" o "N° Girone Unico"
   if (/^\d+[°ºoa*]?\s*(Girone|GIR\.?|GIRONE)/i.test(n)) return true;
-  // Formato "1° A", "2° B" (lettera singola = girone finale)
-  if (/^\d+[°º*]?\s*[A-Z]$/.test(n)) return true;
-  // Formato "3°A", "4°B" senza spazio
-  if (/^\d+[°º][A-Za-z]$/.test(n)) return true;
   // Formato "1° A", "2° B" (lettera singola = girone finale)
   if (/^\d+[°º*]?\s*[A-Z]$/.test(n)) return true;
   // Formato "3°A", "4°B" senza spazio
