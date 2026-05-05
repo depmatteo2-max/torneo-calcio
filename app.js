@@ -412,7 +412,7 @@ function renderCatBar() {
 function _renderGiornataBar() {
   const bar = document.getElementById('giornata-bar'); if (!bar) return;
   const giornate = STATE._giornateDisponibili || [];
-  if (giornate.length <= 1) { bar.innerHTML = ''; return; }
+  if (giornate.length === 0) { bar.innerHTML = ''; return; }
   const oggi = _trovaGiornataOggi(giornate);
   bar.innerHTML = [
     { id: 'tutte', label: '📅 Tutte', oggi: false },
@@ -477,11 +477,8 @@ async function _caricaGiornate() {
       return (meseEntry ? meseEntry[1] : 0) * 100 + giorno;
     };
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
-    // Non filtrare automaticamente — mostra sempre tutte le giornate
-    // L'utente può filtrare manualmente cliccando sulla giornata
-    if (STATE.activeGiornata !== 'tutte' && !STATE._giornateDisponibili.includes(STATE.activeGiornata)) {
-      STATE.activeGiornata = 'tutte';
-    }
+    // Mostra sempre tutte le giornate — non filtrare automaticamente per oggi
+    STATE.activeGiornata = 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
 }
 
