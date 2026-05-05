@@ -2824,140 +2824,114 @@ async function ctSalvaDB() {
   const log=document.getElementById('ct-log');
   if(log)log.innerHTML='<div style="color:var(--testo-lt);font-size:13px;">⏳ Salvataggio...</div>';
   try {
-    const torneo=await dbSaveTorneo({nome:CT.torneo.nome,data:CT.torneo.giorni[0]?.data||'',attivo:true});
-    STATE.tornei=await dbGetTornei();
-    STATE.activeTorneo=torneo.id;
+    // 1. Crea il torneo
+    const torneo = await dbSaveTorneo({nome:CT.torneo.nome, data:CT.torneo.giorni[0]?.data||'', attivo:true});
+    STATE.tornei = await dbGetTornei();
+    STATE.activeTorneo = torneo.id;
 
+    // 2. Costruisci struttura dati uguale a quella dell'importazione Excel
+    const dati = {
+      categorie: [],
+      gironi: [],      // {categoria, girone, squadra, ordine}
+      partite: [],     // PARTITE_FASE1 = gironi qualifiche + gironi finali
+      fase2: []        // FASE_FINALE = round knockout
+    };
+
+    let ordCat = 0;
     for (const cat of CT.categorie) {
-      const catDB=await dbSaveCategoria({nome:cat.nome,qualificate:2,formato:'gironi',ordine:0,torneo_id:torneo.id});
+      ordCat++;
+      dati.categorie.push({nome:cat.nome, qualificate:cat.qualificate||2, formato:'gironi', ordine:ordCat});
 
       // Gironi qualifiche
       for (const g of cat.gironi) {
-        const gironeDB=await dbSaveGirone({categoria_id:catDB.id,nome:g.nome});
-        const sqAll=await dbGetSquadre(torneo.id);
-        const sqIds=[];
-        for (const sq of g.squadre) {
-          let s=sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
-          if(!s)s=await dbSaveSquadra({nome:sq.nome,torneo_id:torneo.id});
-          sqIds.push(s.id);
-        }
-        await dbSetGironeSquadre(gironeDB.id,sqIds);
-        await dbGeneraPartite(gironeDB.id,sqIds);
-        // Aggiorna orari dal calendario
-        const {data:pDB}=await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
-        const sqAll2=await dbGetSquadre(torneo.id);
-        const sqMap={}; sqAll2.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
-        for (const p of cat.calendario.filter(p=>p.gironeNome===g.nome)) {
-          const hId=sqMap[p.sq1.toLowerCase()],aId=sqMap[p.sq2.toLowerCase()];
-          const dbP=pDB?.find(x=>x.home_id===hId&&x.away_id===aId);
-          if(dbP) await db.from('partite').update({orario:p.ora,campo:String(p.campo),giorno:p.giornata}).eq('id',dbP.id);
+        const giornata = CT.torneo.giorni[g.giorno||0]?.data
+          ? _ctFmtData(CT.torneo.giorni[g.giorno||0].data)
+          : `Giorno ${(g.giorno||0)+1}`;
+
+        // Squadre nel girone
+        g.squadre.forEach((sq,i) => {
+          dati.gironi.push({categoria:cat.nome, girone:g.nome, squadra:sq.nome, ordine:i+1});
+        });
+
+        // Partite round-robin dal calendario
+        const calGirone = cat.calendario.filter(p=>p.gironeNome===g.nome);
+        calGirone.sort((a,b)=>a.ordine-b.ordine);
+        calGirone.forEach(p => {
+          dati.partite.push({
+            categoria:cat.nome, girone:g.nome,
+            squadra_casa:p.sq1, squadra_trasferta:p.sq2,
+            gol_casa:'', gol_trasferta:'',
+            campo:p.campo, orario:p.ora, giornata:p.giornata||giornata
+          });
+        });
+
+        // Finali per posto dentro il girone (tipo finali_posto)
+        if (g.tipo==='finali_posto') {
+          const nFin = g.numFinali||2;
+          const finOrari = g.finaliOrari||{};
+          for (let f=nFin-1;f>=0;f--) {
+            const p1=f*2+1, p2=f*2+2;
+            const key=p1+'vs'+p2;
+            const fo = finOrari[key]||{};
+            dati.fase2.push({
+              categoria:cat.nome, round:`FINALE ${p1}°/${p2}°`,
+              squadra_casa:`${p1}° ${g.nome}`, squadra_trasferta:`${p2}° ${g.nome}`,
+              gol_casa:'', gol_trasferta:'',
+              campo:fo.campo||1, orario:fo.ora||'', giornata:giornata
+            });
+          }
         }
       }
 
-      // Gironi finali — le squadre placeholder vanno in note_home/note_away
+      // Gironi finali (GIRONE A, GIRONE B ecc.)
       for (const gf of cat.gironiFinali) {
-        const gironeDB = await dbSaveGirone({categoria_id:catDB.id, nome:gf.nome});
-        const sqAll = await dbGetSquadre(torneo.id);
-        const sqMap = {}; sqAll.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+        const di = gf.giorno??1;
+        const giornata = CT.torneo.giorni[di]?.data
+          ? _ctFmtData(CT.torneo.giorni[di].data)
+          : `Giorno ${di+1}`;
 
-        // Separa squadre reali da placeholder
-        const squadreReali = gf.squadre.filter(sq => !_isPlaceholder(sq.nome));
-        const squadrePH = gf.squadre.filter(sq => _isPlaceholder(sq.nome));
+        // Squadre nel girone finale
+        gf.squadre.forEach((sq,i) => {
+          dati.gironi.push({categoria:cat.nome, girone:gf.nome, squadra:sq.nome, ordine:i+1});
+        });
 
-        // Salva solo le squadre reali nel girone
-        const sqIds = [];
-        for (const sq of squadreReali) {
-          let s = sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
-          if(!s) s = await dbSaveSquadra({nome:sq.nome, torneo_id:torneo.id});
-          sqIds.push(s.id);
-        }
-
-        // Per ogni placeholder crea uno slot vuoto nel girone_squadre con note
-        // Prima crea la squadra placeholder nel DB (serve per girone_squadre)
-        for (const sq of squadrePH) {
-          let s = sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
-          if(!s) s = await dbSaveSquadra({nome:sq.nome, torneo_id:torneo.id});
-          sqIds.push(s.id);
-        }
-
-        if(sqIds.length >= 2) {
-          await dbSetGironeSquadre(gironeDB.id, sqIds);
-          await dbGeneraPartite(gironeDB.id, sqIds);
-
-          // Aggiorna partite: per i placeholder metti note_home/note_away e home_id/away_id=null
-          const sqAll3 = await dbGetSquadre(torneo.id);
-          const sqMap3 = {}; sqAll3.forEach(s=>sqMap3[s.nome.toLowerCase()]=s.id);
-          const {data:pDB} = await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
-
-          // Aggiorna orari e note dal calendarioFinali
-          const calFiltrate = cat.calendarioFinali.filter(p=>p.gironeNome===gf.nome);
-          for (const p of calFiltrate) {
-            const hIsPlaceholder = _isPlaceholder(p.sq1);
-            const aIsPlaceholder = _isPlaceholder(p.sq2);
-            const hId = hIsPlaceholder ? null : (sqMap3[p.sq1.toLowerCase()]||null);
-            const aId = aIsPlaceholder ? null : (sqMap3[p.sq2.toLowerCase()]||null);
-            // Trova la partita corrispondente (cerca per entrambe le combinazioni)
-            const dbP = pDB?.find(x=>{
-              const hMatch = hId ? x.home_id===hId : sqMap3[p.sq1.toLowerCase()]===x.home_id;
-              const aMatch = aId ? x.away_id===aId : sqMap3[p.sq2.toLowerCase()]===x.away_id;
-              return hMatch && aMatch;
-            }) || pDB?.find(x=>
-              (sqMap3[p.sq1.toLowerCase()]===x.home_id && sqMap3[p.sq2.toLowerCase()]===x.away_id)
-            );
-            if(dbP) {
-              const upd = {orario:p.ora, campo:String(p.campo), giorno:p.giornata};
-              if(hIsPlaceholder) { upd.home_id=null; upd.note_home=p.sq1; }
-              if(aIsPlaceholder) { upd.away_id=null; upd.note_away=p.sq2; }
-              await db.from('partite').update(upd).eq('id',dbP.id);
-            }
-          }
-          // Se non c'era corrispondenza (placeholder puro), inserisci partite manualmente
-          if (squadrePH.length > 0 && calFiltrate.length > 0) {
-            // Elimina partite placeholder-vs-placeholder generate automaticamente
-            // e inseriscile con le note corrette
-            for (const p of calFiltrate) {
-              const hIsPlaceholder = _isPlaceholder(p.sq1);
-              const aIsPlaceholder = _isPlaceholder(p.sq2);
-              if (hIsPlaceholder || aIsPlaceholder) {
-                const hId2 = hIsPlaceholder ? null : (sqMap3[p.sq1.toLowerCase()]||null);
-                const aId2 = aIsPlaceholder ? null : (sqMap3[p.sq2.toLowerCase()]||null);
-                // Cerca se esiste già una partita giusta
-                const exists = pDB?.find(x=>
-                  (hIsPlaceholder||x.home_id===hId2) && (aIsPlaceholder||x.away_id===aId2)
-                );
-                if (!exists) {
-                  await db.from('partite').insert({
-                    girone_id: gironeDB.id,
-                    home_id: hId2, away_id: aId2,
-                    note_home: hIsPlaceholder ? p.sq1 : null,
-                    note_away: aIsPlaceholder ? p.sq2 : null,
-                    orario: p.ora, campo: String(p.campo), giorno: p.giornata,
-                    gol_home: 0, gol_away: 0, giocata: false
-                  });
-                }
-              }
-            }
-          }
-        }
+        // Partite del girone finale
+        const calGF = cat.calendarioFinali.filter(p=>p.gironeNome===gf.nome);
+        calGF.sort((a,b)=>a.ordine-b.ordine);
+        calGF.forEach(p => {
+          dati.partite.push({
+            categoria:cat.nome, girone:gf.nome,
+            squadra_casa:p.sq1, squadra_trasferta:p.sq2,
+            gol_casa:'', gol_trasferta:'',
+            campo:p.campo, orario:p.ora, giornata:p.giornata||giornata
+          });
+        });
       }
 
       // Round finali knockout
-      const sqAll=await dbGetSquadre(torneo.id);
-      const sqMap={}; sqAll.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
       for (const f of (cat.finali||[])) {
-        const hId=sqMap[f.sq1?.toLowerCase()]||null;
-        const aId=sqMap[f.sq2?.toLowerCase()]||null;
-        await db.from('knockout').insert({
-          categoria_id:catDB.id, round_name:f.nome,
-          home_id:hId, away_id:aId,
-          note_home:hId?null:(f.sq1||null), note_away:aId?null:(f.sq2||null),
-          orario:f.ora||null, campo:f.campo||1, giocata:false, gol_home:0, gol_away:0
+        const giornata = f.giornata||CT.torneo.giorni[CT.torneo.giorni.length-1]?.data
+          ? _ctFmtData(CT.torneo.giorni[CT.torneo.giorni.length-1].data)
+          : 'Finale';
+        dati.fase2.push({
+          categoria:cat.nome, round:f.nome,
+          squadra_casa:f.sq1||'', squadra_trasferta:f.sq2||'',
+          gol_casa:'', gol_trasferta:'',
+          campo:f.campo||1, orario:f.ora||'', giornata:f.giornata||giornata
         });
       }
     }
 
-    STATE.categorie=await dbGetCategorie(STATE.activeTorneo);
-    STATE.activeCat=STATE.categorie[0]?.id||null;
+    // 3. Usa il sistema di importazione già esistente (stesso di Excel)
+    if (typeof eseguiImportazioneConTorneo === 'function') {
+      await eseguiImportazioneConTorneo(torneo.id, dati, null);
+    } else {
+      // Fallback manuale se eseguiImportazioneConTorneo non disponibile
+      await _ctSalvaManuale(torneo.id, dati);
+    }
+
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    STATE.activeCat = STATE.categorie[0]?.id||null;
     renderCatBar(); renderTorneoBar();
     if(log)log.innerHTML=`<div style="background:var(--verde-bg);border-radius:8px;padding:12px;color:var(--verde);font-weight:700;">✅ Torneo "${CT.torneo.nome}" creato!</div>`;
     toast('✅ Torneo creato!');
@@ -2967,6 +2941,73 @@ async function ctSalvaDB() {
     toast('❌ '+e.message);
   }
 }
+
+// Fallback salvataggio manuale (usato se import.js non disponibile)
+async function _ctSalvaManuale(torneoId, dati) {
+  for (const catDati of dati.categorie) {
+    const catDB = await dbSaveCategoria({nome:catDati.nome, qualificate:catDati.qualificate||2, formato:'gironi', ordine:catDati.ordine||0, torneo_id:torneoId});
+
+    // Raggruppa gironi
+    const gironiNomi = [...new Set(dati.gironi.filter(g=>g.categoria===catDati.nome).map(g=>g.girone))];
+    for (const gironeNome of gironiNomi) {
+      const gironeDB = await dbSaveGirone({categoria_id:catDB.id, nome:gironeNome});
+      const sqNomi = dati.gironi.filter(g=>g.categoria===catDati.nome&&g.girone===gironeNome).sort((a,b)=>a.ordine-b.ordine).map(g=>g.squadra);
+      
+      const sqAll = await dbGetSquadre(torneoId);
+      const sqIds = [];
+      for (const sqNome of sqNomi) {
+        if (_isPlaceholder(sqNome)) {
+          let s = sqAll.find(x=>x.nome.toLowerCase()===sqNome.toLowerCase());
+          if(!s) s = await dbSaveSquadra({nome:sqNome, torneo_id:torneoId});
+          sqIds.push(s.id);
+        } else {
+          let s = sqAll.find(x=>x.nome.toLowerCase()===sqNome.toLowerCase());
+          if(!s) s = await dbSaveSquadra({nome:sqNome, torneo_id:torneoId});
+          sqIds.push(s.id);
+        }
+      }
+      await dbSetGironeSquadre(gironeDB.id, sqIds);
+      await dbGeneraPartite(gironeDB.id, sqIds);
+
+      // Aggiorna orari e gestisci placeholder
+      const {data:pDB} = await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
+      const sqAll2 = await dbGetSquadre(torneoId);
+      const sqMap = {}; sqAll2.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+
+      const partiteGirone = dati.partite.filter(p=>p.categoria===catDati.nome&&p.girone===gironeNome);
+      for (const p of partiteGirone) {
+        const hIsPlaceholder = _isPlaceholder(p.squadra_casa);
+        const aIsPlaceholder = _isPlaceholder(p.squadra_trasferta);
+        const hId = sqMap[p.squadra_casa.toLowerCase()]||null;
+        const aId = sqMap[p.squadra_trasferta.toLowerCase()]||null;
+        const dbP = pDB?.find(x=>x.home_id===hId&&x.away_id===aId);
+        if(dbP) {
+          const upd = {orario:p.orario, campo:String(p.campo), giorno:p.giornata};
+          if(hIsPlaceholder){upd.home_id=null; upd.note_home=p.squadra_casa;}
+          if(aIsPlaceholder){upd.away_id=null; upd.note_away=p.squadra_trasferta;}
+          await db.from('partite').update(upd).eq('id',dbP.id);
+        }
+      }
+    }
+
+    // Fase finale knockout
+    const sqAll = await dbGetSquadre(torneoId);
+    const sqMap = {}; sqAll.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+    for (const f of dati.fase2.filter(p=>p.categoria===catDati.nome)) {
+      const hId = _isPlaceholder(f.squadra_casa) ? null : (sqMap[f.squadra_casa.toLowerCase()]||null);
+      const aId = _isPlaceholder(f.squadra_trasferta) ? null : (sqMap[f.squadra_trasferta.toLowerCase()]||null);
+      await db.from('knockout').insert({
+        categoria_id:catDB.id, round_name:f.round,
+        home_id:hId, away_id:aId,
+        note_home:hId?null:(f.squadra_casa||null),
+        note_away:aId?null:(f.squadra_trasferta||null),
+        orario:f.orario||null, campo:f.campo||1,
+        giocata:false, gol_home:0, gol_away:0
+      });
+    }
+  }
+}
+
 
 // ══════════════════════════════════════════════════════════════
 //  EXPORT EXCEL
