@@ -56,6 +56,19 @@ const ROUND_COLORS = {
   'FINALE 9-10 POSTO': '#CFD8DC', 'FINALE 11-12 POSTO': '#ECEFF1',
 };
 
+// Normalizza placeholder: "1° A" → "1° Girone A", "3°B" → "3° Girone B"
+function _ctNormalizzaPlaceholder(nome) {
+  if (!nome) return nome;
+  const n = nome.trim();
+  // "1° A", "2° B" → "1° Girone A"
+  const m1 = n.match(/^(\d+)[°º\*]?\s+([A-Z])$/);
+  if (m1) return `${m1[1]}° Girone ${m1[2]}`;
+  // "3°A", "4°B" → "3° Girone A"
+  const m2 = n.match(/^(\d+)[°º]([A-Z])$/);
+  if (m2) return `${m2[1]}° Girone ${m2[2]}`;
+  return n;
+}
+
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const n = nome.trim();
@@ -183,7 +196,7 @@ function leggiGironi(wb) {
       const key = `${cat}||${gir}`;
       if (!map[key]) map[key] = { categoria: cat, nome: gir, squadre: [] };
       // Include TUTTI — sia squadre reali che placeholder
-      if (sq && !sq.startsWith('ℹ')) map[key].squadre.push(sq);
+      if (sq && !sq.startsWith('ℹ')) map[key].squadre.push(_ctNormalizzaPlaceholder(sq));
     }
     return Object.values(map).filter(g => g.nome && g.squadre.length > 0);
   }
@@ -271,8 +284,8 @@ function leggiPartiteFase2(wb) {
         orario      : col(obj, 'ORARIO', 'ORA'),
         campo       : col(obj, 'CAMPO'),
         giorno      : col(obj, 'GIORNO', 'DATA', 'GIORNATA'),
-        sq1raw      : col(obj, 'SQUADRA_CASA', 'SQUADRA CASA', 'CASA', 'HOME'),
-        sq2raw      : col(obj, 'SQUADRA_TRASFERTA', 'SQUADRA OSPITE', 'TRASFERTA', 'OSPITE', 'AWAY'),
+        sq1raw      : _ctNormalizzaPlaceholder(col(obj, 'SQUADRA_CASA', 'SQUADRA CASA', 'CASA', 'HOME')),
+        sq2raw      : _ctNormalizzaPlaceholder(col(obj, 'SQUADRA_TRASFERTA', 'SQUADRA OSPITE', 'TRASFERTA', 'OSPITE', 'AWAY')),
       };
     });
 }
