@@ -2854,35 +2854,89 @@ async function ctSalvaDB() {
         }
       }
 
-      // Gironi finali
+      // Gironi finali — le squadre placeholder vanno in note_home/note_away
       for (const gf of cat.gironiFinali) {
-        const gironeDB=await dbSaveGirone({categoria_id:catDB.id,nome:gf.nome});
-        const sqAll=await dbGetSquadre(torneo.id);
-        const sqMap={}; sqAll.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
-        const sqIds=[];
-        for (const sq of gf.squadre) {
-          if (sq._placeholder) {
-            // Crea squadra placeholder
-            let s=sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
-            if(!s)s=await dbSaveSquadra({nome:sq.nome,torneo_id:torneo.id});
-            sqIds.push(s.id);
-          } else {
-            let s=sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
-            if(!s)s=await dbSaveSquadra({nome:sq.nome,torneo_id:torneo.id});
-            sqIds.push(s.id);
-          }
+        const gironeDB = await dbSaveGirone({categoria_id:catDB.id, nome:gf.nome});
+        const sqAll = await dbGetSquadre(torneo.id);
+        const sqMap = {}; sqAll.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+
+        // Separa squadre reali da placeholder
+        const squadreReali = gf.squadre.filter(sq => !_isPlaceholder(sq.nome));
+        const squadrePH = gf.squadre.filter(sq => _isPlaceholder(sq.nome));
+
+        // Salva solo le squadre reali nel girone
+        const sqIds = [];
+        for (const sq of squadreReali) {
+          let s = sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
+          if(!s) s = await dbSaveSquadra({nome:sq.nome, torneo_id:torneo.id});
+          sqIds.push(s.id);
         }
-        if(sqIds.length>=2){
-          await dbSetGironeSquadre(gironeDB.id,sqIds);
-          await dbGeneraPartite(gironeDB.id,sqIds);
-          // Aggiorna orari
-          const {data:pDB}=await db.from('partite').select('id,home_id,away_id,note_home,note_away').eq('girone_id',gironeDB.id);
-          const sqAll3=await dbGetSquadre(torneo.id);
-          const sqMap3={}; sqAll3.forEach(s=>sqMap3[s.nome.toLowerCase()]=s.id);
-          for (const p of cat.calendarioFinali.filter(p=>p.gironeNome===gf.nome)) {
-            const hId=sqMap3[p.sq1.toLowerCase()],aId=sqMap3[p.sq2.toLowerCase()];
-            const dbP=pDB?.find(x=>x.home_id===hId&&x.away_id===aId);
-            if(dbP) await db.from('partite').update({orario:p.ora,campo:String(p.campo),giorno:p.giornata}).eq('id',dbP.id);
+
+        // Per ogni placeholder crea uno slot vuoto nel girone_squadre con note
+        // Prima crea la squadra placeholder nel DB (serve per girone_squadre)
+        for (const sq of squadrePH) {
+          let s = sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
+          if(!s) s = await dbSaveSquadra({nome:sq.nome, torneo_id:torneo.id});
+          sqIds.push(s.id);
+        }
+
+        if(sqIds.length >= 2) {
+          await dbSetGironeSquadre(gironeDB.id, sqIds);
+          await dbGeneraPartite(gironeDB.id, sqIds);
+
+          // Aggiorna partite: per i placeholder metti note_home/note_away e home_id/away_id=null
+          const sqAll3 = await dbGetSquadre(torneo.id);
+          const sqMap3 = {}; sqAll3.forEach(s=>sqMap3[s.nome.toLowerCase()]=s.id);
+          const {data:pDB} = await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
+
+          // Aggiorna orari e note dal calendarioFinali
+          const calFiltrate = cat.calendarioFinali.filter(p=>p.gironeNome===gf.nome);
+          for (const p of calFiltrate) {
+            const hIsPlaceholder = _isPlaceholder(p.sq1);
+            const aIsPlaceholder = _isPlaceholder(p.sq2);
+            const hId = hIsPlaceholder ? null : (sqMap3[p.sq1.toLowerCase()]||null);
+            const aId = aIsPlaceholder ? null : (sqMap3[p.sq2.toLowerCase()]||null);
+            // Trova la partita corrispondente (cerca per entrambe le combinazioni)
+            const dbP = pDB?.find(x=>{
+              const hMatch = hId ? x.home_id===hId : sqMap3[p.sq1.toLowerCase()]===x.home_id;
+              const aMatch = aId ? x.away_id===aId : sqMap3[p.sq2.toLowerCase()]===x.away_id;
+              return hMatch && aMatch;
+            }) || pDB?.find(x=>
+              (sqMap3[p.sq1.toLowerCase()]===x.home_id && sqMap3[p.sq2.toLowerCase()]===x.away_id)
+            );
+            if(dbP) {
+              const upd = {orario:p.ora, campo:String(p.campo), giorno:p.giornata};
+              if(hIsPlaceholder) { upd.home_id=null; upd.note_home=p.sq1; }
+              if(aIsPlaceholder) { upd.away_id=null; upd.note_away=p.sq2; }
+              await db.from('partite').update(upd).eq('id',dbP.id);
+            }
+          }
+          // Se non c'era corrispondenza (placeholder puro), inserisci partite manualmente
+          if (squadrePH.length > 0 && calFiltrate.length > 0) {
+            // Elimina partite placeholder-vs-placeholder generate automaticamente
+            // e inseriscile con le note corrette
+            for (const p of calFiltrate) {
+              const hIsPlaceholder = _isPlaceholder(p.sq1);
+              const aIsPlaceholder = _isPlaceholder(p.sq2);
+              if (hIsPlaceholder || aIsPlaceholder) {
+                const hId2 = hIsPlaceholder ? null : (sqMap3[p.sq1.toLowerCase()]||null);
+                const aId2 = aIsPlaceholder ? null : (sqMap3[p.sq2.toLowerCase()]||null);
+                // Cerca se esiste già una partita giusta
+                const exists = pDB?.find(x=>
+                  (hIsPlaceholder||x.home_id===hId2) && (aIsPlaceholder||x.away_id===aId2)
+                );
+                if (!exists) {
+                  await db.from('partite').insert({
+                    girone_id: gironeDB.id,
+                    home_id: hId2, away_id: aId2,
+                    note_home: hIsPlaceholder ? p.sq1 : null,
+                    note_away: aIsPlaceholder ? p.sq2 : null,
+                    orario: p.ora, campo: String(p.campo), giorno: p.giornata,
+                    gol_home: 0, gol_away: 0, giocata: false
+                  });
+                }
+              }
+            }
           }
         }
       }
