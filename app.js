@@ -590,13 +590,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const partitePure = giocate.filter(p =>
         !_isPlaceholder(sqMap[p.home_id]?.nome) && !_isPlaceholder(sqMap[p.away_id]?.nome)
       );
-      // Non calcolare classifica se non ci sono abbastanza partite giocate tra reali
-      // (almeno il 50% delle partite del girone devono essere giocate)
-      const { data: tuttePartiteGirone } = await db.from('partite').select('id').eq('girone_id', g.id);
-      const totPartite = tuttePartiteGirone?.length || 0;
       if (!partitePure.length) continue;
-      // Non risolvere placeholder se il girone non è ancora iniziato
-      if (totPartite > 0 && partitePure.length === 0) continue;
       const sqRealiIds = new Set();
       partitePure.forEach(p => { sqRealiIds.add(p.home_id); sqRealiIds.add(p.away_id); });
       const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
@@ -767,20 +761,6 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
       return tipo.startsWith('peggio') ? a.stat.gf - b.stat.gf : b.stat.gf - a.stat.gf;
     });
     return candidati[0]?.sq?.id || null;
-  }
-
-  // Formato "3°A" o "4°B" senza spazio
-  const mShort = s.match(/^(\d+)[°º]([A-Za-z])$/);
-  if (mShort) {
-    const pos = parseInt(mShort[1]);
-    const lettera = mShort[2].toUpperCase();
-    const normK = (k) => k.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
-    const k = Object.keys(classificheGironi).find(k => {
-      const kn = normK(k);
-      return kn === lettera || kn.endsWith(' ' + lettera);
-    });
-    if (k) { const cl = classificheGironi[k]; if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null; }
-    return null; // Girone non ancora risolto
   }
 
   // Risoluzione generica: "N° <nome girone>" o "N° Girone X" o "N° X"
@@ -1268,31 +1248,44 @@ function _fileSelezionato(event, idx) {
   _parseExcelRiga(file, idx);
 }
 
-// Wrapper sicuri per le funzioni di import.js
-function _safeCall(fn, ...args) {
-  if (typeof fn === 'function') return fn(...args);
-  return [];
-}
-
 async function _parseExcelRiga(file, idx) {
-  const preview = document.getElementById(`cat-preview-${idx}`); const btnDiv = document.getElementById(`cat-btn-${idx}`);
+  const preview = document.getElementById(`cat-preview-${idx}`);
+  const btnDiv = document.getElementById(`cat-btn-${idx}`);
   if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
   try {
     if (typeof XLSX === 'undefined') {
-      await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
     }
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
-    const leggiCat  = typeof leggiCategorie    === 'function' ? leggiCategorie    : () => [];
-    const leggiGir  = typeof leggiGironi       === 'function' ? leggiGironi       : () => [];
-    const leggiP1   = typeof leggiPartiteFase1 === 'function' ? leggiPartiteFase1 : () => [];
-    const leggiP2   = typeof leggiPartiteFase2 === 'function' ? leggiPartiteFase2 : () => [];
-    const dati = { categorie: leggiCat(wb), gironi: leggiGir(wb), partite: leggiP1(wb), fase2: leggiP2(wb) };
+    if (typeof leggiCategorie !== 'function') {
+      if (preview) preview.innerHTML = '<div style="color:var(--rosso);font-size:12px;">❌ Errore: ricarica la pagina (CTRL+SHIFT+R) e riprova</div>';
+      return;
+    }
+    const dati = {
+      categorie: leggiCategorie(wb),
+      gironi: leggiGironi(wb),
+      partite: leggiPartiteFase1(wb),
+      fase2: leggiPartiteFase2(wb)
+    };
     _fileRighe[idx] = dati;
     const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) nomeCatInput.value = dati.categorie[0].nome;
     if (preview) {
-      preview.innerHTML = `<div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;"><div style="font-weight:700;color:var(--verde);margin-bottom:6px;">✅ File letto correttamente</div><div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${dati.gironi.length} gironi</span><span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${dati.partite.length} partite</span>${dati.fase2.length ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${dati.fase2.length} finali</span>` : ''}</div></div>`;
+      const totGironi = dati.gironi.length;
+      const totPartite = dati.partite.length;
+      const totFinali = dati.fase2.length;
+      preview.innerHTML = `<div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;">
+        <div style="font-weight:700;color:var(--verde);margin-bottom:6px;">✅ File letto correttamente</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${totGironi} gironi</span>
+          <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${totPartite} partite</span>
+          ${totFinali ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${totFinali} finali</span>` : ''}
+        </div></div>`;
     }
     if (btnDiv) {
       btnDiv.style.display = 'block';
@@ -1301,7 +1294,7 @@ async function _parseExcelRiga(file, idx) {
       if (btn) btn.textContent = `✓ Importa "${nome}"`;
     }
   } catch(e) {
-    if (preview) preview.innerHTML = '<div style="color:var(--rosso);font-size:12px;">❌ Errore: ' + e.message + '</div>';
+    if (preview) preview.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
   }
 }
 
