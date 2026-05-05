@@ -590,7 +590,13 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const partitePure = giocate.filter(p =>
         !_isPlaceholder(sqMap[p.home_id]?.nome) && !_isPlaceholder(sqMap[p.away_id]?.nome)
       );
+      // Non calcolare classifica se non ci sono abbastanza partite giocate tra reali
+      // (almeno il 50% delle partite del girone devono essere giocate)
+      const { data: tuttePartiteGirone } = await db.from('partite').select('id').eq('girone_id', g.id);
+      const totPartite = tuttePartiteGirone?.length || 0;
       if (!partitePure.length) continue;
+      // Non risolvere placeholder se il girone non è ancora iniziato
+      if (totPartite > 0 && partitePure.length === 0) continue;
       const sqRealiIds = new Set();
       partitePure.forEach(p => { sqRealiIds.add(p.home_id); sqRealiIds.add(p.away_id); });
       const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
@@ -703,16 +709,10 @@ function _calcolaMiglioriSecondi(classificheGironi) {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
-  // "1° Girone A", "2° Gruppo B"
   if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
-  // "1° A", "2° B" (lettera singola = girone finale)
-  if (/^\d+[°º*]?\s*[A-Z]$/.test(s)) return true;
-  // "1° ARANCIO", "2° VERDE" ecc
   if (/^\d+[°º*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
   if (/^(miglior|peggio)/i.test(s)) return true;
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
-  // "3°A", "4°B" senza spazio
-  if (/^\d+[°º][A-Z]$/.test(s)) return true;
   return false;
 }
 
@@ -769,22 +769,22 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return candidati[0]?.sq?.id || null;
   }
 
-  // Risoluzione generica: "N° <nome girone>" o "N° Girone X" o "N° X"
-  // Estrae il numero di posizione e cerca il girone nel dizionario
   // Formato "3°A" o "4°B" senza spazio
   const mShort = s.match(/^(\d+)[°º]([A-Za-z])$/);
   if (mShort) {
     const pos = parseInt(mShort[1]);
     const lettera = mShort[2].toUpperCase();
-    // Cerca girone con quella lettera
-    const normKey = (k) => k.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const normK = (k) => k.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
     const k = Object.keys(classificheGironi).find(k => {
-      const kn = normKey(k);
-      return kn === lettera || kn === 'A ' + lettera || kn.endsWith(' ' + lettera) || kn === 'GIRONE ' + lettera;
+      const kn = normK(k);
+      return kn === lettera || kn.endsWith(' ' + lettera);
     });
     if (k) { const cl = classificheGironi[k]; if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null; }
+    return null; // Girone non ancora risolto
   }
 
+  // Risoluzione generica: "N° <nome girone>" o "N° Girone X" o "N° X"
+  // Estrae il numero di posizione e cerca il girone nel dizionario
   const mNum = s.match(/^(\d+)\s*[°º*o]?\s*(.+)$/i);
   if (mNum) {
     const pos = parseInt(mNum[1]);
@@ -821,6 +821,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
 
     // Match diretto con il nome del girone (es. "1° Girone A", "1° A", "1° ARANCIO", "1° Venerdi")
     const keyword = resto.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    // Cerca il girone che contiene questa parola chiave (case insensitive, senza accenti)
     const normKey = (s) => s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const k = Object.keys(classificheGironi).find(k => {
       const kn = normKey(k);
@@ -830,9 +831,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
         kn.endsWith(' ' + keyword) ||
         keyword === kn ||
         keyword.endsWith(kn) ||
-        kn.includes(keyword) ||
-        // Match lettera singola: "A" trova "A", "GIRONE A"
-        (keyword.length === 1 && (kn === keyword || kn.endsWith(' ' + keyword)));
+        kn.includes(keyword);
     });
     if (k) {
       const cl = classificheGironi[k];
