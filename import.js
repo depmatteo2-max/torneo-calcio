@@ -29,15 +29,15 @@ const ROUND_META = {
 };
 
 function _getRoundMeta(roundRaw) {
+  if (!roundRaw) return null;
   const r = roundRaw.toUpperCase().trim();
   if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
-  if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
+  if (/^FINALE\s+\d+[-\u2013]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
   if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '\uD83C\uDFC6', desc: r } };
   if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '\u2694\uFE0F', desc: r } };
-  const mGrado = r.match(/^FINALE\s+(\d+)[\u00b0\u00ba]?[\/\-]?(\d+)?[\u00b0\u00ba]?/);
-  if (mGrado) { const p1=parseInt(mGrado[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'\uD83C\uDFC6':p1===3?'\uD83E\uDD49':'\uD83C\uDF96\uFE0F', desc: r } }; }
   if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '\uD83C\uDFDF\uFE0F', desc: r } };
-  if (r.startsWith('FINALE')) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
+  const m = r.match(/^FINALE\s+(\d+)/);
+  if (m) { const p1=parseInt(m[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'\uD83C\uDFC6':p1===3?'\uD83E\uDD49':'\uD83C\uDF96\uFE0F', desc: r } }; }
   return null;
 }
 
