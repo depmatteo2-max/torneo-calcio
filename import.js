@@ -34,6 +34,18 @@ function _getRoundMeta(roundRaw) {
   if (/^FINALE\s+\d+[-–]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
   if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '🏆', desc: r } };
   if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '⚔️', desc: r } };
+  // Formato con gradi: FINALE 1°/2°, FINALE 3°/4°, FINALE 5°/6° ecc.
+  const mGrado = r.match(/^FINALE\s+(\d+)[°º]?\/?(\d+)[°º]?/);
+  if (mGrado) {
+    const p1=parseInt(mGrado[1]), p2=parseInt(mGrado[2]);
+    const isConsolazione = p1 > 2;
+    const order = 18 + Math.floor((p1-1)/2);
+    return { key: r, meta: { order, consolazione: isConsolazione, emoji: p1===1?'🏆':p1===3?'🥉':'🎖️', desc: `Finale ${p1}°-${p2}°` } };
+  }
+  // Formato GIRONE A, GIRONE B come round finale
+  if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '🏟️', desc: r } };
+  // Qualsiasi altro formato finale
+  if (r.startsWith('FINALE')) return { key: r, meta: { order: 30, consolazione: true, emoji: '🎖️', desc: r } };
   return null;
 }
 
