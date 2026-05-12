@@ -590,21 +590,21 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const partitePure = giocate.filter(p =>
         !_isPlaceholder(sqMap[p.home_id]?.nome) && !_isPlaceholder(sqMap[p.away_id]?.nome)
       );
-      // Non calcolare classifica se non ci sono abbastanza partite giocate tra reali
-      // (almeno il 50% delle partite del girone devono essere giocate)
-      const { data: tuttePartiteGirone } = await db.from('partite').select('id').eq('girone_id', g.id);
-      const totPartite = tuttePartiteGirone?.length || 0;
       if (!partitePure.length) continue;
-      // Non risolvere placeholder se il girone non è ancora iniziato
-      if (totPartite > 0 && partitePure.length === 0) continue;
+
+      // FIX CRITICO: non calcolare classifica se il girone ha ancora squadre placeholder
+      // che non sono state risolte (cioè il girone dipende da risultati non ancora disponibili)
+      const { data: gsSlots } = await db.from('girone_squadre')
+        .select('squadra_id, squadre(nome)').eq('girone_id', g.id);
+      const haPlaceholderNonRisolti = (gsSlots||[]).some(r => _isPlaceholder(r.squadre?.nome));
+      if (haPlaceholderNonRisolti) continue; // Salta — il girone ha ancora squadre da definire
+
       const sqRealiIds = new Set();
       partitePure.forEach(p => { sqRealiIds.add(p.home_id); sqRealiIds.add(p.away_id); });
       const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
       if (squadreReali.length > 0) {
-        // Salva con il nome del girone E con varianti per facilitare il lookup
         const cl = calcGironeClassifica({ squadre: squadreReali, partite: partitePure });
         classificheGironi[g.nome] = cl;
-        // Aggiungi anche varianti uppercase e senza accenti per lookup robusto
         classificheGironi[g.nome.toUpperCase()] = cl;
       }
     }
@@ -1810,29 +1810,32 @@ window.addEventListener('DOMContentLoaded', init);
 //  Step 4: Riepilogo + Salva
 // ============================================================
 
-// ============================================================
-// WIZARD CREA TORNEO v4 — Automatico + Modificabile
-// ============================================================
 let CT = {
-  step: 1,
-  subStep: null,
+  step: 1,           // step globale 1-4
+  subStep: null,     // {catIdx, fase: 'gironi'|'calendario'|'accoppiamenti'|'gironifinali'|'finali'}
   torneo: { nome:'', luogo:'', durata:20, pausa:5, giorni:[{data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2}] },
   categorie: []
+  // cat: { nome, gironi:[{nome,giorno,squadre:[{nome,prio}]}], calendario:[{gironeNome,sq1,sq2,ora,campo,giornata,ordine}],
+  //        accoppiamenti:[{pos,gironeNome,aGirone,giorno}], squadreExtra:[{nome,aGirone}],
+  //        gironiFinali:[{nome,giorno,squadre:[{nome,prio}]}], calendarioFinali:[...],
+  //        finali:[{nome,sq1,sq2,ora,campo,giornata}] }
 };
 
 // ─── ENTRY POINT ─────────────────────────────────────────────
 async function renderAdminCreaTorneo() {
   const el = document.getElementById('sec-a-crea');
   if (!el) return;
+
   let html = '';
-  if (CT.step===1) html = _ctStep1();
-  else if (CT.step===2) html = _ctStep2();
-  else if (CT.step===3) html = _ctStep3();
-  else if (CT.step===4) html = await _ctStep4();
-  el.innerHTML = `<div style="max-width:820px;margin:0 auto;padding-bottom:60px;">
+  if (CT.step === 1) html = _ctHtmlStep1();
+  else if (CT.step === 2) html = _ctHtmlStep2();
+  else if (CT.step === 3) html = _ctHtmlStep3();
+  else if (CT.step === 4) html = await _ctHtmlStep4();
+
+  el.innerHTML = `<div style="max-width:800px;margin:0 auto;padding-bottom:60px;">
     <div style="display:flex;align-items:center;margin-bottom:16px;">
       <div style="font-size:20px;font-weight:800;">🆕 Crea Torneo</div>
-      <button onclick="if(confirm('Ricominciare da zero?'))ctReset()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--testo-lt);">🗑 Ricomincia</button>
+      <button onclick="ctReset()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--testo-lt);">🗑 Ricomincia</button>
     </div>
     ${_ctProgressBar()}
     ${html}
@@ -1840,6 +1843,7 @@ async function renderAdminCreaTorneo() {
 }
 
 function ctReset() {
+  if (!confirm('Cancellare tutto?')) return;
   CT = { step:1, subStep:null, torneo:{nome:'',luogo:'',durata:20,pausa:5,giorni:[{data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2}]}, categorie:[] };
   renderAdminCreaTorneo();
 }
@@ -1847,64 +1851,76 @@ function ctReset() {
 function _ctProgressBar() {
   const steps = [{n:1,label:'Torneo'},{n:2,label:'Categorie'},{n:3,label:'Programma'},{n:4,label:'Salva'}];
   return `<div style="display:flex;gap:0;margin-bottom:20px;background:white;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
-    ${steps.map(s=>{ const a=CT.step===s.n,d=CT.step>s.n;
-      return `<div style="flex:1;padding:10px 4px;text-align:center;background:${a?'var(--blu)':d?'var(--verde-bg)':'white'};color:${a?'white':d?'var(--verde)':'var(--testo-xs)'};border-right:1px solid var(--bordo);font-size:12px;font-weight:${a?'800':'500'};">
-        <div style="font-size:16px;">${d?'✅':s.n+'.'}</div>${s.label}</div>`;
+    ${steps.map(s=>{
+      const a=CT.step===s.n, d=CT.step>s.n;
+      return `<div style="flex:1;padding:10px 4px;text-align:center;
+        background:${a?'var(--blu)':d?'var(--verde-bg)':'white'};
+        color:${a?'white':d?'var(--verde)':'var(--testo-xs)'};
+        border-right:1px solid var(--bordo);font-size:12px;font-weight:${a?'800':'500'};">
+        <div style="font-size:16px;">${d?'✅':s.n+'.'}</div>${s.label}
+      </div>`;
     }).join('')}
   </div>`;
 }
 
 // ══════════════════════════════════════════════════════════════
-// STEP 1: INFO TORNEO + GIORNI
+//  STEP 1: INFO TORNEO + GIORNI
 // ══════════════════════════════════════════════════════════════
-function _ctStep1() {
+function _ctHtmlStep1() {
   const t = CT.torneo;
   const giorniHTML = t.giorni.map((g,i) => `
-    <div style="border:1.5px solid var(--bordo);border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div style="border:1.5px solid var(--bordo);border-radius:10px;padding:12px;margin-bottom:10px;background:${i%2?'var(--sfondo)':'white'};">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <span style="background:var(--blu);color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;">📅 Giorno ${i+1}</span>
-        ${t.giorni.length>1?`<button onclick="ctRimuoviGiorno(${i})" style="margin-left:auto;background:var(--rosso-bg);border:1px solid rgba(220,38,38,.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
+        ${t.giorni.length>1?`<button onclick="ctRimuoviGiorno(${i})" style="margin-left:auto;background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
-        <div><label style="font-size:10px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">Data</label>
-          <input class="form-input" type="date" id="ctg-data-${i}" value="${g.data||''}"></div>
-        <div><label style="font-size:10px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">Inizio</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;">
+        <div class="form-group"><label class="form-label">Data</label>
+          <input class="form-input" type="date" id="ctg-data-${i}" value="${g.data}"></div>
+        <div class="form-group"><label class="form-label">Inizio</label>
           <input class="form-input" type="time" id="ctg-ini-${i}" value="${g.oraInizio||'09:00'}"></div>
-        <div><label style="font-size:10px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">Pausa pranzo</label>
+        <div class="form-group"><label class="form-label">Pausa pranzo</label>
           <input class="form-input" type="time" id="ctg-pi-${i}" value="${g.pausaIni||'12:30'}"></div>
-        <div><label style="font-size:10px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">Ripresa</label>
+        <div class="form-group"><label class="form-label">Ripresa</label>
           <input class="form-input" type="time" id="ctg-pf-${i}" value="${g.pausaFine||'14:00'}"></div>
-        <div><label style="font-size:10px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">N° Campi</label>
+        <div class="form-group"><label class="form-label">N° Campi</label>
           <input class="form-input" type="number" id="ctg-campi-${i}" value="${g.campi||2}" min="1" max="10"></div>
       </div>
     </div>`).join('');
 
-  return `<div class="card">
-    <div class="card-title">🏆 Informazioni Torneo</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div class="form-group" style="grid-column:1/-1;"><label class="form-label">Nome torneo *</label>
-        <input class="form-input" id="ct-nome" value="${t.nome||''}" placeholder="es. Spring Cup 2026" style="font-size:16px;font-weight:700;"></div>
-      <div class="form-group"><label class="form-label">Luogo</label>
-        <input class="form-input" id="ct-luogo" value="${t.luogo||''}" placeholder="es. Andora (SV)"></div>
-      <div class="form-group"><label class="form-label">Durata partita (min)</label>
-        <input class="form-input" type="number" id="ct-durata" value="${t.durata||20}" min="5" max="90"></div>
-      <div class="form-group"><label class="form-label">Pausa tra partite (min)</label>
-        <input class="form-input" type="number" id="ct-pausa" value="${t.pausa||5}" min="0" max="30"></div>
+  return `
+    <div class="card">
+      <div class="card-title">🏆 Informazioni Torneo</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label class="form-label">Nome torneo *</label>
+          <input class="form-input" id="ct-nome" value="${t.nome}" placeholder="es. Spring Cup 2026" style="font-size:16px;font-weight:700;">
+        </div>
+        <div class="form-group"><label class="form-label">Luogo</label>
+          <input class="form-input" id="ct-luogo" value="${t.luogo}" placeholder="es. Andora (SV)"></div>
+        <div class="form-group"><label class="form-label">Durata partita (min)</label>
+          <input class="form-input" type="number" id="ct-durata" value="${t.durata}" min="5" max="90"></div>
+        <div class="form-group"><label class="form-label">Pausa tra partite (min)</label>
+          <input class="form-input" type="number" id="ct-pausa" value="${t.pausa}" min="0" max="30"></div>
+      </div>
     </div>
-  </div>
-  <div class="card" style="margin-top:12px;">
-    <div style="display:flex;align-items:center;margin-bottom:14px;">
-      <div class="card-title" style="margin:0;">📅 Giorni</div>
-      <button onclick="ctAggiungiGiorno()" style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Giorno</button>
+    <div class="card" style="margin-top:12px;">
+      <div style="display:flex;align-items:center;margin-bottom:14px;">
+        <div class="card-title" style="margin:0;">📅 Giorni del Torneo</div>
+        <button onclick="ctAggiungiGiorno()" style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Giorno</button>
+      </div>
+      ${giorniHTML}
     </div>
-    ${giorniHTML}
-  </div>
-  <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-    <button onclick="ctSalva1()" class="btn btn-p" style="padding:12px 32px;font-size:15px;">Avanti → Categorie ›</button>
-  </div>`;
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button onclick="ctSalva1EAvanti()" class="btn btn-p" style="padding:12px 32px;font-size:15px;">Avanti → Categorie ›</button>
+    </div>`;
 }
 
-function ctAggiungiGiorno() { _ctSalvaGiorni(); CT.torneo.giorni.push({data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2}); renderAdminCreaTorneo(); }
+function ctAggiungiGiorno() {
+  _ctSalvaGiorni();
+  CT.torneo.giorni.push({data:'',oraInizio:'09:00',pausaIni:'12:30',pausaFine:'14:00',campi:2});
+  renderAdminCreaTorneo();
+}
 function ctRimuoviGiorno(i) { _ctSalvaGiorni(); CT.torneo.giorni.splice(i,1); renderAdminCreaTorneo(); }
 function _ctSalvaGiorni() {
   CT.torneo.giorni.forEach((_,i) => {
@@ -1915,681 +1931,1045 @@ function _ctSalvaGiorni() {
     const ca=document.getElementById('ctg-campi-'+i); if(ca) CT.torneo.giorni[i].campi=parseInt(ca.value)||2;
   });
 }
-function ctSalva1() {
+function ctSalva1EAvanti() {
   const n=document.getElementById('ct-nome')?.value?.trim();
-  if(!n){toast('Inserisci il nome del torneo');return;}
+  if (!n) { toast('Inserisci il nome del torneo'); return; }
   CT.torneo.nome=n;
   CT.torneo.luogo=document.getElementById('ct-luogo')?.value?.trim()||'';
   CT.torneo.durata=parseInt(document.getElementById('ct-durata')?.value)||20;
   CT.torneo.pausa=parseInt(document.getElementById('ct-pausa')?.value)||5;
   _ctSalvaGiorni();
-  if(!CT.categorie.length) CT.categorie.push(_ctNuovaCat(''));
+  if (!CT.categorie.length) CT.categorie.push(_ctNuovaCat(''));
   CT.step=2; renderAdminCreaTorneo();
 }
 
 // ══════════════════════════════════════════════════════════════
-// STEP 2: CATEGORIE
+//  STEP 2: CATEGORIE
 // ══════════════════════════════════════════════════════════════
 function _ctNuovaCat(nome) {
-  return {
-    nome, gironiQ:[], gironiFinali:[], finali:[], calendario:[],
-    durata:CT.torneo.durata, pausa:CT.torneo.pausa,
-    oraPerGiorno: CT.torneo.giorni.map(g=>({oraInizio:g.oraInizio,pausaIni:g.pausaIni,pausaFine:g.pausaFine,campi:g.campi,durata:CT.torneo.durata,pausa:CT.torneo.pausa})),
-    _fatto:false
-  };
+  // oraPerGiorno: array, uno per ogni giorno del torneo
+  const oraPerGiorno = CT.torneo.giorni.map(g => ({
+    oraInizio: g.oraInizio||'09:00',
+    pausaIni: g.pausaIni||'12:30',
+    pausaFine: g.pausaFine||'14:00',
+    campi: g.campi||2,
+    durata: CT.torneo.durata||20,
+    pausa: CT.torneo.pausa||5
+  }));
+  return { nome, gironi:[], calendario:[], accoppiamenti:[], squadreExtra:[], gironiFinali:[], calendarioFinali:[], finali:[], oraPerGiorno, _fatto:false };
 }
 
-function _ctStep2() {
+function _ctHtmlStep2() {
   const catsHTML = CT.categorie.map((cat,ci) => `
     <div style="display:flex;align-items:center;gap:10px;padding:12px;border:1.5px solid var(--bordo);border-radius:10px;margin-bottom:8px;background:${cat._fatto?'var(--verde-bg)':'white'};">
       <div style="font-size:20px;">${cat._fatto?'✅':'📁'}</div>
-      <input value="${cat.nome}" placeholder="Nome categoria (es. PULCINI 2016)"
+      <input value="${cat.nome}" placeholder="Nome categoria (es. PULCINI 2016 U11)"
         style="flex:1;border:1.5px solid var(--bordo);border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;font-family:inherit;"
         onchange="CT.categorie[${ci}].nome=this.value">
-      <button onclick="CT.step=3;CT.subStep={ci:${ci},fase:'gironiQ'};renderAdminCreaTorneo()"
-        style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;">
-        ${cat._fatto?'✏️ Modifica':'▶ Configura'}</button>
+      <button onclick="CT.step=3;CT.subStep={catIdx:${ci},fase:'gironi'};renderAdminCreaTorneo()"
+        style="background:var(--blu);color:white;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">
+        ${cat._fatto?'✏️ Modifica':'▶ Configura'}
+      </button>
       ${CT.categorie.length>1?`<button onclick="CT.categorie.splice(${ci},1);renderAdminCreaTorneo()"
-        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,.2);color:var(--rosso);border-radius:8px;padding:8px 10px;cursor:pointer;">✕</button>`:''}
+        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:8px;padding:8px 10px;cursor:pointer;">✕</button>`:''}
     </div>`).join('');
 
   const tutteOk = CT.categorie.length && CT.categorie.every(c=>c._fatto);
-  return `<div class="card">
-    <div style="display:flex;align-items:center;margin-bottom:16px;">
-      <div class="card-title" style="margin:0;">📁 Categorie</div>
-      <button onclick="CT.categorie.push(_ctNuovaCat(''));renderAdminCreaTorneo()"
-        style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Categoria</button>
+
+  return `
+    <div class="card">
+      <div style="display:flex;align-items:center;margin-bottom:16px;">
+        <div class="card-title" style="margin:0;">📁 Categorie del Torneo</div>
+        <button onclick="CT.categorie.push(_ctNuovaCat(''));renderAdminCreaTorneo()"
+          style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Categoria</button>
+      </div>
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--blu);">
+        💡 Aggiungi tutte le categorie, poi clicca <strong>Configura</strong> su ognuna per inserire gironi e partite.
+      </div>
+      ${catsHTML}
     </div>
-    <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--blu);">
-      💡 Aggiungi tutte le categorie, poi clicca <strong>▶ Configura</strong> su ognuna.
-    </div>
-    ${catsHTML}
-  </div>
-  <div style="display:flex;justify-content:space-between;margin-top:12px;">
-    <button onclick="CT.step=1;renderAdminCreaTorneo()" class="btn btn-secondary">‹ Indietro</button>
-    ${tutteOk?`<button onclick="CT.step=4;renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 32px;font-size:15px;">Avanti → Salva ›</button>`
-      :`<div style="font-size:12px;color:var(--testo-xs);padding:12px;">Configura tutte le categorie per continuare</div>`}
-  </div>`;
+    <div style="display:flex;justify-content:space-between;margin-top:12px;">
+      <button onclick="CT.step=1;renderAdminCreaTorneo()" class="btn btn-secondary">‹ Indietro</button>
+      ${tutteOk?`<button onclick="CT.step=4;renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 32px;font-size:15px;">Avanti → Riepilogo ›</button>`
+        :`<div style="font-size:12px;color:var(--testo-xs);padding:12px;">Configura tutte le categorie per continuare</div>`}
+    </div>`;
 }
 
 // ══════════════════════════════════════════════════════════════
-// STEP 3: CONFIGURAZIONE CATEGORIA
+//  STEP 3: CONFIGURAZIONE CATEGORIA (sub-step)
 // ══════════════════════════════════════════════════════════════
-function _ctStep3() {
-  const {ci, fase} = CT.subStep;
-  const cat = CT.categorie[ci];
-  const fasi = [{id:'gironiQ',icon:'👕',label:'Gironi'},{id:'accoppiamenti',icon:'🔀',label:'Accoppiamenti'},{id:'calendario',icon:'📅',label:'Calendario'},{id:'finali',icon:'🏅',label:'Finali'}];
+function _ctHtmlStep3() {
+  const {catIdx, fase} = CT.subStep;
+  const cat = CT.categorie[catIdx];
+
+  // Barra fasi categoria
+  const fasi = [
+    {id:'gironi',    icon:'👕', label:'Gironi'},
+    {id:'calendario',icon:'📅', label:'Calendario'},
+    {id:'accoppiamenti',icon:'🔀',label:'Accoppiamenti'},
+    {id:'gironifinali',icon:'🏟️',label:'Gironi Finali'},
+    {id:'finali',    icon:'🏅', label:'Finali'},
+  ];
   const ordFasi = fasi.map(f=>f.id);
   const faseIdx = ordFasi.indexOf(fase);
 
-  const faseBar = `<div style="display:flex;gap:4px;margin-bottom:16px;">
-    ${fasi.map((f,fi)=>{ const att=fase===f.id,fat=fi<faseIdx;
-      return `<button onclick="CT.subStep.fase='${f.id}';renderAdminCreaTorneo()"
-        style="flex:1;padding:8px 4px;border-radius:8px;border:2px solid ${att?'var(--blu)':fat?'var(--verde)':'var(--bordo)'};
-        background:${att?'var(--blu)':fat?'var(--verde-bg)':'white'};color:${att?'white':fat?'var(--verde)':'var(--testo-xs)'};
-        font-size:11px;font-weight:${att?800:500};cursor:pointer;font-family:inherit;">
-        <div style="font-size:15px;">${fat?'✅':f.icon}</div>${f.label}</button>`;
+  const faseBar = `<div style="display:flex;gap:4px;margin-bottom:16px;overflow-x:auto;flex-wrap:nowrap;">
+    ${fasi.map((f,fi)=>{
+      const att=fase===f.id, fat=fi<faseIdx;
+      return `<button onclick="CT.subStep.fase='${f.id}';_ctSalvaFaseCorrente();renderAdminCreaTorneo()"
+        style="flex:1;min-width:60px;padding:8px 4px;border-radius:8px;border:2px solid ${att?'var(--blu)':fat?'var(--verde)':'var(--bordo)'};
+        background:${att?'var(--blu)':fat?'var(--verde-bg)':'white'};
+        color:${att?'white':fat?'var(--verde)':'var(--testo-xs)'};font-size:11px;font-weight:${att?'800':'500'};cursor:pointer;font-family:inherit;transition:all .15s;">
+        <div style="font-size:15px;">${fat?'✅':f.icon}</div>${f.label}
+      </button>`;
     }).join('')}
   </div>`;
 
-  let body='';
-  if(fase==='gironiQ') body=_ctFaseGironiQ(cat,ci);
-  else if(fase==='accoppiamenti') body=_ctFaseAccoppiamenti(cat,ci);
-  else if(fase==='calendario') body=_ctFaseCalendario(cat,ci);
-  else if(fase==='finali') body=_ctFaseFinali(cat,ci);
+  let body = '';
+  if (fase==='gironi') body = _ctFaseGironi(cat, catIdx);
+  else if (fase==='calendario') body = _ctFaseCalendario(cat, catIdx);
+  else if (fase==='accoppiamenti') body = _ctFaseAccoppiamenti(cat, catIdx);
+  else if (fase==='gironifinali') body = _ctFaseGironiFinali(cat, catIdx);
+  else if (fase==='finali') body = _ctFaseFinali(cat, catIdx);
 
-  return `<div style="background:var(--blu);color:white;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
-    <button onclick="CT.step=2;CT.subStep=null;renderAdminCreaTorneo()"
-      style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit;">‹ Categorie</button>
-    <div style="font-size:16px;font-weight:800;">${cat.nome||'Categoria '+(ci+1)}</div>
-  </div>
-  ${faseBar}${body}`;
+  return `
+    <div style="background:var(--blu);color:white;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+      <button onclick="CT.step=2;CT.subStep=null;renderAdminCreaTorneo()"
+        style="background:rgba(255,255,255,0.2);border:none;color:white;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit;">‹ Categorie</button>
+      <div style="font-size:16px;font-weight:800;">${cat.nome||'Categoria '+(catIdx+1)}</div>
+    </div>
+    ${faseBar}
+    ${body}`;
 }
 
-// ── GIRONI QUALIFICHE ─────────────────────────────────────────
-function _ctFaseGironiQ(cat, ci) {
-  const dLabel = (di) => { const g=CT.torneo.giorni[di]; return g?.data?_ctFmtData(g.data):`Giorno ${di+1}`; };
+function _ctSalvaFaseCorrente() {
+  // salva dati visibili prima di cambiare fase — gestita dentro ogni fase con onchange
+}
 
-  // Sezione orari categoria per giorno
-  const orariHTML = `<div class="card" style="margin-bottom:12px;">
-    <div class="card-title">⏰ Orari per questa categoria</div>
-    ${CT.torneo.giorni.map((g,di)=>`
-      <div style="border:1px solid var(--bordo);border-radius:8px;padding:10px;margin-bottom:8px;background:${di%2?'var(--sfondo)':'white'};">
-        <div style="font-size:12px;font-weight:700;color:var(--blu);margin-bottom:8px;">📅 ${dLabel(di)}</div>
-        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">
-          ${['Inizio','Pausa','Ripresa','Campi','Durata','Pausa gara'].map((lbl,j)=>`
-            <div><label style="font-size:9px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;">${lbl}</label>
-            ${j<3?`<input type="time" value="${[cat.oraPerGiorno[di]?.oraInizio,cat.oraPerGiorno[di]?.pausaIni,cat.oraPerGiorno[di]?.pausaFine][j]||['09:00','12:30','14:00'][j]}"
-              style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 4px;font-size:11px;font-family:inherit;"
-              onchange="if(!CT.categorie[${ci}].oraPerGiorno[${di}])CT.categorie[${ci}].oraPerGiorno[${di}]={};CT.categorie[${ci}].oraPerGiorno[${di}].${'oraInizio,pausaIni,pausaFine'.split(',')[j]}=this.value">`
-            :`<input type="number" value="${[cat.oraPerGiorno[di]?.campi||2,cat.oraPerGiorno[di]?.durata||CT.torneo.durata||20,cat.oraPerGiorno[di]?.pausa||CT.torneo.pausa||5][j-3]}" min="${j===3?1:1}" max="${j===3?10:90}"
-              style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 4px;font-size:11px;font-family:inherit;"
-              onchange="if(!CT.categorie[${ci}].oraPerGiorno[${di}])CT.categorie[${ci}].oraPerGiorno[${di}]={};CT.categorie[${ci}].oraPerGiorno[${di}].${'campi,durata,pausa'.split(',')[j-3]}=parseInt(this.value)||${[2,20,5][j-3]}">`}
-            </div>`).join('')}
+// ── FASE: GIRONI ─────────────────────────────────────────────
+function _ctFaseGironi(cat, ci) {
+  const giornoLabel = (idx) => {
+    const g = CT.torneo.giorni[idx];
+    return g?.data ? _ctFmtData(g.data) : `Giorno ${idx+1}`;
+  };
+
+  const tipoLabel = {
+    'solo': '🏅 Solo qualifiche',
+    'finali_posto': '🥇 Qualifiche + Finali per posto (1°vs2°, 3°vs4°...)',
+    'gironi_finali': '🏆 Qualifiche + Gironi finali (es. GIRONE A, GIRONE B...)'
+  };
+
+  const gironiHTML = cat.gironi.map((g,gi) => {
+    const tipo = g.tipo || 'solo';
+    // Finali per posto: mostra sezione per configurarle
+    // Assicura che finaliOrari esista
+    if (!g.finaliOrari) g.finaliOrari = {};
+
+    const finaliPostoHTML = tipo === 'finali_posto' ? `
+      <div style="background:#fffbeb;border-radius:8px;padding:10px 12px;margin-top:10px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:8px;">🥇 Finali per posto — stesso giorno</div>
+        <div style="font-size:11px;color:#92400e;margin-bottom:8px;">Quante finali vuoi?</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+          ${[2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].gironi[${gi}].numFinali=${n};renderAdminCreaTorneo()"
+            style="padding:5px 12px;border-radius:6px;border:2px solid ${(g.numFinali||2)===n?'#d97706':'var(--bordo)'};background:${(g.numFinali||2)===n?'#fef3c7':'white'};color:${(g.numFinali||2)===n?'#92400e':'var(--testo-lt)'};cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">
+            Fino al ${n*2}° posto
+          </button>`).join('')}
         </div>
-      </div>`).join('')}
-  </div>`;
+        <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:6px;">Orari e campi delle finali:</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#fef3c7;">
+            <th style="padding:5px 8px;text-align:left;border:1px solid #fcd34d;">Finale</th>
+            <th style="padding:5px 8px;text-align:left;border:1px solid #fcd34d;">Squadra 1</th>
+            <th style="padding:5px 8px;text-align:left;border:1px solid #fcd34d;">Squadra 2</th>
+            <th style="padding:5px 8px;border:1px solid #fcd34d;width:64px;">Ora</th>
+            <th style="padding:5px 8px;border:1px solid #fcd34d;width:44px;">Campo</th>
+          </tr></thead>
+          <tbody>
+            ${Array.from({length:g.numFinali||2},(_,fi)=>{
+              const p1=fi*2+1,p2=fi*2+2;
+              const key=p1+'vs'+p2;
+              const finInfo = g.finaliOrari?.[key] || {};
+              return `<tr style="background:${fi%2===0?'white':'#fffbeb'};">
+                <td style="padding:5px 8px;border:1px solid #fcd34d;font-weight:700;color:#92400e;white-space:nowrap;">${p1}°/${p2}°</td>
+                <td style="padding:5px 8px;border:1px solid #fcd34d;font-size:11px;color:#aaa;">${p1}° ${g.nome}</td>
+                <td style="padding:5px 8px;border:1px solid #fcd34d;font-size:11px;color:#aaa;">${p2}° ${g.nome}</td>
+                <td style="padding:4px 6px;border:1px solid #fcd34d;">
+                  <input value="${finInfo.ora||''}" placeholder="es. 16:45"
+                    style="width:100%;border:1px solid #fcd34d;border-radius:4px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
+                    onchange="if(!CT.categorie[${ci}].gironi[${gi}].finaliOrari)CT.categorie[${ci}].gironi[${gi}].finaliOrari={};CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}']={...CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}'],ora:this.value}">
+                </td>
+                <td style="padding:4px 6px;border:1px solid #fcd34d;">
+                  <input type="number" value="${finInfo.campo||1}" min="1" max="${CT.torneo.campi}"
+                    style="width:100%;border:1px solid #fcd34d;border-radius:4px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+                    onchange="if(!CT.categorie[${ci}].gironi[${gi}].finaliOrari)CT.categorie[${ci}].gironi[${gi}].finaliOrari={};CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}']={...CT.categorie[${ci}].gironi[${gi}].finaliOrari['${key}'],campo:parseInt(this.value)||1}">
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>` : '';
 
-  const gironiHTML = (cat.gironiQ||[]).map((g,gi)=>`
-    <div style="border:1.5px solid var(--bordo);border-radius:10px;margin-bottom:12px;overflow:hidden;">
+    const gironiFinaliHTML = tipo === 'gironi_finali' ? `
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 12px;margin-top:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--blu);text-transform:uppercase;margin-bottom:8px;">🏆 Gironi Finali — configura nella sezione Accoppiamenti</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div>
+            <label style="font-size:11px;color:var(--testo-lt);">Quante si qualificano per girone?</label>
+            <div style="display:flex;gap:4px;margin-top:4px;">
+              ${[1,2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].gironi[${gi}].qualificate=${n};renderAdminCreaTorneo()"
+                style="width:28px;height:28px;border-radius:50%;border:2px solid ${(g.qualificate||2)===n?'var(--blu)':'var(--bordo)'};background:${(g.qualificate||2)===n?'var(--blu)':'white'};color:${(g.qualificate||2)===n?'white':'var(--testo-lt)'};cursor:pointer;font-size:13px;font-weight:800;font-family:inherit;">${n}</button>`).join('')}
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--testo-lt);">
+            Il ${g.qualificate||2}° si qualifica • il ${(g.qualificate||2)+1}° in poi gioca le finali consolazione
+          </div>
+        </div>
+      </div>` : '';
+
+    return `
+    <div style="border:1.5px solid var(--bordo);border-radius:10px;margin-bottom:14px;overflow:hidden;">
+      <!-- Header girone -->
       <div style="background:var(--sfondo);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <input value="${g.nome}" placeholder="Nome girone (es. Girone Q)"
           style="flex:1;min-width:120px;border:1.5px solid var(--blu);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:800;font-family:inherit;background:var(--blu-bg);color:var(--blu);"
-          onchange="CT.categorie[${ci}].gironiQ[${gi}].nome=this.value">
+          onchange="CT.categorie[${ci}].gironi[${gi}].nome=this.value">
         <span style="font-size:11px;color:var(--testo-xs);">Gioca il:</span>
         <select style="border:1px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;"
-          onchange="CT.categorie[${ci}].gironiQ[${gi}].giorno=parseInt(this.value)">
-          ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${(g.giorno||0)===di?'selected':''}>${dLabel(di)}</option>`).join('')}
+          onchange="CT.categorie[${ci}].gironi[${gi}].giorno=parseInt(this.value)">
+          ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${(g.giorno||0)===di?'selected':''}>${giornoLabel(di)}</option>`).join('')}
         </select>
-        ${(cat.gironiQ||[]).length>1?`<button onclick="CT.categorie[${ci}].gironiQ.splice(${gi},1);renderAdminCreaTorneo()"
-          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
+        ${cat.gironi.length>1?`<button onclick="CT.categorie[${ci}].gironi.splice(${gi},1);renderAdminCreaTorneo()"
+          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
       </div>
+
+      <!-- Tipo girone -->
+      <div style="padding:8px 12px;background:white;border-bottom:1px solid var(--bordo-lt);">
+        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:6px;">Tipo</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          ${Object.entries(tipoLabel).map(([k,v])=>`
+            <button onclick="CT.categorie[${ci}].gironi[${gi}].tipo='${k}';renderAdminCreaTorneo()"
+              style="text-align:left;padding:8px 12px;border-radius:8px;border:2px solid ${tipo===k?'var(--blu)':'var(--bordo)'};background:${tipo===k?'var(--blu-bg)':'white'};color:${tipo===k?'var(--blu)':'var(--testo-lt)'};cursor:pointer;font-size:12px;font-weight:${tipo===k?'700':'400'};font-family:inherit;transition:all .15s;">
+              ${v}
+            </button>`).join('')}
+        </div>
+        ${finaliPostoHTML}
+        ${gironiFinaliHTML}
+      </div>
+
+      <!-- Squadre -->
       <div style="padding:10px 12px;">
-        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:6px;">Squadre</div>
-        ${(g.squadre||[]).map((sq,si)=>`
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--bordo-lt);">
-            <span style="font-size:12px;color:var(--testo-xs);width:18px;text-align:right;">${si+1}.</span>
+        <div style="font-size:11px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre</div>
+        ${g.squadre.map((sq,si)=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bordo-lt);">
+            <span style="font-size:12px;color:var(--testo-xs);width:20px;text-align:right;">${si+1}.</span>
             <input value="${sq.nome}" style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:13px;font-weight:600;font-family:inherit;"
-              onchange="CT.categorie[${ci}].gironiQ[${gi}].squadre[${si}].nome=this.value">
-            <select title="Priorità orario" style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
-              onchange="CT.categorie[${ci}].gironiQ[${gi}].squadre[${si}].prio=this.value">
+              onchange="CT.categorie[${ci}].gironi[${gi}].squadre[${si}].nome=this.value">
+            <select style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
+              onchange="CT.categorie[${ci}].gironi[${gi}].squadre[${si}].prio=this.value">
               <option value="prima" ${sq.prio==='prima'?'selected':''}>⬆ Prima</option>
               <option value="normale" ${!sq.prio||sq.prio==='normale'?'selected':''}>= Normale</option>
               <option value="dopo" ${sq.prio==='dopo'?'selected':''}>⬇ Dopo</option>
             </select>
-            <button onclick="CT.categorie[${ci}].gironiQ[${gi}].squadre.splice(${si},1);renderAdminCreaTorneo()"
+            <button onclick="CT.categorie[${ci}].gironi[${gi}].squadre.splice(${si},1);renderAdminCreaTorneo()"
               style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:14px;">✕</button>
           </div>`).join('')}
         <div style="display:flex;gap:6px;margin-top:8px;">
           <input id="sq-in-${ci}-${gi}" class="form-input" style="flex:1;font-size:13px;" placeholder="Nome squadra..."
-            onkeydown="if(event.key==='Enter')ctAddSq(${ci},${gi})">
-          <button onclick="ctAddSq(${ci},${gi})" class="btn btn-p btn-sm">+ Aggiungi</button>
+            onkeydown="if(event.key==='Enter')ctAddSquadra(${ci},${gi})">
+          <button onclick="ctAddSquadra(${ci},${gi})" class="btn btn-p btn-sm">+ Aggiungi</button>
         </div>
-        <textarea id="bulk-${ci}-${gi}" class="form-input" rows="3" style="font-size:12px;margin-top:6px;resize:vertical;"
-          placeholder="Incolla lista (una per riga)"></textarea>
-        <button onclick="ctBulkSq(${ci},${gi})"
-          style="margin-top:4px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;">📋 Aggiungi lista</button>
-        
-        <!-- Finali dentro il girone (tipo finali_posto) -->
-        <div style="margin-top:12px;border-top:1px solid var(--bordo-lt);padding-top:10px;">
-          <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:6px;">Finali nello stesso giorno</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-            ${['nessuna','1°/2° e 3°/4°','fino al 6°','fino all\'8°'].map((lbl,ni)=>`
-              <button onclick="CT.categorie[${ci}].gironiQ[${gi}].finaliPosto=${ni};renderAdminCreaTorneo()"
-                style="padding:5px 10px;border-radius:6px;border:2px solid ${(g.finaliPosto||0)===ni?'var(--blu)':'var(--bordo)'};background:${(g.finaliPosto||0)===ni?'var(--blu-bg)':'white'};color:${(g.finaliPosto||0)===ni?'var(--blu)':'var(--testo-lt)'};cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;">${lbl}</button>`).join('')}
-          </div>
-          ${(g.finaliPosto||0)>0?_ctFinaliPostoTable(g,ci,gi):''}
-        </div>
+        <textarea id="bulk-${ci}-${gi}" class="form-input" rows="3" style="font-size:12px;resize:vertical;margin-top:6px;"
+          placeholder="Incolla lista (una per riga):&#10;RHODENSE&#10;CHISOLA&#10;BORGORATTI"></textarea>
+        <button onclick="ctBulkAggiungi(${ci},${gi})"
+          style="margin-top:4px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);cursor:pointer;">📋 Aggiungi lista</button>
       </div>
-    </div>`).join('');
-
-  return `${orariHTML}
-  <div class="card">
-    <div style="display:flex;align-items:center;margin-bottom:12px;">
-      <div class="card-title" style="margin:0;">👕 Gironi di Qualifica</div>
-      <button onclick="CT.categorie[${ci}].gironiQ.push({nome:'Girone '+String.fromCharCode(65+CT.categorie[${ci}].gironiQ.length),giorno:0,squadre:[],finaliPosto:0,finaliOrari:{}});renderAdminCreaTorneo()"
-        style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Girone</button>
-    </div>
-    ${!(cat.gironiQ||[]).length?'<div style="text-align:center;padding:20px;color:var(--testo-xs);">Clicca <strong>+ Girone</strong> per iniziare</div>':gironiHTML}
-  </div>
-  <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-    <button onclick="_ctVaiAccoppiamenti(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Accoppiamenti ›</button>
-  </div>`;
-}
-
-function _ctFinaliPostoTable(g, ci, gi) {
-  const nFin = [0,2,3,4][g.finaliPosto||0];
-  if(!nFin) return '';
-  const rows = Array.from({length:nFin},(_,f)=>{
-    const p1=f*2+1,p2=f*2+2, key=p1+'v'+p2;
-    const fo=g.finaliOrari?.[key]||{};
-    return `<tr style="background:${f%2?'var(--sfondo)':'white'};">
-      <td style="padding:5px 8px;border:1px solid var(--bordo-lt);font-weight:700;font-size:12px;">${p1}°/${p2}°</td>
-      <td style="padding:5px 8px;border:1px solid var(--bordo-lt);font-size:11px;color:var(--testo-xs);">${p1}° ${g.nome} vs ${p2}° ${g.nome}</td>
-      <td style="padding:4px 6px;border:1px solid var(--bordo-lt);">
-        <input value="${fo.ora||''}" placeholder="es. 16:45" style="width:64px;border:1px solid var(--bordo);border-radius:4px;padding:3px 5px;font-size:12px;font-family:inherit;"
-          onchange="if(!CT.categorie[${ci}].gironiQ[${gi}].finaliOrari)CT.categorie[${ci}].gironiQ[${gi}].finaliOrari={};CT.categorie[${ci}].gironiQ[${gi}].finaliOrari['${key}']={...CT.categorie[${ci}].gironiQ[${gi}].finaliOrari['${key}'],ora:this.value}"></td>
-      <td style="padding:4px 6px;border:1px solid var(--bordo-lt);">
-        <input type="number" value="${fo.campo||1}" min="1" max="10" style="width:40px;border:1px solid var(--bordo);border-radius:4px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
-          onchange="if(!CT.categorie[${ci}].gironiQ[${gi}].finaliOrari)CT.categorie[${ci}].gironiQ[${gi}].finaliOrari={};CT.categorie[${ci}].gironiQ[${gi}].finaliOrari['${key}']={...CT.categorie[${ci}].gironiQ[${gi}].finaliOrari['${key}'],campo:parseInt(this.value)||1}"></td>
-    </tr>`;
+    </div>`;
   }).join('');
-  return `<table style="width:100%;border-collapse:collapse;font-size:12px;">
-    <thead><tr style="background:var(--sfondo);">
-      <th style="padding:5px 8px;border:1px solid var(--bordo-lt);text-align:left;">Finale</th>
-      <th style="padding:5px 8px;border:1px solid var(--bordo-lt);text-align:left;">Squadre</th>
-      <th style="padding:5px 8px;border:1px solid var(--bordo-lt);">Ora</th>
-      <th style="padding:5px 8px;border:1px solid var(--bordo-lt);">Campo</th>
-    </tr></thead><tbody>${rows}</tbody></table>`;
-}
 
-function ctAddSq(ci,gi) {
-  const inp=document.getElementById('sq-in-'+ci+'-'+gi);
-  if(!inp||!inp.value.trim())return;
-  if(!CT.categorie[ci].gironiQ[gi].squadre)CT.categorie[ci].gironiQ[gi].squadre=[];
-  CT.categorie[ci].gironiQ[gi].squadre.push({nome:inp.value.trim(),prio:'normale'});
-  inp.value=''; renderAdminCreaTorneo();
-  setTimeout(()=>{const el=document.getElementById('sq-in-'+ci+'-'+gi);if(el)el.focus();},100);
-}
-function ctBulkSq(ci,gi) {
-  const ta=document.getElementById('bulk-'+ci+'-'+gi);
-  if(!ta)return;
-  const nomi=ta.value.split(/[\n,;]/).map(s=>s.trim()).filter(Boolean);
-  if(!nomi.length){toast('Nessuna squadra trovata');return;}
-  if(!CT.categorie[ci].gironiQ[gi].squadre)CT.categorie[ci].gironiQ[gi].squadre=[];
-  nomi.forEach(n=>CT.categorie[ci].gironiQ[gi].squadre.push({nome:n,prio:'normale'}));
-  ta.value=''; toast('✅ '+nomi.length+' squadre aggiunte!'); renderAdminCreaTorneo();
-}
-
-// ── ACCOPPIAMENTI ─────────────────────────────────────────────
-function _ctVaiAccoppiamenti(ci) {
-  const cat=CT.categorie[ci];
-  for(const g of (cat.gironiQ||[])){
-    if(!g.nome?.trim()){toast('Dai un nome a tutti i gironi');return;}
-    if(!(g.squadre||[]).length){toast(`${g.nome}: inserisci almeno una squadra`);return;}
+  // Assicura oraPerGiorno inizializzato
+  if (!cat.oraPerGiorno || cat.oraPerGiorno.length !== CT.torneo.giorni.length) {
+    cat.oraPerGiorno = CT.torneo.giorni.map(g => ({
+      oraInizio:g.oraInizio||'09:00', pausaIni:g.pausaIni||'12:30',
+      pausaFine:g.pausaFine||'14:00', campi:g.campi||2,
+      durata:CT.torneo.durata||20, pausa:CT.torneo.pausa||5
+    }));
   }
-  // Init accoppiamenti se non esistono
-  if(!(cat.accoppiamenti)){
-    cat.accoppiamenti=[];
-    (cat.gironiQ||[]).forEach(g=>{
-      (g.squadre||[]).forEach((_,si)=>{
-        cat.accoppiamenti.push({pos:si+1,gironeQ:g.nome,aGirone:'',giorno:Math.min(1,CT.torneo.giorni.length-1)});
-      });
-    });
-  }
-  CT.subStep.fase='accoppiamenti'; renderAdminCreaTorneo();
-}
 
-function _ctFaseAccoppiamenti(cat,ci) {
-  if(!(cat.accoppiamenti)) cat.accoppiamenti=[];
-  const gironiQ=cat.gironiQ||[];
-  if(!gironiQ.length) return '<div class="empty-state">Prima aggiungi i gironi.</div>';
+  const oraCatHTML = `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">⏰ Orari e Campi per questa Categoria</div>
+      <div style="font-size:12px;color:var(--testo-lt);margin-bottom:10px;">Personalizza orari e campi per questa categoria — sovrascrivono i valori globali del giorno.</div>
+      ${CT.torneo.giorni.map((g,di)=>`
+        <div style="border:1px solid var(--bordo);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${di%2===0?'white':'var(--sfondo)'};">
+          <div style="font-size:12px;font-weight:700;color:var(--blu);margin-bottom:8px;">📅 ${g.data?_ctFmtData(g.data):'Giorno '+(di+1)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:8px;">
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Inizio</label>
+              <input type="time" value="${cat.oraPerGiorno[di]?.oraInizio||'09:00'}"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].oraInizio=this.value"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Pausa pranzo</label>
+              <input type="time" value="${cat.oraPerGiorno[di]?.pausaIni||'12:30'}"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausaIni=this.value"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Ripresa</label>
+              <input type="time" value="${cat.oraPerGiorno[di]?.pausaFine||'14:00'}"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausaFine=this.value"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">N° Campi</label>
+              <input type="number" value="${cat.oraPerGiorno[di]?.campi||2}" min="1" max="10"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].campi=parseInt(this.value)||1"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Durata (min)</label>
+              <input type="number" value="${cat.oraPerGiorno[di]?.durata||CT.torneo.durata||20}" min="5" max="90"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].durata=parseInt(this.value)||20"></div>
+            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Pausa (min)</label>
+              <input type="number" value="${cat.oraPerGiorno[di]?.pausa||CT.torneo.pausa||5}" min="0" max="30"
+                style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+                onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausa=parseInt(this.value)||5"></div>
+          </div>
+        </div>`).join('')}
+    </div>`;
 
-  const maxSq=Math.max(...gironiQ.map(g=>(g.squadre||[]).length),0);
-  const dLabel=(di)=>{const g=CT.torneo.giorni[di];return g?.data?_ctFmtData(g.data):`Giorno ${di+1}`;};
-
-  const tabella=`<div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr style="background:var(--sfondo);">
-        <th style="padding:7px 8px;border:1px solid var(--bordo);text-align:left;">Posizione</th>
-        ${gironiQ.map(g=>`<th style="padding:7px 8px;border:1px solid var(--bordo);text-align:center;color:var(--blu);font-weight:800;">${g.nome}</th>`).join('')}
-        <th style="padding:7px 8px;border:1px solid var(--bordo);text-align:center;">Giorno finali</th>
-      </tr></thead>
-      <tbody>
-        ${Array.from({length:maxSq},(_,pi)=>{
-          const pos=pi+1;
-          const giornoAcc=cat.accoppiamenti.find(a=>a.pos===pos)?.giorno??1;
-          return `<tr style="background:${pi%2?'var(--sfondo)':'white'};">
-            <td style="padding:7px 8px;border:1px solid var(--bordo);font-weight:800;">${pos}° posto</td>
-            ${gironiQ.map(g=>{
-              const acc=cat.accoppiamenti.find(a=>a.pos===pos&&a.gironeQ===g.nome);
-              return `<td style="padding:5px 6px;border:1px solid var(--bordo);text-align:center;">
-                <input value="${acc?.aGirone||''}" placeholder="es. GIRONE A"
-                  style="width:100%;border:1.5px solid var(--blu);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:700;font-family:inherit;text-align:center;background:var(--blu-bg);color:var(--blu);"
-                  onchange="ctSetAcc(${ci},${pos},'${g.nome}',this.value)">
-              </td>`;
-            }).join('')}
-            <td style="padding:5px 6px;border:1px solid var(--bordo);text-align:center;">
-              <select style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
-                onchange="CT.categorie[${ci}].accoppiamenti.filter(a=>a.pos===${pos}).forEach(a=>a.giorno=parseInt(this.value))">
-                ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${(giornoAcc||1)===di?'selected':''}>${dLabel(di)}</option>`).join('')}
-              </select>
-            </td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
-  </div>`;
-
-  // Squadre fisse per gironi finali
-  const gironiFinaliNomi=[...new Set((cat.accoppiamenti||[]).map(a=>a.aGirone).filter(Boolean))];
-  const extraHTML=`<div style="margin-top:14px;">
-    <div style="font-size:12px;font-weight:700;color:var(--testo-lt);margin-bottom:8px;">🏟️ Squadre fisse nei gironi finali (entrano senza qualificarsi)</div>
-    ${gironiFinaliNomi.map(gnome=>`
-      <div style="border:1px solid var(--bordo);border-radius:8px;padding:10px;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:800;color:var(--blu);margin-bottom:6px;">${gnome}</div>
-        ${(cat.squadreExtra||[]).filter(sq=>sq.aGirone===gnome).map((sq,ei)=>`
-          <div style="display:flex;gap:6px;margin-bottom:4px;align-items:center;">
-            <input value="${sq.nome}" placeholder="Nome squadra"
-              style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:13px;font-family:inherit;"
-              onchange="CT.categorie[${ci}].squadreExtra[${ei}].nome=this.value">
-            <select style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
-              onchange="CT.categorie[${ci}].squadreExtra[${ei}].prio=this.value">
-              <option value="prima" ${sq.prio==='prima'?'selected':''}>⬆ Prima</option>
-              <option value="normale" ${!sq.prio||sq.prio==='normale'?'selected':''}>= Normale</option>
-              <option value="dopo" ${sq.prio==='dopo'?'selected':''}>⬇ Dopo</option>
-            </select>
-            <button onclick="CT.categorie[${ci}].squadreExtra.splice(${ei},1);renderAdminCreaTorneo()"
-              style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;">✕</button>
-          </div>`).join('')}
-        <button onclick="if(!CT.categorie[${ci}].squadreExtra)CT.categorie[${ci}].squadreExtra=[];CT.categorie[${ci}].squadreExtra.push({nome:'',aGirone:'${gnome}',prio:'normale'});renderAdminCreaTorneo()"
-          style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--blu);cursor:pointer;">+ Squadra fissa in ${gnome}</button>
-      </div>`).join('')}
-  </div>`;
-
-  return `<div class="card">
-    <div class="card-title">🔀 Accoppiamenti — Chi va dove dopo le qualifiche</div>
-    <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
-      💡 Per ogni posizione scrivi in quale <strong>girone finale</strong> va la squadra. Lascia vuoto se non fa gironi finali.
+  return `
+    ${oraCatHTML}
+    <div class="card">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0;">👕 Gironi e Squadre</div>
+        <button onclick="CT.categorie[${ci}].gironi.push({nome:'Girone '+'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[CT.categorie[${ci}].gironi.length]||'',giorno:0,squadre:[],tipo:'solo',qualificate:2,numFinali:2});renderAdminCreaTorneo()"
+          style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Girone</button>
+      </div>
+      ${cat.gironi.length===0?`<div style="text-align:center;padding:20px;color:var(--testo-xs);">Clicca <strong>+ Girone</strong> per iniziare</div>`:gironiHTML}
     </div>
-    ${tabella}
-    ${gironiFinaliNomi.length?extraHTML:'<div style="margin-top:10px;padding:10px;background:var(--sfondo);border-radius:8px;font-size:12px;color:var(--testo-xs);">Compila la tabella sopra per vedere i gironi finali</div>'}
-  </div>
-  <div style="display:flex;justify-content:space-between;margin-top:12px;">
-    <button onclick="CT.subStep.fase='gironiQ';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Gironi</button>
-    <button onclick="_ctVaiCalendario(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Calendario ›</button>
-  </div>`;
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <button onclick="_ctVaiCalendario(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Calendario ›</button>
+    </div>`;
 }
 
-function ctSetAcc(ci,pos,gironeQ,aGirone) {
-  if(!CT.categorie[ci].accoppiamenti) CT.categorie[ci].accoppiamenti=[];
-  const idx=CT.categorie[ci].accoppiamenti.findIndex(a=>a.pos===pos&&a.gironeQ===gironeQ);
-  const giorno=CT.categorie[ci].accoppiamenti.find(a=>a.pos===pos)?.giorno??1;
-  if(idx>=0) CT.categorie[ci].accoppiamenti[idx].aGirone=aGirone;
-  else CT.categorie[ci].accoppiamenti.push({pos,gironeQ,aGirone,giorno});
-}
-
-// ── CALENDARIO ────────────────────────────────────────────────
 function _ctVaiCalendario(ci) {
-  const cat=CT.categorie[ci];
-  // Genera gironi finali dagli accoppiamenti
-  const accMap={};
-  (cat.accoppiamenti||[]).forEach(a=>{
-    if(!a.aGirone) return;
-    if(!accMap[a.aGirone]) accMap[a.aGirone]={nome:a.aGirone,giorno:a.giorno??1,squadre:[],squadreExtra:[]};
-    accMap[a.aGirone].squadre.push({nome:`${a.pos}° ${a.gironeQ}`,prio:'normale',_placeholder:true,_gironeQ:a.gironeQ,_pos:a.pos});
-  });
-  (cat.squadreExtra||[]).forEach(sq=>{
-    if(sq.aGirone&&accMap[sq.aGirone]) accMap[sq.aGirone].squadreExtra.push({nome:sq.nome,prio:sq.prio||'normale',_placeholder:false});
-  });
-  cat.gironiFinali=Object.values(accMap);
-
-  // Genera calendario con priorità
-  cat.calendario=[];
-  let ordine=1;
-
-  // Gironi qualifiche
-  (cat.gironiQ||[]).forEach(g=>{
-    const sq=g.squadre||[];
-    const di=g.giorno||0;
-    const giornata=CT.torneo.giorni[di]?.data?_ctFmtData(CT.torneo.giorni[di].data):`Giorno ${di+1}`;
-    // Ordina per priorità
-    const prima=sq.filter(s=>s.prio==='prima');
-    const normale=sq.filter(s=>!s.prio||s.prio==='normale');
-    const dopo=sq.filter(s=>s.prio==='dopo');
-    const sqOrd=[...prima,...normale,...dopo];
-    for(let i=0;i<sqOrd.length;i++) for(let j=i+1;j<sqOrd.length;j++)
-      cat.calendario.push({tipo:'gironeQ',gironeNome:g.nome,sq1:sqOrd[i].nome,sq2:sqOrd[j].nome,ora:'',campo:1,giornata,ordine:ordine++,_di:di});
-    // Finali dentro il girone
-    const nFin=[0,2,3,4][g.finaliPosto||0];
-    for(let f=nFin-1;f>=0;f--){
-      const p1=f*2+1,p2=f*2+2,key=p1+'v'+p2;
-      const fo=g.finaliOrari?.[key]||{};
-      cat.calendario.push({tipo:'finaleQ',gironeNome:`FINALE ${p1}°/${p2}° ${g.nome}`,sq1:`${p1}° ${g.nome}`,sq2:`${p2}° ${g.nome}`,ora:fo.ora||'',campo:fo.campo||1,giornata,ordine:ordine++,_di:di,_oraManuale:!!(fo.ora)});
+  const cat = CT.categorie[ci];
+  for (const g of cat.gironi) {
+    if (!g.nome.trim()) { toast('Dai un nome a tutti i gironi'); return; }
+    if (g.squadre.length < 2) { toast(`${g.nome}: inserisci almeno 2 squadre`); return; }
+  }
+  // Genera calendario round-robin
+  cat.calendario = [];
+  cat.gironi.forEach(g => {
+    const sq = g.squadre;
+    let ordine = cat.calendario.length + 1;
+    const dayIdx = g.giorno||0;
+    const giornata = CT.torneo.giorni[dayIdx]?.data ? _ctFmtData(CT.torneo.giorni[dayIdx].data) : `Giorno ${dayIdx+1}`;
+    // Partite round-robin
+    for (let i=0;i<sq.length;i++) for (let j=i+1;j<sq.length;j++) {
+      cat.calendario.push({gironeNome:g.nome, sq1:sq[i].nome, sq2:sq[j].nome, ora:'', campo:1, giornata, ordine:ordine++, _giornoIdx:dayIdx});
+    }
+    // Se tipo = finali_posto → aggiungi finali con orari già inseriti
+    if (g.tipo === 'finali_posto') {
+      const nFin = g.numFinali || 2;
+      // Prima le finali consolazione (3°/4°, 5°/6° ecc.) poi la finale principale (1°/2°)
+      const ordineFinali = [];
+      for (let f=0;f<nFin;f++) ordineFinali.push(f);
+      // Inverti: prima 3°/4°, poi 1°/2°
+      ordineFinali.sort((a,b)=>b-a);
+      ordineFinali.forEach(f => {
+        const p1=f*2+1, p2=f*2+2;
+        const key=p1+'vs'+p2;
+        const finInfo = g.finaliOrari?.[key] || {};
+        cat.calendario.push({
+          gironeNome: `FINALE ${p1}°/${p2}°`,
+          sq1: `${p1}° ${g.nome}`, sq2: `${p2}° ${g.nome}`,
+          ora: finInfo.ora||'', campo: finInfo.campo||1,
+          giornata, ordine:ordine++, _giornoIdx:dayIdx,
+          _isFinale:true, _oraManuale: !!(finInfo.ora)
+        });
+      });
     }
   });
-
-  // Gironi finali
-  cat.gironiFinali.forEach(gf=>{
-    const di=gf.giorno??1;
-    const giornata=CT.torneo.giorni[di]?.data?_ctFmtData(CT.torneo.giorni[di].data):`Giorno ${di+1}`;
-    const allSq=[...gf.squadre,...gf.squadreExtra];
-    const prima=allSq.filter(s=>s.prio==='prima');
-    const normale=allSq.filter(s=>!s.prio||s.prio==='normale');
-    const dopo=allSq.filter(s=>s.prio==='dopo');
-    const sqOrd=[...prima,...normale,...dopo];
-    for(let i=0;i<sqOrd.length;i++) for(let j=i+1;j<sqOrd.length;j++)
-      cat.calendario.push({tipo:'gironeF',gironeNome:gf.nome,sq1:sqOrd[i].nome,sq2:sqOrd[j].nome,ora:'',campo:1,giornata,ordine:ordine++,_di:di});
+  _ctAssegnaOrari(cat.calendario, cat);
+  // Pre-inizializza accoppiamenti per gironi con tipo gironi_finali
+  cat.accoppiamenti = [];
+  const roundNames = ['ARANCIO','VERDE','BLU','GIALLO','BIANCO','ROSSO'];
+  cat.gironi.filter(g=>g.tipo==='gironi_finali').forEach(g => {
+    const q = g.qualificate||2;
+    for (let pos=1; pos<=g.squadre.length; pos++) {
+      const round = roundNames[pos-1]||`ROUND ${pos}`;
+      cat.accoppiamenti.push({pos, gironeNome:g.nome, aGirone:round, giorno:Math.min((g.giorno||0)+1, CT.torneo.giorni.length-1)});
+    }
   });
-
-  _ctCalcolaOrari(cat);
-  CT.subStep.fase='calendario'; renderAdminCreaTorneo();
+  CT.subStep.fase = 'calendario';
+  renderAdminCreaTorneo();
 }
 
-function _ctCalcolaOrari(cat) {
-  const perDi={};
-  cat.calendario.forEach(p=>{const k=p._di??0;if(!perDi[k])perDi[k]=[];perDi[k].push(p);});
-  Object.entries(perDi).forEach(([diStr,partite])=>{
-    const di=parseInt(diStr);
-    const catDay=cat.oraPerGiorno?.[di];
-    const dayData=CT.torneo.giorni[di]||{};
-    const durata=catDay?.durata??CT.torneo.durata??20;
-    const pausa=catDay?.pausa??CT.torneo.pausa??5;
-    const campi=catDay?.campi??dayData.campi??2;
-    let oraMin=_ctTimeToMin(catDay?.oraInizio??dayData.oraInizio??'09:00');
-    const pausaIni=_ctTimeToMin(catDay?.pausaIni??dayData.pausaIni??'12:30');
-    const pausaFine=_ctTimeToMin(catDay?.pausaFine??dayData.pausaFine??'14:00');
+function _ctAssegnaOrari(lista, cat) {
+  const perGiorno = {};
+  lista.forEach(p => { const k=p._giornoIdx??0; if(!perGiorno[k])perGiorno[k]=[]; perGiorno[k].push(p); });
+  Object.entries(perGiorno).forEach(([dayIdx,partite]) => {
+    const di = parseInt(dayIdx);
+    const catDay = cat?.oraPerGiorno?.[di];
+    const dayData = CT.torneo.giorni[di]||{};
+    // Usa durata/pausa/campi della categoria per giorno, altrimenti globali torneo
+    const durata = catDay?.durata ?? CT.torneo.durata ?? 20;
+    const pausa  = catDay?.pausa  ?? CT.torneo.pausa  ?? 5;
+    const campi  = catDay?.campi  ?? dayData.campi ?? 2;
+    let oraMin = _ctTimeToMin(catDay?.oraInizio ?? dayData.oraInizio ?? '09:00');
+    const pausaIni  = _ctTimeToMin(catDay?.pausaIni  ?? dayData.pausaIni  ?? '12:30');
+    const pausaFine = _ctTimeToMin(catDay?.pausaFine ?? dayData.pausaFine ?? '14:00');
     partite.sort((a,b)=>a.ordine-b.ordine);
     let campo=1;
-    partite.forEach(p=>{
-      if(p._oraManuale&&p.ora){oraMin=_ctTimeToMin(p.ora)+durata+pausa;campo=(p.campo||1)%campi+1;return;}
-      if(oraMin>=pausaIni&&oraMin<pausaFine)oraMin=pausaFine;
-      p.ora=_ctMinToTime(oraMin); p.campo=campo;
-      campo++;if(campo>campi){campo=1;oraMin+=durata+pausa;}
+    partite.forEach(p => {
+      if (p._oraManuale && p.ora) {
+        oraMin = _ctTimeToMin(p.ora) + durata + pausa;
+        campo = (p.campo||1) % campi + 1;
+        return;
+      }
+      if (oraMin>=pausaIni && oraMin<pausaFine) oraMin=pausaFine;
+      p.ora = _ctMinToTime(oraMin);
+      p.campo = campo;
+      campo++; if(campo>campi){campo=1; oraMin+=durata+pausa;}
     });
   });
 }
 
-function _ctFaseCalendario(cat,ci) {
-  const partite=[...cat.calendario].sort((a,b)=>a.ordine-b.ordine);
-  const colore={gironeQ:'var(--blu)',finaleQ:'#d97706',gironeF:'#7c3aed'};
-  const label={gironeQ:'Qualifica',finaleQ:'Finale Q',gironeF:'Finale'};
+// ── FASE: CALENDARIO ─────────────────────────────────────────
+function _ctFaseCalendario(cat, ci) {
+  return _ctRenderCalendarioUI(cat, ci, 'calendario', 'accoppiamenti', 'gironi');
+}
 
-  const righe=partite.map((p,i)=>`
-    <tr style="background:${i%2?'var(--sfondo)':'white'};">
+function _ctRicalcolaOrari(ci) {
+  _ctAssegnaOrari(CT.categorie[ci].calendario, CT.categorie[ci]);
+}
+
+function _ctOrdinaPerGirone(chiave, ci) {
+  // Raggruppa le partite per girone, mantenendo l'ordine interno
+  const lista = CT.categorie[ci][chiave];
+  const gironi = [...new Set(lista.map(p=>p.gironeNome))];
+  let ordine = 1;
+  gironi.forEach(g => {
+    lista.filter(p=>p.gironeNome===g).forEach(p => { p.ordine=ordine++; });
+  });
+  _ctAssegnaOrari(lista, CT.categorie[ci]);
+  renderAdminCreaTorneo();
+}
+
+function _ctOrdinaAlternato(chiave, ci) {
+  // Alterna le partite dei diversi gironi: A1, B1, A2, B2...
+  // Così due gironi giocano contemporaneamente su campi diversi
+  const lista = CT.categorie[ci][chiave];
+  const gironi = [...new Set(lista.map(p=>p.gironeNome))];
+  const perGirone = {};
+  gironi.forEach(g => { perGirone[g] = lista.filter(p=>p.gironeNome===g); });
+  const maxLen = Math.max(...gironi.map(g=>perGirone[g].length));
+  let ordine = 1;
+  for (let i=0; i<maxLen; i++) {
+    gironi.forEach(g => {
+      if (perGirone[g][i]) perGirone[g][i].ordine = ordine++;
+    });
+  }
+  _ctAssegnaOrari(lista, CT.categorie[ci]);
+  renderAdminCreaTorneo();
+}
+
+function _ctSpostaPartita(ci, chiave, fromIdx, dir) {
+  // chiave = 'calendario' o 'calendarioFinali'
+  const lista = CT.categorie[ci][chiave];
+  const toIdx = fromIdx + dir;
+  if (toIdx < 0 || toIdx >= lista.length) return;
+  // Swap ordine
+  const tmp = lista[fromIdx].ordine;
+  lista[fromIdx].ordine = lista[toIdx].ordine;
+  lista[toIdx].ordine = tmp;
+  // Riassegna orari
+  _ctAssegnaOrari(lista, CT.categorie[ci]);
+  renderAdminCreaTorneo();
+}
+
+function _ctRenderCalendarioUI(cat, ci, chiave, faseAvanti, faseIndietro) {
+  const lista = [...(cat[chiave]||[])].sort((a,b)=>a.ordine-b.ordine);
+  const isFin = chiave === 'calendarioFinali';
+
+  const righe = lista.map((p,i) => `
+    <tr id="cal-row-${ci}-${chiave}-${i}" style="background:${i%2===0?'white':'var(--sfondo)'};transition:background .15s;">
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;white-space:nowrap;">
         <div style="display:flex;flex-direction:column;gap:1px;">
-          <button onclick="ctSposta(${ci},${i},-1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:10px;" ${i===0?'disabled':''}>▲</button>
-          <button onclick="ctSposta(${ci},${i},1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:10px;" ${i===partite.length-1?'disabled':''}>▼</button>
+          <button onclick="_ctSpostaPartita(${ci},'${chiave}',${i},-1)"
+            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===0?'disabled':''}>▲</button>
+          <button onclick="_ctSpostaPartita(${ci},'${chiave}',${i},1)"
+            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===lista.length-1?'disabled':''}>▼</button>
         </div>
       </td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--testo-xs);font-weight:700;">${i+1}</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);">
         <input value="${p.ora}" style="width:56px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
-          onchange="CT.categorie[${ci}].calendario[${i}].ora=this.value;CT.categorie[${ci}].calendario[${i}]._oraManuale=true"></td>
-      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
-        <input type="number" value="${p.campo}" min="1" max="10" style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
-          onchange="CT.categorie[${ci}].calendario[${i}].campo=parseInt(this.value)||1"></td>
-      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);white-space:nowrap;">
-        <span style="font-size:10px;background:${colore[p.tipo]||'#888'};color:white;padding:1px 6px;border-radius:10px;">${label[p.tipo]||''}</span>
-        <span style="font-size:11px;color:var(--testo-xs);margin-left:4px;">${p.gironeNome}</span>
+          onchange="CT.categorie[${ci}]['${chiave}'][${i}].ora=this.value">
       </td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+        <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}"
+          style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+          onchange="CT.categorie[${ci}]['${chiave}'][${i}].campo=parseInt(this.value)||1">
+      </td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:${isFin?'var(--arancio,#ea580c)':'var(--blu)'};font-weight:700;white-space:nowrap;">${p.gironeNome}</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
     </tr>`).join('');
 
-  return `<div class="card">
-    <div style="display:flex;align-items:center;margin-bottom:12px;">
-      <div class="card-title" style="margin:0;">📅 Calendario</div>
-      <button onclick="_ctCalcolaOrari(CT.categorie[${ci}]);renderAdminCreaTorneo()" style="margin-left:8px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🔄 Rigenera orari</button>
-      <div style="display:flex;gap:4px;margin-left:8px;">
-        <button onclick="ctOrdGirone(${ci})" style="background:white;border:1.5px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;">📋 Per girone</button>
-        <button onclick="ctOrdAlterna(${ci})" style="background:white;border:1.5px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;">⚡ Alterna</button>
+  const titolo = isFin ? '📅 Calendario Gironi Finali' : '📅 Calendario';
+
+  return `
+    <div class="card">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0;">${titolo}</div>
+        <button onclick="_ctAssegnaOrari(CT.categorie[${ci}]['${chiave}'],CT.categorie[${ci}]);renderAdminCreaTorneo()"
+          style="margin-left:8px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🔄 Rigenera orari</button>
+      </div>
+      <div style="background:var(--blu-bg);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
+        💡 Usa <strong>▲ ▼</strong> per spostare le partite. Clicca <strong>🔄 Rigenera orari</strong> per aggiornare gli orari.<br>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          <button onclick="_ctOrdinaPerGirone('${chiave}',${ci})" style="background:white;border:1.5px solid var(--blu);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">📋 Raggruppa per girone</button>
+          <button onclick="_ctOrdinaAlternato('${chiave}',${ci})" style="background:white;border:1.5px solid var(--blu);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">⚡ Alterna gironi (no stesso campo)</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:var(--sfondo);">
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:40px;"></th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:28px;">N°</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:20px;"></th>
+            <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
+          </tr></thead>
+          <tbody>${righe}</tbody>
+        </table>
       </div>
     </div>
-    <div style="background:var(--blu-bg);border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--blu);">
-      💡 <strong>▲▼</strong> per riordinare • <strong>🔄 Rigenera</strong> per aggiornare orari • <strong>⚡ Alterna</strong> per gironi su più campi contemporaneamente
-    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;">
+      <button onclick="CT.subStep.fase='${faseIndietro}';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Indietro</button>
+      <button onclick="CT.subStep.fase='${faseAvanti}';renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti ›</button>
+    </div>`;
+}
+
+// ── FASE: ACCOPPIAMENTI ──────────────────────────────────────
+function _ctFaseAccoppiamenti(cat, ci) {
+  // Per ogni girone, per ogni posizione → quale girone finale
+  const gironi = cat.gironi;
+  if (!gironi.length) return '<div class="empty-state">Prima configura i gironi.</div>';
+
+  const maxSq = Math.max(...gironi.map(g=>g.squadre.length));
+  const roundSuggeriti = ['ARANCIO','VERDE','BLU','GIALLO','BIANCO','ROSSO'];
+
+  // Assicura che accoppiamenti siano inizializzati
+  if (!cat.accoppiamenti.length) {
+    cat.accoppiamenti = [];
+    gironi.forEach(g => {
+      for (let pos=1; pos<=g.squadre.length; pos++) {
+        const round = roundSuggeriti[pos-1]||`ROUND ${pos}`;
+        const giorno = CT.torneo.giorni.length>1 ? 1 : 0;
+        cat.accoppiamenti.push({pos, gironeNome:g.nome, aGirone:round, giorno});
+      }
+    });
+  }
+
+  const giornoLabel = (idx) => {
+    const g = CT.torneo.giorni[idx];
+    return g?.data ? _ctFmtData(g.data) : `Giorno ${idx+1}`;
+  };
+
+  // Tabella: righe = posizioni, colonne = gironi
+  const tabella = `
     <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr style="background:var(--sfondo);">
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);width:40px;"></th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);width:24px;">N°</th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);width:20px;"></th>
-          <th style="padding:6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
-        </tr></thead>
-        <tbody>${righe}</tbody>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:300px;">
+        <thead>
+          <tr style="background:var(--sfondo);">
+            <th style="padding:8px 10px;border:1px solid var(--bordo);text-align:left;">Posto</th>
+            ${gironi.map(g=>`<th style="padding:8px 10px;border:1px solid var(--bordo);text-align:center;color:var(--blu);font-weight:800;">${g.nome}</th>`).join('')}
+            <th style="padding:8px 10px;border:1px solid var(--bordo);text-align:center;font-size:11px;color:var(--testo-xs);">Giorno</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Array.from({length:maxSq},(_,posIdx)=>{
+            const pos = posIdx+1;
+            const giornoAcc = cat.accoppiamenti.find(a=>a.pos===pos)?.giorno??1;
+            return `<tr style="background:${posIdx%2===0?'white':'var(--sfondo)'};">
+              <td style="padding:7px 10px;border:1px solid var(--bordo);">
+                <span style="font-size:12px;font-weight:800;color:var(--testo);">${pos}° posto</span>
+              </td>
+              ${gironi.map(g=>{
+                const acc = cat.accoppiamenti.find(a=>a.pos===pos&&a.gironeNome===g.nome);
+                const val = acc?.aGirone || (roundSuggeriti[posIdx]||'');
+                return `<td style="padding:5px 6px;border:1px solid var(--bordo);text-align:center;">
+                  <input value="${val}" placeholder="es. ARANCIO"
+                    style="width:100%;border:1.5px solid var(--blu);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:700;font-family:inherit;text-align:center;background:var(--blu-bg);color:var(--blu);"
+                    onchange="ctSetAcc(${ci},${pos},'${g.nome}',this.value)">
+                </td>`;
+              }).join('')}
+              <td style="padding:5px 6px;border:1px solid var(--bordo);text-align:center;">
+                <select style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
+                  onchange="ctSetGiornoAcc(${ci},${pos},parseInt(this.value))">
+                  ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${giornoAcc===di?'selected':''}>${giornoLabel(di)}</option>`).join('')}
+                </select>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
       </table>
-    </div>
-  </div>
-  <div style="display:flex;justify-content:space-between;margin-top:12px;">
-    <button onclick="CT.subStep.fase='accoppiamenti';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Accoppiamenti</button>
-    <button onclick="CT.subStep.fase='finali';renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Finali ›</button>
-  </div>`;
-}
+    </div>`;
 
-function ctSposta(ci,i,dir) {
-  const lista=CT.categorie[ci].calendario;
-  const j=i+dir; if(j<0||j>=lista.length)return;
-  const tmp=lista[i].ordine; lista[i].ordine=lista[j].ordine; lista[j].ordine=tmp;
-  _ctCalcolaOrari(CT.categorie[ci]); renderAdminCreaTorneo();
-}
-function ctOrdGirone(ci) {
-  const lista=CT.categorie[ci].calendario;
-  const gironi=[...new Set(lista.map(p=>p.gironeNome))];
-  let ord=1; gironi.forEach(g=>lista.filter(p=>p.gironeNome===g).forEach(p=>p.ordine=ord++));
-  _ctCalcolaOrari(CT.categorie[ci]); renderAdminCreaTorneo();
-}
-function ctOrdAlterna(ci) {
-  const lista=CT.categorie[ci].calendario;
-  const gironi=[...new Set(lista.map(p=>p.gironeNome))];
-  const perG={}; gironi.forEach(g=>perG[g]=lista.filter(p=>p.gironeNome===g));
-  const max=Math.max(...gironi.map(g=>perG[g].length));
-  let ord=1; for(let i=0;i<max;i++) gironi.forEach(g=>{if(perG[g][i])perG[g][i].ordine=ord++;});
-  _ctCalcolaOrari(CT.categorie[ci]); renderAdminCreaTorneo();
-}
+  // Squadre extra già qualificate
+  const extraHTML = `
+    <div style="margin-top:14px;border:1.5px dashed var(--bordo);border-radius:10px;padding:12px;">
+      <div style="font-size:12px;font-weight:700;color:var(--testo-xs);margin-bottom:8px;">🏟️ Squadre già qualificate (entrano direttamente senza qualifiche)</div>
+      ${(cat.squadreExtra||[]).map((sq,si)=>`
+        <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+          <input value="${sq.nome}" placeholder="Nome squadra"
+            style="flex:1;border:1px solid var(--bordo);border-radius:6px;padding:5px 10px;font-size:13px;font-family:inherit;"
+            onchange="CT.categorie[${ci}].squadreExtra[${si}].nome=this.value">
+          <input value="${sq.aGirone||''}" placeholder="Girone finale (es. ARANCIO)"
+            style="width:140px;border:1px solid var(--bordo);border-radius:6px;padding:5px 10px;font-size:12px;font-family:inherit;"
+            onchange="CT.categorie[${ci}].squadreExtra[${si}].aGirone=this.value">
+          <button onclick="CT.categorie[${ci}].squadreExtra.splice(${si},1);renderAdminCreaTorneo()"
+            style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;">✕</button>
+        </div>`).join('')}
+      <button onclick="CT.categorie[${ci}].squadreExtra.push({nome:'',aGirone:'ARANCIO'});renderAdminCreaTorneo()"
+        style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">
+        + Aggiungi squadra già qualificata
+      </button>
+    </div>`;
 
-// ── FINALI ────────────────────────────────────────────────────
-function _ctFaseFinali(cat,ci) {
-  if(!cat.finali) cat.finali=[];
-  const gironiF=cat.gironiFinali||[];
-  const r0=gironiF[0]?.nome||'GIRONE A', r1=gironiF[1]?.nome||'GIRONE B';
-  const lastDay=CT.torneo.giorni[CT.torneo.giorni.length-1];
-  const lastLabel=lastDay?.data?_ctFmtData(lastDay.data):`Giorno ${CT.torneo.giorni.length}`;
-
-  const templates=[
-    {label:'Semifinali + Finali 1°-4°', fn:()=>{cat.finali=[
-      {nome:'SEMIFINALE 01',sq1:`1° Girone ${r0}`,sq2:`2° Girone ${r1}`,ora:'',campo:1,giornata:lastLabel},
-      {nome:'SEMIFINALE 02',sq1:`1° Girone ${r1}`,sq2:`2° Girone ${r0}`,ora:'',campo:2,giornata:lastLabel},
-      {nome:'FINALE 3°/4°',sq1:'Perdente SEMIFINALE 01',sq2:'Perdente SEMIFINALE 02',ora:'',campo:1,giornata:lastLabel},
-      {nome:'FINALE 1°/2°',sq1:'Vincente SEMIFINALE 01',sq2:'Vincente SEMIFINALE 02',ora:'',campo:1,giornata:lastLabel},
-    ];}},
-    {label:'Solo Finali per posto (1°/2°, 3°/4°...)', fn:()=>{
-      const max=Math.max(...gironiF.map(g=>(g.squadre.length+g.squadreExtra.length)||4));
-      cat.finali=Array.from({length:max},(_,i)=>({nome:`FINALE ${i*2+1}°/${i*2+2}°`,sq1:`${i+1}° Girone ${r0}`,sq2:`${i+1}° Girone ${r1}`,ora:'',campo:1,giornata:lastLabel}));
-    }},
-    {label:'Semifinali + Finali 1°-8°', fn:()=>{cat.finali=[
-      {nome:'SEMIFINALE 01',sq1:`1° Girone ${r0}`,sq2:`2° Girone ${r1}`,ora:'',campo:1,giornata:lastLabel},
-      {nome:'SEMIFINALE 02',sq1:`1° Girone ${r1}`,sq2:`2° Girone ${r0}`,ora:'',campo:2,giornata:lastLabel},
-      {nome:'FINALE 3°/4°',sq1:'Perdente SEMIFINALE 01',sq2:'Perdente SEMIFINALE 02',ora:'',campo:1,giornata:lastLabel},
-      {nome:'FINALE 1°/2°',sq1:'Vincente SEMIFINALE 01',sq2:'Vincente SEMIFINALE 02',ora:'',campo:1,giornata:lastLabel},
-      {nome:'FINALE 5°/6°',sq1:`3° Girone ${r0}`,sq2:`3° Girone ${r1}`,ora:'',campo:2,giornata:lastLabel},
-      {nome:'FINALE 7°/8°',sq1:`4° Girone ${r0}`,sq2:`4° Girone ${r1}`,ora:'',campo:2,giornata:lastLabel},
-    ];}},
-  ];
-
-  const finaliHTML=cat.finali.map((f,fi)=>`
-    <div style="border:1px solid var(--bordo);border-radius:8px;margin-bottom:8px;overflow:hidden;">
-      <div style="background:var(--sfondo);padding:7px 12px;display:flex;align-items:center;gap:8px;">
-        <input value="${f.nome}" style="flex:1;border:1.5px solid var(--bordo);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:700;font-family:inherit;"
-          onchange="CT.categorie[${ci}].finali[${fi}].nome=this.value">
-        <button onclick="CT.categorie[${ci}].finali.splice(${fi},1);renderAdminCreaTorneo()"
-          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>
+  return `
+    <div class="card">
+      <div class="card-title">🔀 Accoppiamenti — Chi va dove</div>
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
+        💡 Per ogni posizione, scrivi in quale <strong>girone finale</strong> va la squadra. Es: il 1° di ogni girone va nel girone <strong>ARANCIO</strong>.
       </div>
-      <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <input value="${f.sq1}" placeholder="Squadra 1 (es. 1° Girone A)"
-          style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
-          onchange="CT.categorie[${ci}].finali[${fi}].sq1=this.value">
-        <span style="color:var(--testo-xs);">vs</span>
-        <input value="${f.sq2}" placeholder="Squadra 2 (es. 1° Girone B)"
-          style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
-          onchange="CT.categorie[${ci}].finali[${fi}].sq2=this.value">
-        <input value="${f.ora||''}" placeholder="Ora" style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
-          onchange="CT.categorie[${ci}].finali[${fi}].ora=this.value">
-        <input type="number" value="${f.campo||1}" min="1" max="10" style="width:40px;border:1px solid var(--bordo);border-radius:5px;padding:4px;font-size:12px;text-align:center;font-family:inherit;"
-          onchange="CT.categorie[${ci}].finali[${fi}].campo=parseInt(this.value)||1">
+      ${tabella}
+      ${extraHTML}
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;">
+      <button onclick="CT.subStep.fase='calendario';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Calendario</button>
+      <button onclick="_ctVaiGironiFinali(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Gironi Finali ›</button>
+    </div>`;
+}
+
+function ctSetAcc(ci, pos, gironeNome, aGirone) {
+  const cat = CT.categorie[ci];
+  const idx = cat.accoppiamenti.findIndex(a=>a.pos===pos&&a.gironeNome===gironeNome);
+  const giorno = cat.accoppiamenti.find(a=>a.pos===pos)?.giorno??1;
+  if (idx>=0) cat.accoppiamenti[idx].aGirone=aGirone;
+  else cat.accoppiamenti.push({pos,gironeNome,aGirone,giorno});
+}
+function ctSetGiornoAcc(ci, pos, giorno) {
+  CT.categorie[ci].accoppiamenti.forEach(a=>{if(a.pos===pos)a.giorno=giorno;});
+}
+
+// ── FASE: GIRONI FINALI ──────────────────────────────────────
+function _ctVaiGironiFinali(ci) {
+  const cat = CT.categorie[ci];
+  // Calcola gironi finali unici dagli accoppiamenti
+  const roundSet = {};
+  cat.accoppiamenti.forEach(a => {
+    if (!roundSet[a.aGirone]) roundSet[a.aGirone] = {nome:a.aGirone, giorno:a.giorno??1, squadre:[]};
+    roundSet[a.aGirone].squadre.push({nome:`${a.pos}° ${a.gironeNome}`, prio:'normale', _placeholder:true});
+  });
+  (cat.squadreExtra||[]).forEach(sq => {
+    if (sq.aGirone && sq.nome) {
+      if (!roundSet[sq.aGirone]) roundSet[sq.aGirone]={nome:sq.aGirone,giorno:1,squadre:[]};
+      roundSet[sq.aGirone].squadre.push({nome:sq.nome,prio:'normale',_placeholder:false});
+    }
+  });
+  // Mantieni gironi finali esistenti o crea da zero
+  if (!cat.gironiFinali.length) {
+    cat.gironiFinali = Object.values(roundSet);
+  }
+  // Rigenera calendario finali
+  cat.calendarioFinali = [];
+  cat.gironiFinali.forEach(g => {
+    const sq=g.squadre;
+    let ordine = cat.calendarioFinali.length+1;
+    for (let i=0;i<sq.length;i++) for (let j=i+1;j<sq.length;j++)
+      cat.calendarioFinali.push({gironeNome:g.nome,sq1:sq[i].nome,sq2:sq[j].nome,ora:'',campo:1,giornata:CT.torneo.giorni[g.giorno??1]?.data?_ctFmtData(CT.torneo.giorni[g.giorno??1].data):`Giorno ${(g.giorno??1)+1}`,ordine:ordine++,_giornoIdx:g.giorno??1});
+  });
+  _ctAssegnaOrari(cat.calendarioFinali, cat);
+  CT.subStep.fase='gironifinali';
+  renderAdminCreaTorneo();
+}
+
+function _ctFaseGironiFinali(cat, ci) {
+  const giornoLabel = (idx) => {
+    const g = CT.torneo.giorni[idx];
+    return g?.data ? _ctFmtData(g.data) : `Giorno ${idx+1}`;
+  };
+
+  const gironiHTML = cat.gironiFinali.map((g,gi) => `
+    <div style="border:1.5px solid var(--bordo);border-radius:10px;margin-bottom:12px;overflow:hidden;">
+      <div style="background:var(--arancio-bg);padding:8px 12px;display:flex;align-items:center;gap:8px;">
+        <input value="${g.nome}" placeholder="Nome girone finale"
+          style="flex:1;border:1.5px solid var(--arancio,#ea580c);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:800;font-family:inherit;background:white;color:var(--arancio,#ea580c);"
+          onchange="CT.categorie[${ci}].gironiFinali[${gi}].nome=this.value">
+        <span style="font-size:11px;color:var(--testo-xs);">Gioca il:</span>
+        <select style="border:1px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;"
+          onchange="CT.categorie[${ci}].gironiFinali[${gi}].giorno=parseInt(this.value)">
+          ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${(g.giorno??1)===di?'selected':''}>${giornoLabel(di)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="padding:10px 12px;">
+        <div style="font-size:11px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre (placeholder + fisse)</div>
+        ${g.squadre.map((sq,si)=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bordo-lt);">
+            <span style="font-size:12px;color:var(--testo-xs);width:20px;text-align:right;">${si+1}.</span>
+            <input value="${sq.nome}"
+              style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-weight:600;font-family:inherit;${sq._placeholder?'background:var(--blu-bg);color:var(--blu);':''}"
+              onchange="CT.categorie[${ci}].gironiFinali[${gi}].squadre[${si}].nome=this.value">
+            ${sq._placeholder?`<span style="font-size:10px;background:var(--blu-bg);color:var(--blu);padding:2px 6px;border-radius:10px;white-space:nowrap;">placeholder</span>`:''}
+            <button onclick="CT.categorie[${ci}].gironiFinali[${gi}].squadre.splice(${si},1);renderAdminCreaTorneo()"
+              style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:14px;">✕</button>
+          </div>`).join('')}
+        <button onclick="CT.categorie[${ci}].gironiFinali[${gi}].squadre.push({nome:'',prio:'normale',_placeholder:false});renderAdminCreaTorneo()"
+          style="margin-top:6px;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--blu);cursor:pointer;">+ Squadra fissa</button>
       </div>
     </div>`).join('');
 
-  return `<div class="card">
-    <div class="card-title">🏅 Round Finali (Semifinali, Finali per posto...)</div>
-    <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
-      💡 Placeholder riconosciuti: <code>1° Girone A</code> · <code>Vincente SEMIFINALE 01</code> · <code>Perdente SEMIFINALE 02</code>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-      ${templates.map((t,ti)=>`<button onclick="(${t.fn.toString()})();renderAdminCreaTorneo()"
-        style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">${t.label}</button>`).join('')}
-      <button onclick="CT.categorie[${ci}].finali.push({nome:'FINALE',sq1:'',sq2:'',ora:'',campo:1,giornata:'${lastLabel}'});renderAdminCreaTorneo()"
-        style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Round vuoto</button>
-    </div>
-    ${finaliHTML}
-    ${!cat.finali.length?'<div style="text-align:center;padding:16px;color:var(--testo-xs);">Scegli un template o aggiungi round</div>':''}
-  </div>
-  <div style="display:flex;justify-content:space-between;margin-top:12px;">
-    <button onclick="CT.subStep.fase='calendario';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Calendario</button>
-    <button onclick="_ctCompletaCat(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;background:var(--verde);border-color:var(--verde);">✅ Completa Categoria</button>
-  </div>`;
-}
+  // Tabella calendario gironi finali
+  const calHTML = cat.calendarioFinali.length ? _ctRenderCalendarioUI(cat, ci, 'calendarioFinali', 'finali', 'accoppiamenti') : '';
 
-function _ctCompletaCat(ci) { CT.categorie[ci]._fatto=true; CT.step=2; CT.subStep=null; renderAdminCreaTorneo(); }
-
-// ══════════════════════════════════════════════════════════════
-// STEP 4: RIEPILOGO + SALVA
-// ══════════════════════════════════════════════════════════════
-async function _ctStep4() {
-  const tot=CT.categorie.reduce((s,c)=>s+c.calendario.length,0);
-  const totF=CT.categorie.reduce((s,c)=>s+(c.finali?.length||0),0);
-  return `<div class="card">
-    <div class="card-title">✅ Riepilogo</div>
-    <div style="background:var(--verde-bg);border-radius:10px;padding:14px;margin-bottom:14px;">
-      <div style="font-size:18px;font-weight:800;color:var(--verde);margin-bottom:6px;">🏆 ${CT.torneo.nome}</div>
-      <div style="font-size:13px;color:var(--testo-lt);">📍 ${CT.torneo.luogo||'—'} &nbsp;|&nbsp; ⏱️ ${CT.torneo.durata}min</div>
-      <div style="font-size:13px;color:var(--testo-lt);">📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
-      <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
-        ${CT.categorie.map(cat=>`
-          <div style="background:white;border-radius:8px;padding:8px 12px;font-size:12px;">
-            <strong>${cat.nome}</strong> — ${(cat.gironiQ||[]).length} gironi qualifiche + ${(cat.gironiFinali||[]).length} gironi finali | ${cat.calendario.length} partite + ${cat.finali?.length||0} round knockout
-          </div>`).join('')}
+  // calHTML ora è una stringa HTML completa con navigazione
+  // ma noi vogliamo i gironi sopra e il calendario sotto con navigazione separata
+  const calTabellaOnly = cat.calendarioFinali.length ? (() => {
+    const lista = [...cat.calendarioFinali].sort((a,b)=>a.ordine-b.ordine);
+    const isFin = true;
+    const righe = lista.map((p,i) => `
+      <tr style="background:${i%2===0?'white':'var(--sfondo)'};">
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;white-space:nowrap;">
+          <div style="display:flex;flex-direction:column;gap:1px;">
+            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},-1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===0?'disabled':''}>▲</button>
+            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===lista.length-1?'disabled':''}>▼</button>
+          </div>
+        </td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--testo-xs);font-weight:700;">${i+1}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);">
+          <input value="${p.ora}" style="width:56px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
+            onchange="CT.categorie[${ci}].calendarioFinali[${i}].ora=this.value">
+        </td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;">
+          <input type="number" value="${p.campo}" min="1" max="${CT.torneo.campi}" style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;"
+            onchange="CT.categorie[${ci}].calendarioFinali[${i}].campo=parseInt(this.value)||1">
+        </td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--arancio,#ea580c);font-weight:700;">${p.gironeNome}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
+      </tr>`).join('');
+    return `<div class="card" style="margin-top:12px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">📅 Calendario Gironi Finali</div>
+        <button onclick="_ctAssegnaOrari(CT.categorie[${ci}].calendarioFinali,CT.categorie[${ci}]);renderAdminCreaTorneo()"
+          style="margin-left:8px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🔄 Rigenera orari</button>
       </div>
-      <div style="margin-top:8px;font-size:13px;color:var(--testo-lt);">⚽ ${tot} partite &nbsp;|&nbsp; 🏅 ${totF} round finali</div>
+      <div style="background:var(--blu-bg);border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--blu);">
+        💡 Usa <strong>▲ ▼</strong> per spostare le partite, poi clicca 🔄 per aggiornare gli orari.
+      </div>
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:var(--sfondo);">
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:40px;"></th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:28px;">N°</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:64px;">Ora</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:44px;">Campo</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Girone</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 1</th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);width:20px;"></th>
+          <th style="padding:7px 6px;border-bottom:1px solid var(--bordo);text-align:left;">Squadra 2</th>
+        </tr></thead>
+        <tbody>${righe}</tbody>
+      </table></div>
+    </div>`;
+  })() : '';
+
+  return `
+    <div class="card">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0;">🏟️ Gironi Finali</div>
+        <button onclick="CT.categorie[${ci}].gironiFinali.push({nome:'NUOVO',giorno:1,squadre:[]});renderAdminCreaTorneo()"
+          style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Girone Finale</button>
+      </div>
+      <div style="background:#fffbeb;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#92400e;">
+        💡 I <strong>placeholder</strong> (es. "1° Girone Q") vengono risolti automaticamente dal sistema dopo i risultati.
+      </div>
+      ${gironiHTML}
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <button onclick="ctSalvaDB()" style="background:var(--verde);color:white;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">💾 Salva nel Database</button>
+    ${calTabellaOnly}
+    <div style="display:flex;justify-content:space-between;margin-top:12px;">
+      <button onclick="CT.subStep.fase='accoppiamenti';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Accoppiamenti</button>
+      <button onclick="CT.subStep.fase='finali';renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Finali ›</button>
+    </div>`;
+}
+
+function _ctRicalcolaOrariFinali(ci) {
+  _ctAssegnaOrari(CT.categorie[ci].calendarioFinali, CT.categorie[ci]);
+}
+
+// ── FASE: FINALI ─────────────────────────────────────────────
+function _ctFaseFinali(cat, ci) {
+  if (!cat.finali) cat.finali = [];
+
+  const finaliHTML = cat.finali.map((f,fi) => `
+    <div style="border:1px solid var(--bordo);border-radius:8px;margin-bottom:8px;overflow:hidden;">
+      <div style="background:var(--arancio-bg);padding:7px 12px;display:flex;align-items:center;gap:8px;">
+        <input value="${f.nome}" placeholder="Nome round (es. SEMIFINALE 01)"
+          style="flex:1;border:1.5px solid var(--bordo);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:700;font-family:inherit;"
+          onchange="CT.categorie[${ci}].finali[${fi}].nome=this.value">
+        <button onclick="CT.categorie[${ci}].finali.splice(${fi},1);renderAdminCreaTorneo()"
+          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>
+      </div>
+      <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input value="${f.sq1}" placeholder="es. 1° GIRONE A oppure Vincente SEMIFINALE 01"
+          style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
+          onchange="CT.categorie[${ci}].finali[${fi}].sq1=this.value">
+        <span style="color:var(--testo-xs);font-size:12px;">vs</span>
+        <input value="${f.sq2}" placeholder="es. 1° GIRONE B oppure Vincente SEMIFINALE 02"
+          style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
+          onchange="CT.categorie[${ci}].finali[${fi}].sq2=this.value">
+        <input value="${f.ora||''}" placeholder="Ora"
+          style="width:60px;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
+          onchange="CT.categorie[${ci}].finali[${fi}].ora=this.value">
+        <input type="number" value="${f.campo||1}" min="1" max="${CT.torneo.campi}"
+          style="width:44px;border:1px solid var(--bordo);border-radius:5px;padding:4px 4px;font-size:12px;text-align:center;font-family:inherit;"
+          onchange="CT.categorie[${ci}].finali[${fi}].campo=parseInt(this.value)||1">
+        <select style="border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:11px;font-family:inherit;"
+          onchange="CT.categorie[${ci}].finali[${fi}].giornata=this.value">
+          ${CT.torneo.giorni.map((g,di)=>`<option value="${g.data?_ctFmtData(g.data):'Giorno '+(di+1)}" ${(f.giornata||'')===(_ctFmtData(g.data)||'Giorno '+(di+1))?'selected':''}>${g.data?_ctFmtData(g.data):'Giorno '+(di+1)}</option>`).join('')}
+        </select>
+      </div>
+    </div>`).join('');
+
+  // Template rapidi
+  const templates = [
+    {label:'Semifinali + Finali', click:`ctTemplateFinali(${ci},'semi')`},
+    {label:'Solo Finali per posto', click:`ctTemplateFinali(${ci},'posto')`},
+    {label:'Aggiungi round vuoto', click:`CT.categorie[${ci}].finali.push({nome:'FINALE',sq1:'',sq2:'',ora:'',campo:1,giornata:''});renderAdminCreaTorneo()`},
+  ];
+
+  return `
+    <div class="card">
+      <div class="card-title">🏅 Round Finali (Semifinali, Finali per posto...)</div>
+      <div style="background:var(--blu-bg);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blu);">
+        💡 Usa i template oppure aggiungi round manualmente.<br>
+        <strong>Formato placeholder:</strong>
+        <span style="background:white;border-radius:4px;padding:1px 6px;margin:0 3px;font-family:monospace;">1° GIRONE A</span>
+        <span style="background:white;border-radius:4px;padding:1px 6px;margin:0 3px;font-family:monospace;">Vincente SEMIFINALE 01</span>
+        <span style="background:white;border-radius:4px;padding:1px 6px;margin:0 3px;font-family:monospace;">Perdente SEMIFINALE 02</span>
+        — vengono risolti automaticamente dopo i risultati.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        ${templates.map(t=>`<button onclick="${t.click}"
+          style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">${t.label}</button>`).join('')}
+      </div>
+      ${finaliHTML}
+      ${!cat.finali.length?`<div style="text-align:center;padding:16px;color:var(--testo-xs);font-size:13px;">Scegli un template o aggiungi round manualmente</div>`:''}
     </div>
-    <div id="ct-log" style="margin-top:12px;"></div>
-  </div>
-  <div style="margin-top:12px;">
-    <button onclick="CT.step=2;renderAdminCreaTorneo()" class="btn btn-secondary">‹ Categorie</button>
-  </div>`;
+    <div style="display:flex;justify-content:space-between;margin-top:12px;">
+      <button onclick="CT.subStep.fase='gironifinali';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Gironi Finali</button>
+      <button onclick="_ctCompletaCat(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;background:var(--verde);border-color:var(--verde);">✅ Completa Categoria</button>
+    </div>`;
+}
+
+function ctTemplateFinali(ci, tipo) {
+  const cat = CT.categorie[ci];
+  // Usa nomi reali dei gironi finali
+  const gironiF = cat.gironiFinali.map(g=>g.nome);
+  const gironiQ = cat.gironi.map(g=>g.nome);
+  // Preferisci gironi finali, altrimenti gironi qualifiche
+  const r0 = gironiF[0] || gironiQ[0] || 'GIRONE A';
+  const r1 = gironiF[1] || gironiQ[1] || 'GIRONE B';
+
+  // Giorno delle finali = ultimo giorno del torneo
+  const lastDay = CT.torneo.giorni[CT.torneo.giorni.length-1];
+  const giornatoLabel = lastDay?.data ? _ctFmtData(lastDay.data) : `Giorno ${CT.torneo.giorni.length}`;
+
+  if (tipo==='semi') {
+    cat.finali = [
+      {nome:'SEMIFINALE 01', sq1:`1° ${r0}`, sq2:`2° ${r1}`, ora:'', campo:1, giornata:giornatoLabel},
+      {nome:'SEMIFINALE 02', sq1:`1° ${r1}`, sq2:`2° ${r0}`, ora:'', campo:2, giornata:giornatoLabel},
+      {nome:'FINALE 3°/4°', sq1:'Perdente SEMIFINALE 01', sq2:'Perdente SEMIFINALE 02', ora:'', campo:1, giornata:giornatoLabel},
+      {nome:'FINALE 1°/2°', sq1:'Vincente SEMIFINALE 01', sq2:'Vincente SEMIFINALE 02', ora:'', campo:1, giornata:giornatoLabel},
+    ];
+  } else {
+    const maxSq = cat.gironiFinali.length ? Math.max(...cat.gironiFinali.map(g=>g.squadre.length)) : 4;
+    cat.finali = [];
+    for (let pos=1; pos<=maxSq; pos++) {
+      const p1=pos*2-1, p2=pos*2;
+      cat.finali.push({nome:`FINALE ${p1}°/${p2}°`, sq1:`${pos}° ${r0}`, sq2:`${pos}° ${r1}`, ora:'', campo:1, giornata:giornatoLabel});
+    }
+  }
+  renderAdminCreaTorneo();
+}
+
+function _ctCompletaCat(ci) {
+  CT.categorie[ci]._fatto = true;
+  CT.step = 2; CT.subStep = null;
+  renderAdminCreaTorneo();
 }
 
 // ══════════════════════════════════════════════════════════════
-// SALVA DATABASE — usa il sistema di importazione Excel
+//  STEP 4: RIEPILOGO + SALVA
+// ══════════════════════════════════════════════════════════════
+async function _ctHtmlStep4() {
+  const totPartite = CT.categorie.reduce((s,c)=>s+c.calendario.length+c.calendarioFinali.length,0);
+  const totFinali = CT.categorie.reduce((s,c)=>s+(c.finali?.length||0),0);
+
+  return `
+    <div class="card">
+      <div class="card-title">✅ Riepilogo</div>
+      <div style="background:var(--verde-bg);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:18px;font-weight:800;color:var(--verde);margin-bottom:6px;">🏆 ${CT.torneo.nome||'—'}</div>
+        <div style="font-size:13px;color:var(--testo-lt);">📍 ${CT.torneo.luogo||'—'} &nbsp;|&nbsp; ⏱️ ${CT.torneo.durata}min &nbsp;|&nbsp; 🏟 ${CT.torneo.campi} campi</div>
+        <div style="font-size:13px;color:var(--testo-lt);margin-top:4px;">📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+          ${CT.categorie.map(cat=>`
+            <div style="background:white;border-radius:8px;padding:8px 12px;font-size:12px;">
+              <strong>${cat.nome}</strong> — ${cat.gironi.length} gironi qualif. + ${cat.gironiFinali.length} gironi finali &nbsp;|&nbsp; ${cat.calendario.length+cat.calendarioFinali.length} partite + ${cat.finali?.length||0} finali knockout
+            </div>`).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:13px;color:var(--testo-lt);">⚽ ${totPartite} partite &nbsp;|&nbsp; 🏅 ${totFinali} round finali</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="ctSalvaDB()" style="background:var(--verde);color:white;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">💾 Salva nel Database</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button onclick="ctExportExcel()" style="background:var(--blu);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">📊 Esporta Excel</button>
+          <button onclick="ctStampaPDF()" style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Stampa PDF</button>
+        </div>
+      </div>
+      <div id="ct-log" style="margin-top:12px;"></div>
+    </div>
+    <div style="margin-top:12px;">
+      <button onclick="CT.step=2;renderAdminCreaTorneo()" class="btn btn-secondary">‹ Categorie</button>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SALVA DATABASE
 // ══════════════════════════════════════════════════════════════
 async function ctSalvaDB() {
   const log=document.getElementById('ct-log');
-  if(log)log.innerHTML='<div style="color:var(--testo-lt);font-size:13px;">⏳ Salvataggio in corso...</div>';
+  if(log)log.innerHTML='<div style="color:var(--testo-lt);font-size:13px;">⏳ Salvataggio...</div>';
   try {
-    const torneo=await dbSaveTorneo({nome:CT.torneo.nome,data:CT.torneo.giorni[0]?.data||'',attivo:true});
-    STATE.tornei=await dbGetTornei(); STATE.activeTorneo=torneo.id;
+    const torneo = await dbSaveTorneo({nome:CT.torneo.nome, data:CT.torneo.giorni[0]?.data||'', attivo:true});
+    STATE.tornei = await dbGetTornei();
+    STATE.activeTorneo = torneo.id;
 
-    // Costruisci struttura dati uguale all'Excel
-    const dati={categorie:[],gironi:[],partite:[],fase2:[]};
-    let ordCat=0;
-    for(const cat of CT.categorie) {
-      ordCat++;
-      dati.categorie.push({nome:cat.nome,qualificate:2,formato:'gironi',ordine:ordCat,codice:cat.nome});
+    for (const cat of CT.categorie) {
+      const catDB = await dbSaveCategoria({nome:cat.nome, qualificate:cat.qualificate||2, formato:'gironi', ordine:0, torneo_id:torneo.id});
 
-      // Gironi qualifiche — squadre
-      for(const g of (cat.gironiQ||[])) {
-        const di=g.giorno||0;
-        const giornata=CT.torneo.giorni[di]?.data?_ctFmtData(CT.torneo.giorni[di].data):`Giorno ${di+1}`;
-        (g.squadre||[]).forEach((sq,i)=>dati.gironi.push({categoria:cat.nome,girone:g.nome,squadra:sq.nome,ordine:i+1}));
-        cat.calendario.filter(p=>p.tipo==='gironeQ'&&p.gironeNome===g.nome).sort((a,b)=>a.ordine-b.ordine).forEach(p=>
-          dati.partite.push({categoria:cat.nome,girone:g.nome,home:p.sq1,away:p.sq2,orario:p.ora,campo:p.campo,giornata:p.giornata||giornata,giorno:p.giornata||giornata}));
-        // Finali nel girone (knockout)
-        cat.calendario.filter(p=>p.tipo==='finaleQ'&&p.gironeNome.includes(g.nome)).sort((a,b)=>a.ordine-b.ordine).forEach(p=>{
-          const m=p.gironeNome.match(/FINALE\s+(.+)/i);
-          dati.fase2.push({categoria:cat.nome,round:p.gironeNome,roundLabel:`🎖️ ${p.gironeNome}`,roundOrder:50,matchOrder:dati.fase2.length,consolazione:true,sq1raw:p.sq1,sq2raw:p.sq2,orario:p.ora,campo:p.campo,giorno:p.giornata||giornata});
-        });
+      // ── Gironi qualifiche ────────────────────────────────────
+      for (const g of cat.gironi) {
+        if (!g.nome?.trim()) continue;
+        const di = g.giorno||0;
+        const giornata = CT.torneo.giorni[di]?.data ? _ctFmtData(CT.torneo.giorni[di].data) : `Giorno ${di+1}`;
+        const gironeDB = await dbSaveGirone({categoria_id:catDB.id, nome:g.nome.trim()});
+
+        // Salva squadre (reali)
+        const sqAll = await dbGetSquadre(torneo.id);
+        const sqIds = [];
+        for (const sq of g.squadre) {
+          let s = sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
+          if(!s) s = await dbSaveSquadra({nome:sq.nome, torneo_id:torneo.id});
+          sqIds.push(s.id);
+        }
+        await dbSetGironeSquadre(gironeDB.id, sqIds);
+        await dbGeneraPartite(gironeDB.id, sqIds);
+
+        // Aggiorna orari dal calendario
+        const {data:pDB} = await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
+        const sqAll2 = await dbGetSquadre(torneo.id);
+        const sqMap = {}; sqAll2.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+        for (const p of cat.calendario.filter(p=>p.gironeNome===g.nome)) {
+          const hId=sqMap[p.sq1?.toLowerCase()], aId=sqMap[p.sq2?.toLowerCase()];
+          const dbP=pDB?.find(x=>x.home_id===hId&&x.away_id===aId);
+          if(dbP) await db.from('partite').update({orario:p.ora,campo:String(p.campo||1),giorno:p.giornata||giornata}).eq('id',dbP.id);
+        }
+
+        // Finali per posto dentro il girone
+        if (g.tipo==='finali_posto') {
+          const nFin = g.numFinali||2;
+          for (let f=nFin-1;f>=0;f--) {
+            const p1=f*2+1, p2=f*2+2;
+            const key=p1+'vs'+p2;
+            const fo = g.finaliOrari?.[key]||{};
+            await db.from('knockout').insert({
+              categoria_id:catDB.id, round_name:`FINALE ${p1}°/${p2}°`,
+              home_id:null, away_id:null,
+              note_home:`${p1}° ${g.nome}`, note_away:`${p2}° ${g.nome}`,
+              orario:fo.ora||null, campo:fo.campo||1,
+              giocata:false, gol_home:0, gol_away:0
+            });
+          }
+        }
       }
 
-      // Gironi finali — squadre (inclusi placeholder con nome CORRETTO)
-      for(const gf of (cat.gironiFinali||[])) {
-        const di=gf.giorno??1;
-        const giornata=CT.torneo.giorni[di]?.data?_ctFmtData(CT.torneo.giorni[di].data):`Giorno ${di+1}`;
-        const allSq=[...gf.squadre,...gf.squadreExtra];
-        allSq.forEach((sq,i)=>{
-          // Il placeholder viene salvato come "N° Girone X" — formato riconosciuto dal sistema
-          const nomeSq=sq._placeholder?`${sq._pos}° Girone ${sq._gironeQ}`:sq.nome;
-          dati.gironi.push({categoria:cat.nome,girone:gf.nome,squadra:nomeSq,ordine:i+1});
-        });
-        cat.calendario.filter(p=>p.tipo==='gironeF'&&p.gironeNome===gf.nome).sort((a,b)=>a.ordine-b.ordine).forEach(p=>
-          dati.partite.push({categoria:cat.nome,girone:gf.nome,home:p.sq1,away:p.sq2,orario:p.ora,campo:p.campo,giornata:p.giornata||giornata,giorno:p.giornata||giornata}));
+      // ── Gironi finali ────────────────────────────────────────
+      for (const gf of cat.gironiFinali) {
+        if (!gf.nome?.trim()) continue;
+        const di = gf.giorno??1;
+        const giornata = CT.torneo.giorni[di]?.data ? _ctFmtData(CT.torneo.giorni[di].data) : `Giorno ${di+1}`;
+        const gironeDB = await dbSaveGirone({categoria_id:catDB.id, nome:gf.nome.trim()});
+
+        // Separa reali da placeholder
+        const sqAll = await dbGetSquadre(torneo.id);
+        const sqIds = [];
+        for (const sq of gf.squadre) {
+          if (!sq.nome?.trim()) continue;
+          let s = sqAll.find(x=>x.nome.toLowerCase()===sq.nome.toLowerCase());
+          if(!s) s = await dbSaveSquadra({nome:sq.nome, torneo_id:torneo.id});
+          sqIds.push(s.id);
+        }
+        if (sqIds.length >= 2) {
+          await dbSetGironeSquadre(gironeDB.id, sqIds);
+          await dbGeneraPartite(gironeDB.id, sqIds);
+
+          // Aggiorna orari e imposta note per placeholder
+          const {data:pDB} = await db.from('partite').select('id,home_id,away_id').eq('girone_id',gironeDB.id);
+          const sqAll2 = await dbGetSquadre(torneo.id);
+          const sqMap = {}; sqAll2.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+
+          for (const p of cat.calendarioFinali.filter(p=>p.gironeNome===gf.nome)) {
+            const hPH = _isPlaceholder(p.sq1);
+            const aPH = _isPlaceholder(p.sq2);
+            const hId = sqMap[p.sq1?.toLowerCase()]||null;
+            const aId = sqMap[p.sq2?.toLowerCase()]||null;
+            const dbP = pDB?.find(x=>x.home_id===hId&&x.away_id===aId);
+            if(dbP) {
+              const upd={orario:p.ora,campo:String(p.campo||1),giorno:p.giornata||giornata};
+              if(hPH){upd.home_id=null;upd.note_home=p.sq1;}
+              if(aPH){upd.away_id=null;upd.note_away=p.sq2;}
+              await db.from('partite').update(upd).eq('id',dbP.id);
+            }
+          }
+        }
       }
 
-      // Round finali knockout
-      (cat.finali||[]).forEach((f,fi)=>{
-        // Trasforma sq1/sq2: se "1° GIRONE A" → "1° Girone A" (con Girone maiuscolo)
-        const fixPh=s=>{
-          if(!s)return s;
-          const m=s.match(/^(\d+)[°º]\s+(?:girone\s+)?(\w+)$/i);
-          if(m)return `${m[1]}° Girone ${m[2].toUpperCase()}`;
-          return s;
-        };
-        dati.fase2.push({
-          categoria:cat.nome,round:f.nome,
-          roundLabel:`🏅 ${f.nome}`,roundOrder:18+fi,matchOrder:fi,consolazione:fi>1,
-          sq1raw:fixPh(f.sq1),sq2raw:fixPh(f.sq2),
-          orario:f.ora||'',campo:f.campo||1,giorno:f.giornata||''
+      // ── Round finali knockout ────────────────────────────────
+      const sqAll = await dbGetSquadre(torneo.id);
+      const sqMap = {}; sqAll.forEach(s=>sqMap[s.nome.toLowerCase()]=s.id);
+      for (const f of (cat.finali||[])) {
+        if (!f.nome?.trim()) continue;
+        const hPH = _isPlaceholder(f.sq1);
+        const aPH = _isPlaceholder(f.sq2);
+        const hId = hPH ? null : (sqMap[f.sq1?.toLowerCase()]||null);
+        const aId = aPH ? null : (sqMap[f.sq2?.toLowerCase()]||null);
+        await db.from('knockout').insert({
+          categoria_id:catDB.id, round_name:f.nome,
+          home_id:hId, away_id:aId,
+          note_home:hId?null:(f.sq1||null),
+          note_away:aId?null:(f.sq2||null),
+          orario:f.ora||null, campo:f.campo||1,
+          giocata:false, gol_home:0, gol_away:0
         });
-      });
+      }
     }
 
-    // Usa il sistema di importazione
-    if(typeof eseguiImportazioneConTorneo==='function') {
-      await eseguiImportazioneConTorneo(torneo.id,dati,null);
-    } else {
-      throw new Error('Sistema di importazione non disponibile. Ricarica la pagina.');
-    }
-
-    STATE.categorie=await dbGetCategorie(STATE.activeTorneo);
-    STATE.activeCat=STATE.categorie[0]?.id||null;
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    STATE.activeCat = STATE.categorie[0]?.id||null;
     renderCatBar(); renderTorneoBar();
     if(log)log.innerHTML=`<div style="background:var(--verde-bg);border-radius:8px;padding:12px;color:var(--verde);font-weight:700;">✅ Torneo "${CT.torneo.nome}" creato!</div>`;
     toast('✅ Torneo creato!');
@@ -2600,9 +2980,151 @@ async function ctSalvaDB() {
   }
 }
 
+
+// ══════════════════════════════════════════════════════════════
+//  EXPORT EXCEL
+// ══════════════════════════════════════════════════════════════
+function ctExportExcel() {
+  if(typeof XLSX==='undefined'){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=_ctExcel;document.head.appendChild(s);}
+  else _ctExcel();
+}
+function _ctExcel() {
+  const wb=XLSX.utils.book_new();
+  // CATEGORIE
+  const catRows=[['nome','qualificate','formato','ordine']];
+  CT.categorie.forEach((c,i)=>catRows.push([c.nome,2,'gironi',i+1]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(catRows),'CATEGORIE');
+  // GIRONI
+  const girRows=[['categoria','girone','squadra','ordine']];
+  CT.categorie.forEach(c=>{
+    c.gironi.forEach(g=>g.squadre.forEach((sq,i)=>girRows.push([c.nome,g.nome,sq.nome,i+1])));
+    c.gironiFinali.forEach(g=>g.squadre.forEach((sq,i)=>girRows.push([c.nome,g.nome,sq.nome,i+1])));
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(girRows),'GIRONI');
+  // PARTITE_FASE1
+  const p1=[['categoria','girone','squadra_casa','squadra_trasferta','gol_casa','gol_trasferta','campo','orario','giornata']];
+  CT.categorie.forEach(c=>{
+    [...c.calendario,...c.calendarioFinali].sort((a,b)=>a.ordine-b.ordine).forEach(p=>p1.push([c.nome,p.gironeNome,p.sq1,p.sq2,'','',p.campo,p.ora,p.giornata]));
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(p1),'PARTITE_FASE1');
+  // FASE_FINALE
+  const ff=[['categoria','round','squadra_casa','squadra_trasferta','gol_casa','gol_trasferta','campo','orario','giornata']];
+  CT.categorie.forEach(c=>(c.finali||[]).forEach(f=>ff.push([c.nome,f.nome,f.sq1||'',f.sq2||'','','',f.campo||1,f.ora||'',f.giornata||''])));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ff),'FASE_FINALE');
+  XLSX.writeFile(wb,(CT.torneo.nome||'torneo').replace(/\s+/g,'_')+'.xlsx');
+  toast('📊 Excel esportato!');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STAMPA PDF
+// ══════════════════════════════════════════════════════════════
+function ctStampaPDF() {
+  const nome=CT.torneo.nome||'Torneo';
+  const luogo=CT.torneo.luogo||'';
+  const durata=CT.torneo.durata||20;
+
+  const gironiHdr=CT.categorie.map(cat=>`
+    <div style="margin-bottom:10px;">
+      <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-size:13px;padding:5px 12px;font-style:italic;text-transform:uppercase;">${cat.nome}</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>${[...cat.gironi,...cat.gironiFinali].map(g=>`<td style="border:1px solid #b8c8e8;padding:8px 12px;vertical-align:top;font-size:11px;">
+          <div style="font-weight:800;font-size:12px;color:#1a3a6e;margin-bottom:4px;">${g.nome}</div>
+          ${g.squadre.map(s=>`<div style="padding:2px 0;border-bottom:1px solid #eef0f5;font-weight:600;">${s.nome}</div>`).join('')}
+        </td>`).join('')}</tr>
+      </table>
+    </div>`).join('');
+
+  const allP=[];
+  CT.categorie.forEach(cat=>{
+    [...cat.calendario,...cat.calendarioFinali].sort((a,b)=>a.ordine-b.ordine).forEach(p=>allP.push({...p,catNome:cat.nome,tipo:'girone'}));
+    (cat.finali||[]).forEach(f=>allP.push({sq1:f.sq1,sq2:f.sq2,ora:f.ora,campo:f.campo,giornata:f.giornata,gironeNome:f.nome,catNome:cat.nome,tipo:'finale'}));
+  });
+  const perGiorno={};
+  allP.forEach(p=>{const g=p.giornata||'—';if(!perGiorno[g])perGiorno[g]=[];perGiorno[g].push(p);});
+  let cnt=0;
+  const partiteHdr=Object.entries(perGiorno).map(([giorno,partite])=>`
+    <div style="margin-bottom:18px;">
+      <div style="background:#1a3a6e;color:#fff;padding:8px 14px;font-weight:800;font-size:14px;font-style:italic;text-transform:uppercase;">${giorno} — 1X${durata} MIN — ${luogo}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="background:#e8eef8;">
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;">N°</th>
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;">ORA</th>
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;">CAMPO</th>
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;">GIRONE/ROUND</th>
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;">SQUADRA 1</th>
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;">SQUADRA 2</th>
+          <th style="padding:5px 8px;border:1px solid #b8c8e8;text-align:center;">RIS</th>
+        </tr></thead>
+        <tbody>${partite.map((p,i)=>{cnt++;return `<tr style="background:${p.tipo==='finale'?'#fffbeb':i%2===0?'#fff':'#f4f7fd'};">
+          <td style="padding:5px 8px;border:1px solid #d0daf0;text-align:center;color:#999;font-weight:700;">${cnt}</td>
+          <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:700;">${p.ora||''}</td>
+          <td style="padding:5px 8px;border:1px solid #d0daf0;text-align:center;">C${p.campo||1}</td>
+          <td style="padding:5px 8px;border:1px solid #d0daf0;font-size:10px;">${p.gironeNome||''}</td>
+          <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:600;">${p.sq1||'—'}</td>
+          <td style="padding:5px 8px;border:1px solid #d0daf0;font-weight:600;">${p.sq2||'—'}</td>
+          <td style="padding:5px 8px;border:1px solid #d0daf0;"><div style="display:flex;align-items:center;justify-content:center;gap:3px;">
+            <span style="display:inline-block;width:22px;height:16px;border:1.5px solid #aaa;border-radius:3px;"></span>
+            <span style="color:#aaa;font-size:10px;">—</span>
+            <span style="display:inline-block;width:22px;height:16px;border:1.5px solid #aaa;border-radius:3px;"></span>
+          </div></td>
+        </tr>`}).join('')}</tbody>
+      </table>
+    </div>`).join('');
+
+  const win=window.open('','_blank','width=1000,height=800');
+  win.document.write(`<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>${nome}</title>
+    <style>body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:20px;background:#fff;}
+    @media print{.np{display:none!important;}@page{margin:.8cm;size:A4;}}</style></head><body>
+    <div class="np" style="margin-bottom:14px;"><button onclick="window.print()" style="background:#1a3a6e;color:#fff;border:none;padding:10px 22px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;">🖨️ Stampa / Salva PDF</button></div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;"><tr>
+      <td style="background:#1a3a6e;color:#fff;padding:14px 18px;">
+        <div style="font-size:24px;font-weight:900;font-style:italic;color:#FFD700;text-transform:uppercase;">${nome}</div>
+        <div style="font-size:13px;margin-top:4px;">📍 ${luogo} &nbsp;|&nbsp; 📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
+      </td>
+    </tr></table>
+    <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-style:italic;font-size:15px;padding:6px 14px;text-transform:uppercase;margin-bottom:10px;">GIRONI</div>
+    ${gironiHdr}
+    <div style="background:#1a3a6e;color:#FFD700;font-weight:800;font-style:italic;font-size:15px;padding:6px 14px;text-transform:uppercase;margin:14px 0 10px;">PROGRAMMA PARTITE</div>
+    ${partiteHdr}
+    </body></html>`);
+  win.document.close();
+  toast('🖨️ PDF aperto!');
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────
 function _ctTimeToMin(t){if(!t)return 540;const p=String(t).split(':');return parseInt(p[0]||9)*60+parseInt(p[1]||0);}
-function _ctMinToTime(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0');}
+function _ctMinToTime(min){const h=Math.floor(min/60),m=min%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
+
+function ctAddSquadra(ci, gi) {
+  const inp = document.getElementById('sq-in-'+ci+'-'+gi);
+  if (!inp || !inp.value.trim()) return;
+  CT.categorie[ci].gironi[gi].squadre.push({nome:inp.value.trim(), prio:'normale'});
+  inp.value = '';
+  renderAdminCreaTorneo();
+  setTimeout(()=>{ const el=document.getElementById('sq-in-'+ci+'-'+gi); if(el)el.focus(); },120);
+}
+
+function ctBulkAggiungi(ci, gi) {
+  const ta = document.getElementById('bulk-'+ci+'-'+gi);
+  if (!ta) return;
+  const nomi = ta.value.split(/[\n,;]/).map(s=>s.trim()).filter(Boolean);
+  if (!nomi.length) { toast('Nessuna squadra trovata'); return; }
+  nomi.forEach(nome => CT.categorie[ci].gironi[gi].squadre.push({nome, prio:'normale'}));
+  ta.value = '';
+  toast('✅ '+nomi.length+' squadre aggiunte!');
+  renderAdminCreaTorneo();
+}
+
+function ctRimuoviGirone(ci, gi) {
+  CT.categorie[ci].gironi.splice(gi,1);
+  renderAdminCreaTorneo();
+}
+
+function ctRimuoviCat(ci) {
+  if (!confirm('Eliminare questa categoria?')) return;
+  CT.categorie.splice(ci,1);
+  renderAdminCreaTorneo();
+}
 function _ctFmtData(iso){if(!iso)return '';try{return new Date(iso+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}catch(e){return iso;}}
 
 
