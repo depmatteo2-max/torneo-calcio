@@ -979,18 +979,79 @@ async function renderClassifiche() {
     return lista;
   }
 
+  // Helper: raccoglie per pos filtrando per lista di nomi gironi
+  function _raccogliPerPosFiltra(classificheGironi, pos, nomiConsentiti) {
+    const lista = [];
+    for (const [nome, cl] of Object.entries(classificheGironi)) {
+      if (nomiConsentiti && !nomiConsentiti.some(n => nome.toUpperCase() === n.toUpperCase())) continue;
+      if (cl.length > pos && cl[pos]?.g > 0) {
+        lista.push({
+          girone: nome, sq: cl[pos].sq,
+          pts: cl[pos].pts, g: cl[pos].g, v: cl[pos].v,
+          p: cl[pos].p, s: cl[pos].s,
+          gf: cl[pos].gf, gs: cl[pos].gs,
+          dr: cl[pos].gf - cl[pos].gs
+        });
+      }
+    }
+    lista.sort((a,b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.dr !== a.dr) return b.dr - a.dr;
+      return b.gf - a.gf;
+    });
+    return lista;
+  }
+
+  // Identifica che tipo di gironi sono presenti
+  const nomiGironi = Object.keys(classificheGironi);
+  const gironiQualifiche = nomiGironi.filter(n => !/^GIRONE\s+\d+/i.test(n) && !/CHAMPIONS|EUROPA|PLATINUM|SILVER|GOLD|BRONZE/i.test(n));
+  const gironi123 = ['GIRONE 1','GIRONE 2','GIRONE 3'].filter(n => nomiGironi.some(k=>k.toUpperCase()===n));
+  const gironi456 = ['GIRONE 4','GIRONE 5','GIRONE 6'].filter(n => nomiGironi.some(k=>k.toUpperCase()===n));
+  const gironi789 = ['GIRONE 7','GIRONE 8','GIRONE 9','GIRONE 10'].filter(n => nomiGironi.some(k=>k.toUpperCase()===n));
+
+  // ── FASE 1: Classifiche Migliori dai Gironi Qualifiche (A-L) ──
   const seconde = _raccogliPerPos(classificheGironi, 1);
   const terze   = _raccogliPerPos(classificheGironi, 2);
   const quarte  = _raccogliPerPos(classificheGironi, 3);
 
   if (seconde.length >= 2) {
-    html += _renderClassificaSpeciale(seconde, '🥈 Classifica Migliori Seconde', '#d97706', '#fffbeb', seconde.length);
+    html += _renderClassificaSpeciale(seconde, '🥈 Migliori Seconde — Gironi Qualifiche', '#d97706', '#fffbeb', seconde.length);
   }
   if (terze.length >= 2) {
-    html += _renderClassificaSpeciale(terze, '🥉 Classifica Migliori Terze', '#78716c', '#f5f5f4', terze.length);
+    html += _renderClassificaSpeciale(terze, '🥉 Migliori Terze — Gironi Qualifiche', '#78716c', '#f5f5f4', terze.length);
   }
   if (quarte.length >= 2) {
-    html += _renderClassificaSpeciale(quarte, '4️⃣ Classifica Migliori Quarte', '#6366f1', '#eef2ff', quarte.length);
+    html += _renderClassificaSpeciale(quarte, '4️⃣ Migliori Quarte — Gironi Qualifiche', '#6366f1', '#eef2ff', quarte.length);
+  }
+
+  // ── FASE 2: Classifiche Migliori dai Gironi Intermedi 1-2-3 ──
+  if (gironi123.length >= 2) {
+    const sec123 = _raccogliPerPosFiltra(classificheGironi, 1, gironi123);
+    const ter123 = _raccogliPerPosFiltra(classificheGironi, 2, gironi123);
+    if (sec123.length >= 1) {
+      html += `<div style="margin:16px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">
+        🏆 Champions League — Fase dai Gironi 1-2-3
+      </div>`;
+      html += _renderClassificaSpeciale(sec123, '🥈 Migliori Seconde Gironi 1-2-3', '#0891b2', '#ecfeff', sec123.length);
+    }
+    if (ter123.length >= 1) {
+      html += _renderClassificaSpeciale(ter123, '🥉 Migliori Terze Gironi 1-2-3', '#0891b2', '#ecfeff', ter123.length);
+    }
+  }
+
+  // ── FASE 2: Classifiche Migliori dai Gironi Intermedi 4-5-6 ──
+  if (gironi456.length >= 2) {
+    const sec456 = _raccogliPerPosFiltra(classificheGironi, 1, gironi456);
+    const ter456 = _raccogliPerPosFiltra(classificheGironi, 2, gironi456);
+    if (sec456.length >= 1) {
+      html += `<div style="margin:16px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">
+        🌍 Champions League Silver/Bronze — Fase dai Gironi 4-5-6
+      </div>`;
+      html += _renderClassificaSpeciale(sec456, '🥈 Migliori Seconde Gironi 4-5-6', '#7c3aed', '#f5f3ff', sec456.length);
+    }
+    if (ter456.length >= 1) {
+      html += _renderClassificaSpeciale(ter456, '🥉 Migliori Terze Gironi 4-5-6', '#7c3aed', '#f5f3ff', ter456.length);
+    }
   }
 
   el.innerHTML = html || '<div class="empty-state">Nessun girone trovato.</div>';
