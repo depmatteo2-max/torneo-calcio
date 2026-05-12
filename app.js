@@ -574,113 +574,92 @@ async function verificaEGeneraTriangolari(categoriaId) {
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     const classificheGironi = {};
 
-    // PASSO 1: calcola classifiche di ogni girone
-    // Usa partite giocate con home_id e away_id reali e NON placeholder
+    // PASSO 1: calcola classifiche SOLO dei gironi completati con squadre reali
     for (const g of (gironi||[])) {
+      // Controlla se il girone ha ancora placeholder NON risolti
+      const { data: gsSlots } = await db.from('girone_squadre')
+        .select('squadra_id, squadre(nome)').eq('girone_id', g.id);
+      const haPlaceholder = (gsSlots||[]).some(r => _isPlaceholder(r.squadre?.nome));
+      if (haPlaceholder) continue; // Girone ha ancora squadre da definire — salta
+
       const { data: partite } = await db.from('partite')
-        .select('id,home_id,away_id,gol_home,gol_away,giocata')
-        .eq('girone_id', g.id);
+        .select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id', g.id);
       if (!partite || !partite.length) continue;
+
       const giocate = partite.filter(p => p.giocata && p.home_id && p.away_id);
       if (!giocate.length) continue;
+
+      // Verifica che TUTTE le partite reali siano giocate
+      const totalePartite = partite.length;
+      const partiteGiocate = giocate.length;
+      if (partiteGiocate < totalePartite) continue; // Girone non ancora completato
+
       const sqIds = new Set();
       giocate.forEach(p => { sqIds.add(p.home_id); sqIds.add(p.away_id); });
       const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', [...sqIds]);
       const sqMap = {}; (sqList||[]).forEach(s => sqMap[s.id] = s);
-      const partitePure = giocate.filter(p =>
-        !_isPlaceholder(sqMap[p.home_id]?.nome) && !_isPlaceholder(sqMap[p.away_id]?.nome)
-      );
-      if (!partitePure.length) continue;
 
-      // FIX CRITICO: non calcolare classifica se il girone ha ancora squadre placeholder
-      // che non sono state risolte (cioè il girone dipende da risultati non ancora disponibili)
-      const { data: gsSlots } = await db.from('girone_squadre')
-        .select('squadra_id, squadre(nome)').eq('girone_id', g.id);
-      const haPlaceholderNonRisolti = (gsSlots||[]).some(r => _isPlaceholder(r.squadre?.nome));
-      if (haPlaceholderNonRisolti) continue; // Salta — il girone ha ancora squadre da definire
+      const squadreReali = [...sqIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
+      if (!squadreReali.length) continue;
 
-      const sqRealiIds = new Set();
-      partitePure.forEach(p => { sqRealiIds.add(p.home_id); sqRealiIds.add(p.away_id); });
-      const squadreReali = [...sqRealiIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
-      if (squadreReali.length > 0) {
-        const cl = calcGironeClassifica({ squadre: squadreReali, partite: partitePure });
-        classificheGironi[g.nome] = cl;
-        classificheGironi[g.nome.toUpperCase()] = cl;
-      }
+      const cl = calcGironeClassifica({ squadre: squadreReali, partite: giocate });
+      classificheGironi[g.nome] = cl;
+      classificheGironi[g.nome.toUpperCase()] = cl;
     }
 
-    const { data: allKo } = await db.from('knockout').select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away').eq('categoria_id', categoriaId);
-    const ROUND_NON_GIRONE = /SEMIFINALE|FINALE|QUARTO|CONSOLAZ|PLAYOFF|SPAREGGIO/i;
-    const koPerRound = {};
-    const risultatiKnockout = {};
+    // PASSO 2: leggi risultati knockout per Vincente/Perdente SEMIFINALE
+    const { data: allKo } = await db.from('knockout')
+      .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
+      .eq('categoria_id', categoriaId);
 
+    const risultatiKnockout = {};
     for (const ko of (allKo||[])) {
-      const rn = (ko.round_name||'').trim();
+      const rn = (ko.round_name||'').toUpperCase().trim();
       const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
       if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2, '0')] = ko;
       const mQuarto = rn.match(/QUARTO\s*(\d+)/i);
       if (mQuarto) risultatiKnockout['QUARTO ' + mQuarto[1].padStart(2, '0')] = ko;
-      if (!ROUND_NON_GIRONE.test(rn) && ko.home_id && ko.away_id) {
-        const key = rn.toUpperCase();
-        if (!koPerRound[key]) koPerRound[key] = [];
-        koPerRound[key].push(ko);
-      }
-    }
-
-    for (const [roundKey, partite] of Object.entries(koPerRound)) {
-      const giocate = partite.filter(p => p.giocata);
-      if (!giocate.length) continue;
-      const sqIds = new Set();
-      partite.forEach(p => { if(p.home_id) sqIds.add(p.home_id); if(p.away_id) sqIds.add(p.away_id); });
-      if (!sqIds.size) continue;
-      const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', [...sqIds]);
-      if (!sqList || !sqList.length) continue;
-      classificheGironi[roundKey] = calcGironeClassifica({ squadre: sqList, partite: giocate.map(p => ({ ...p, giocata: true })) });
     }
 
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
 
-    const miglioriSecondi = _calcolaMiglioriSecondi(classificheGironi);
     let risolti = 0;
 
-    for (const match of (allKo||[])) {
-      const newH = _resolvePlaceholder(match.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
-      const newA = _resolvePlaceholder(match.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
-      const upd = {};
-      if (newH && newH !== match.home_id) upd.home_id = newH;
-      if (newA && newA !== match.away_id) upd.away_id = newA;
-      if (Object.keys(upd).length) { await db.from('knockout').update(upd).eq('id', match.id); risolti++; }
-    }
-
+    // PASSO 3: risolvi placeholder nelle partite di girone
     for (const g of (gironi||[])) {
-      const { data: tuttePartite } = await db.from('partite').select('id,note_home,note_away,home_id,away_id').eq('girone_id', g.id);
+      const { data: tuttePartite } = await db.from('partite')
+        .select('id,note_home,note_away,home_id,away_id').eq('girone_id', g.id);
       for (const p of (tuttePartite||[])) {
         if (!p.note_home && !p.note_away) continue;
-        const newH = _resolvePlaceholder(p.note_home, classificheGironi, miglioriSecondi, risultatiKnockout);
-        const newA = _resolvePlaceholder(p.note_away, classificheGironi, miglioriSecondi, risultatiKnockout);
+        const newH = _resolvePlaceholder(p.note_home, classificheGironi, [], risultatiKnockout);
+        const newA = _resolvePlaceholder(p.note_away, classificheGironi, [], risultatiKnockout);
         const upd = {};
         if (newH && newH !== p.home_id) upd.home_id = newH;
         if (newA && newA !== p.away_id) upd.away_id = newA;
         if (Object.keys(upd).length) { await db.from('partite').update(upd).eq('id', p.id); risolti++; }
       }
 
-      // *** FIX CRITICO: sostituisce placeholder in girone_squadre con squadre reali ***
-      // Carica tutto il girone_squadre con le note delle partite
-      const { data: gsEsist } = await db.from('girone_squadre').select('id,squadra_id').eq('girone_id', g.id);
+      // Sostituisci placeholder in girone_squadre
+      const { data: gsEsist } = await db.from('girone_squadre').select('id,squadra_id,squadre(nome)').eq('girone_id', g.id);
       for (const gs of (gsEsist||[])) {
-        // Verifica se questa squadra è un placeholder
-        const { data: sqInfo } = await db.from('squadre').select('nome').eq('id', gs.squadra_id).single();
-        if (!sqInfo || !_isPlaceholder(sqInfo.nome)) continue;
-        // È un placeholder — trova la squadra reale corrispondente
-        const sqReale = _resolvePlaceholder(sqInfo.nome, classificheGironi, miglioriSecondi, risultatiKnockout);
+        if (!_isPlaceholder(gs.squadre?.nome)) continue;
+        const sqReale = _resolvePlaceholder(gs.squadre.nome, classificheGironi, [], risultatiKnockout);
         if (!sqReale || sqReale === gs.squadra_id) continue;
-        // Verifica che la squadra reale non sia già nel girone
         const giaPresente = (gsEsist||[]).some(r => r.squadra_id === sqReale);
         if (giaPresente) continue;
-        // Sostituisce il placeholder con la squadra reale
         await db.from('girone_squadre').update({ squadra_id: sqReale }).eq('id', gs.id);
         risolti++;
       }
+    }
+
+    // PASSO 4: risolvi placeholder nel knockout
+    for (const match of (allKo||[])) {
+      const newH = _resolvePlaceholder(match.note_home, classificheGironi, [], risultatiKnockout);
+      const newA = _resolvePlaceholder(match.note_away, classificheGironi, [], risultatiKnockout);
+      const upd = {};
+      if (newH && newH !== match.home_id) upd.home_id = newH;
+      if (newA && newA !== match.away_id) upd.away_id = newA;
+      if (Object.keys(upd).length) { await db.from('knockout').update(upd).eq('id', match.id); risolti++; }
     }
 
     if (risolti > 0) {
