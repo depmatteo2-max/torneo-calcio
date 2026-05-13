@@ -906,7 +906,8 @@ async function renderClassifiche() {
     if (g.partite.length <= 1) continue;
     const cl = calcGironeClassifica(g);
     classificheGironi[g.nome] = cl;
-    const played = g.partite.filter(p=>p.giocata).length;
+   
+    classificheGironi[g.nome.toUpperCase()] = cl; const played = g.partite.filter(p=>p.giocata).length;
     html += `<div class="card" style="margin-bottom:8px;">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
       <table class="standings-table">
@@ -968,24 +969,34 @@ async function renderClassifiche() {
     </div>`;
   }
 
-  // Raccoglie stats dalla posizione pos di ogni girone filtrato per nomi (o tutti i gironi A-L)
+  // Raccoglie stats dalla posizione pos di ogni girone
+  // filtroNomi = array di nomi esatti (es ['GIRONE 1','GIRONE 2','GIRONE 3'])
+  // filtroNomi = null → prende tutti i gironi qualifiche (nome singola lettera A-L)
   function _buildListaSpeciale(pos, filtroNomi) {
+    const visti = new Set(); // evita duplicati (nome+uppercase)
     const lista = [];
     for (const [nome, cl] of Object.entries(classificheGironi)) {
+      const nomeU = nome.toUpperCase();
+      if (visti.has(nomeU)) continue;
       if (filtroNomi) {
-        if (!filtroNomi.some(n => nome.toUpperCase() === n.toUpperCase())) continue;
+        if (!filtroNomi.some(n => nomeU === n.toUpperCase())) continue;
       } else {
-        // Solo gironi qualifiche A-L (no numeri, no CLASSIFICA)
-        if (!/^GIRONE\s+[A-L]$/i.test(nome)) continue;
+        // Solo gironi qualifiche: "GIRONE A" ... "GIRONE L" (una lettera sola)
+        if (!/^GIRONE\s+[A-Z]$/.test(nomeU)) continue;
+        // Escludi GIRONE 1, GIRONE 2 ecc (numeri)
+        const lettera = nomeU.replace('GIRONE ','').trim();
+        if (/^\d+$/.test(lettera)) continue;
       }
+      visti.add(nomeU);
       if (cl.length > pos && cl[pos]?.g > 0) {
+        const row = cl[pos];
         lista.push({
-          girone: nome.replace(/^GIRONE\s+/i,''),
-          sq: cl[pos].sq,
-          pts: cl[pos].pts, g: cl[pos].g, v: cl[pos].v,
-          p: cl[pos].p, s: cl[pos].s,
-          gf: cl[pos].gf, gs: cl[pos].gs,
-          dr: cl[pos].gf - cl[pos].gs
+          girone: nome.replace(/^GIRONE\s+/i,'').replace(/^girone\s+/i,''),
+          sq: row.sq,
+          pts: row.pts, g: row.g, v: row.v,
+          p: row.p, s: row.s,
+          gf: row.gf, gs: row.gs,
+          dr: row.gf - row.gs
         });
       }
     }
