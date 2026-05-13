@@ -869,25 +869,14 @@ async function renderClassifiche() {
   const classificheGironi = {};
   let html = '';
   for (const g of gironi) {
-    if (/CLASSIFICA/i.test(g.nome)) continue; // gironi virtuali — skip
-    const partiteGiocate = g.partite.filter(p => p.giocata && p.home_id && p.away_id);
-    if (!partiteGiocate.length) continue;
-    // Costruisci squadre direttamente dalle partite (più affidabile di g.squadre)
-    const sqIds = new Set();
-    partiteGiocate.forEach(p => { sqIds.add(p.home_id); sqIds.add(p.away_id); });
-    const squadreMap = {};
-    g.squadre && g.squadre.forEach(s => { if (s && s.id) squadreMap[s.id] = s; });
-    // Usa anche home/away objects se disponibili
-    partiteGiocate.forEach(p => {
-      if (p.home && !squadreMap[p.home_id]) squadreMap[p.home_id] = p.home;
-      if (p.away && !squadreMap[p.away_id]) squadreMap[p.away_id] = p.away;
-    });
-    const squadreReali = [...sqIds].map(id => squadreMap[id]).filter(s => s && s.id && s.nome && !_isPlaceholder(s.nome));
-    if (squadreReali.length < 2) continue;
-    const cl = calcGironeClassifica({ squadre: squadreReali, partite: partiteGiocate });
-    classificheGironi[g.nome.toUpperCase().trim()] = cl;
+    if (/CLASSIFICA/i.test(g.nome)) continue;
+    const squadreValide = (g.squadre||[]).filter(s => s && s.id && s.nome && !_isPlaceholder(s.nome));
+    if (squadreValide.length >= 2) {
+      const cl = calcGironeClassifica({ squadre: squadreValide, partite: g.partite });
+      classificheGironi[g.nome.toUpperCase().trim()] = cl;
+    }
     if (g.partite.length <= 1) continue;
-    const played = partiteGiocate.length;
+    const played = g.partite.filter(p=>p.giocata).length;
     html += `<div class="card" style="margin-bottom:8px;">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
       <table class="standings-table">
