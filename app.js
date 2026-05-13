@@ -843,6 +843,8 @@ function _riepilogoBanner(section) {
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  // VERSIONE v98-DEBUG — rimuovere dopo conferma deploy
+  console.warn('=== renderClassifiche v98 LOADED ===');
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
