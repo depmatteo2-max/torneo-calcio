@@ -865,13 +865,21 @@ async function renderClassifiche() {
     return;
   }
 
-  // DEBUG TEMPORANEO
-  console.log('DEBUG gironi:', gironi.map(g => ({ nome: g.nome, hex: [...(g.nome||'')].map(c=>c.charCodeAt(0).toString(16)).join('-'), npt: g.partite.length })));
-
   // ── SEPARA gironi normali da gironi CLASSIFICA speciali ──────────────────
-  const _isSpeciale = g =>
-    g.partite.length === 0 ||
-    /classif|migliori/i.test(g.nome);
+  // Un girone è "speciale" (virtuale, senza partite proprie) se:
+  // 1. Ha 0 partite, OPPURE
+  // 2. Il nome (normalizzato) contiene "classif" o "migliori", OPPURE
+  // 3. Tutte le sue partite hanno gol_home=0, gol_away=0 e giocata=false
+  //    e le sue squadre NON hanno placeholder (cioè è un girone virtuale già risolto)
+  const _nomeNorm = nome => (nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const _isSpeciale = g => {
+    const n = _nomeNorm(g.nome);
+    if (n.includes('classif') || n.includes('migliori')) return true;
+    if (g.partite.length === 0) return true;
+    // Girone con partite MA tutte non giocate e squadre reali = girone fase successiva non ancora iniziata
+    // NON è speciale, è un girone normale futuro → non skippiamo
+    return false;
+  };
 
   // ── COSTRUISCE classificheGironi dai gironi con partite ──────────────────
   const classificheGironi = {};
@@ -1000,9 +1008,11 @@ async function renderClassifiche() {
     const fromBuild = _buildSpeciale(pos, filtroNomi);
     if (fromBuild.length) return fromBuild;
     // Fallback: leggi il girone CLASSIFICA virtuale direttamente
+    // Usa confronto normalizzato (rimuove accenti e maiuscole)
+    const normTarget = _nomeNorm(nomeGironeVirtuale);
     const gVirt = gironi.find(g => {
-      const n = (g.nome||'').toUpperCase().trim();
-      return n === nomeGironeVirtuale || n.includes(nomeGironeVirtuale);
+      const n = _nomeNorm(g.nome);
+      return n === normTarget || n.includes(normTarget) || normTarget.includes(n);
     });
     if (!gVirt) return [];
     return _buildDaGironeVirtuale(gVirt);
