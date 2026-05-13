@@ -574,94 +574,74 @@ async function verificaEGeneraTriangolari(categoriaId) {
     const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     const classificheGironi = {};
 
-    // PASSO 1: calcola classifiche SOLO dei gironi completati con squadre reali
     for (const g of (gironi||[])) {
-      // Controlla se il girone ha ancora placeholder NON risolti
       const { data: gsSlots } = await db.from('girone_squadre')
         .select('squadra_id, squadre(nome)').eq('girone_id', g.id);
-      const haPlaceholder = (gsSlots||[]).some(r => _isPlaceholder(r.squadre?.nome));
-      if (haPlaceholder) continue; // Girone ha ancora squadre da definire — salta
-
+      if ((gsSlots||[]).some(r => _isPlaceholder(r.squadre?.nome))) continue;
       const { data: partite } = await db.from('partite')
         .select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id', g.id);
-      if (!partite || !partite.length) continue;
-
+      if (!partite?.length) continue;
       const giocate = partite.filter(p => p.giocata && p.home_id && p.away_id);
-      if (!giocate.length) continue;
-
-      // Verifica che TUTTE le partite reali siano giocate
-      const totalePartite = partite.length;
-      const partiteGiocate = giocate.length;
-      if (partiteGiocate < totalePartite) continue; // Girone non ancora completato
-
+      if (!giocate.length || giocate.length < partite.length) continue;
       const sqIds = new Set();
       giocate.forEach(p => { sqIds.add(p.home_id); sqIds.add(p.away_id); });
       const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', [...sqIds]);
       const sqMap = {}; (sqList||[]).forEach(s => sqMap[s.id] = s);
-
       const squadreReali = [...sqIds].map(id => sqMap[id]).filter(s => s && !_isPlaceholder(s.nome));
       if (!squadreReali.length) continue;
-
       const cl = calcGironeClassifica({ squadre: squadreReali, partite: giocate });
       classificheGironi[g.nome] = cl;
       classificheGironi[g.nome.toUpperCase()] = cl;
     }
 
-    // PASSO 2: leggi risultati knockout per Vincente/Perdente SEMIFINALE
     const { data: allKo } = await db.from('knockout')
       .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
       .eq('categoria_id', categoriaId);
-
     const risultatiKnockout = {};
     for (const ko of (allKo||[])) {
       const rn = (ko.round_name||'').toUpperCase().trim();
       const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
-      if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2, '0')] = ko;
-      const mQuarto = rn.match(/QUARTO\s*(\d+)/i);
-      if (mQuarto) risultatiKnockout['QUARTO ' + mQuarto[1].padStart(2, '0')] = ko;
+      if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2,'0')] = ko;
+      const mQ = rn.match(/QUARTO\s*(\d+)/i);
+      if (mQ) risultatiKnockout['QUARTO ' + mQ[1].padStart(2,'0')] = ko;
     }
 
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
 
+    // Calcola tutte le classifiche speciali
+    const specialMap = _buildSpecialMap(classificheGironi);
     let risolti = 0;
 
-    // PASSO 3: risolvi placeholder nelle partite di girone
     for (const g of (gironi||[])) {
       const { data: tuttePartite } = await db.from('partite')
         .select('id,note_home,note_away,home_id,away_id').eq('girone_id', g.id);
       for (const p of (tuttePartite||[])) {
         if (!p.note_home && !p.note_away) continue;
-        const newH = _resolvePlaceholder(p.note_home, classificheGironi, [], risultatiKnockout);
-        const newA = _resolvePlaceholder(p.note_away, classificheGironi, [], risultatiKnockout);
+        const newH = _resolvePlaceholder(p.note_home, classificheGironi, risultatiKnockout, specialMap);
+        const newA = _resolvePlaceholder(p.note_away, classificheGironi, risultatiKnockout, specialMap);
         const upd = {};
         if (newH && newH !== p.home_id) upd.home_id = newH;
         if (newA && newA !== p.away_id) upd.away_id = newA;
         if (Object.keys(upd).length) { await db.from('partite').update(upd).eq('id', p.id); risolti++; }
       }
-
-      // Sostituisci placeholder in girone_squadre
       const { data: gsEsist } = await db.from('girone_squadre').select('id,squadra_id,squadre(nome)').eq('girone_id', g.id);
       for (const gs of (gsEsist||[])) {
         if (!_isPlaceholder(gs.squadre?.nome)) continue;
-        const sqReale = _resolvePlaceholder(gs.squadre.nome, classificheGironi, [], risultatiKnockout);
+        const sqReale = _resolvePlaceholder(gs.squadre.nome, classificheGironi, risultatiKnockout, specialMap);
         if (!sqReale || sqReale === gs.squadra_id) continue;
-        const giaPresente = (gsEsist||[]).some(r => r.squadra_id === sqReale);
-        if (giaPresente) continue;
+        if ((gsEsist||[]).some(r => r.squadra_id === sqReale)) continue;
         await db.from('girone_squadre').update({ squadra_id: sqReale }).eq('id', gs.id);
         risolti++;
       }
     }
-
-    // PASSO 4: risolvi placeholder nel knockout
     for (const match of (allKo||[])) {
-      const newH = _resolvePlaceholder(match.note_home, classificheGironi, [], risultatiKnockout);
-      const newA = _resolvePlaceholder(match.note_away, classificheGironi, [], risultatiKnockout);
+      const newH = _resolvePlaceholder(match.note_home, classificheGironi, risultatiKnockout, specialMap);
+      const newA = _resolvePlaceholder(match.note_away, classificheGironi, risultatiKnockout, specialMap);
       const upd = {};
       if (newH && newH !== match.home_id) upd.home_id = newH;
       if (newA && newA !== match.away_id) upd.away_id = newA;
       if (Object.keys(upd).length) { await db.from('knockout').update(upd).eq('id', match.id); risolti++; }
     }
-
     if (risolti > 0) {
       _mostraNotificaTriangolari();
       if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
@@ -671,18 +651,52 @@ async function verificaEGeneraTriangolari(categoriaId) {
   } catch(e) { console.error('verificaEGeneraTriangolari:', e); }
 }
 
+
 function _calcolaMiglioriSecondi(classificheGironi) {
-  const secondi = [];
+  return _calcolaClassificaPos(classificheGironi, 1, null);
+}
+
+// Calcola classifica delle N-esime classificate filtrando per gironi
+// nomiGironi=null → tutti; altrimenti array di nomi es. ['GIRONE 1','GIRONE 2','GIRONE 3']
+function _calcolaClassificaPos(classificheGironi, pos, nomiGironi) {
+  const lista = [];
   for (const [nome, cl] of Object.entries(classificheGironi)) {
-    if (cl.length >= 2) secondi.push({ girone: nome, sq: cl[1].sq, stat: cl[1] });
+    if (nomiGironi && !nomiGironi.some(n => nome.toUpperCase() === n.toUpperCase())) continue;
+    if (cl.length > pos && cl[pos]?.g > 0) {
+      lista.push({ girone: nome, sq: cl[pos].sq, stat: cl[pos] });
+    }
   }
-  secondi.sort((a,b) => {
+  lista.sort((a,b) => {
     if (b.stat.pts !== a.stat.pts) return b.stat.pts - a.stat.pts;
     const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
     if (drB !== drA) return drB - drA;
     return b.stat.gf - a.stat.gf;
   });
-  return secondi;
+  return lista;
+}
+
+// Costruisce la mappa completa di tutte le classifiche speciali
+// Gestisce: tutte le 10 qualifiche, gironi 1-2-3, gironi 4-5-6
+function _buildSpecialMap(classificheGironi) {
+  const GIRONI_Q = ['GIRONE A','GIRONE B','GIRONE C','GIRONE D','GIRONE E',
+                    'GIRONE F','GIRONE G','GIRONE H','GIRONE I','GIRONE L'];
+  const GIRONI_123 = ['GIRONE 1','GIRONE 2','GIRONE 3'];
+  const GIRONI_456 = ['GIRONE 4','GIRONE 5','GIRONE 6'];
+
+  // Classifiche dalle qualifiche (A-L)
+  const seconde  = _calcolaClassificaPos(classificheGironi, 1, GIRONI_Q);
+  const terze    = _calcolaClassificaPos(classificheGironi, 2, GIRONI_Q);
+  const quarte   = _calcolaClassificaPos(classificheGironi, 3, GIRONI_Q);
+
+  // Classifiche dai gironi intermedi 1-2-3
+  const seconde123 = _calcolaClassificaPos(classificheGironi, 1, GIRONI_123);
+  const terze123   = _calcolaClassificaPos(classificheGironi, 2, GIRONI_123);
+
+  // Classifiche dai gironi intermedi 4-5-6
+  const seconde456 = _calcolaClassificaPos(classificheGironi, 1, GIRONI_456);
+  const terze456   = _calcolaClassificaPos(classificheGironi, 2, GIRONI_456);
+
+  return { seconde, terze, quarte, seconde123, terze123, seconde456, terze456 };
 }
 
 function _isPlaceholder(nome) {
@@ -695,131 +709,107 @@ function _isPlaceholder(nome) {
   return false;
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[], risultatiKnockout={}) {
+function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={}, specialMap={}) {
   if (!placeholder) return null;
   const s = placeholder.trim();
+  const sU = s.toUpperCase();
 
+  // ── Vincente/Perdente SEMIFINALE/QUARTO/FINALE ───────────
   const mSemVP = s.match(/(Vincente|Perdente)\s+SEMIFINALE\s*(\d+)/i);
   if (mSemVP) {
     const tipo = mSemVP[1].toLowerCase();
-    const sem = risultatiKnockout['SEMIFINALE ' + mSemVP[2].padStart(2, '0')];
-    if (!sem || !sem.giocata) return null;
-    return tipo === 'vincente' ? (sem.gol_home >= sem.gol_away ? sem.home_id : sem.away_id) : (sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id);
+    const sem = risultatiKnockout['SEMIFINALE ' + mSemVP[2].padStart(2,'0')];
+    if (!sem?.giocata) return null;
+    return tipo==='vincente'?(sem.gol_home>=sem.gol_away?sem.home_id:sem.away_id):(sem.gol_home<=sem.gol_away?sem.home_id:sem.away_id);
   }
-
   const mQVP = s.match(/(Vincente|Perdente)\s+QUARTO\s*(\d+)/i);
   if (mQVP) {
     const tipo = mQVP[1].toLowerCase();
-    const q = risultatiKnockout['QUARTO ' + mQVP[2].padStart(2, '0')];
-    if (!q || !q.giocata) return null;
-    return tipo === 'vincente' ? (q.gol_home >= q.gol_away ? q.home_id : q.away_id) : (q.gol_home <= q.gol_away ? q.home_id : q.away_id);
+    const q = risultatiKnockout['QUARTO ' + mQVP[2].padStart(2,'0')];
+    if (!q?.giocata) return null;
+    return tipo==='vincente'?(q.gol_home>=q.gol_away?q.home_id:q.away_id):(q.gol_home<=q.gol_away?q.home_id:q.away_id);
   }
 
-  // Vincente/Perdente Finale N
-  const mFinVP = s.match(/(Vincente|Perdente)\s+(?:Finale|FINALE)\s*(\d+)/i);
-  if (mFinVP) {
-    const tipo = mFinVP[1].toLowerCase();
-    const key = 'FINALE ' + mFinVP[2].padStart(2, '0');
-    const fin = risultatiKnockout[key] || Object.values(risultatiKnockout).find(k => (k.round_name||'').toUpperCase().includes('FINALE ' + mFinVP[2]));
-    if (!fin || !fin.giocata) return null;
-    return tipo === 'vincente' ? (fin.gol_home >= fin.gol_away ? fin.home_id : fin.away_id) : (fin.gol_home <= fin.gol_away ? fin.home_id : fin.away_id);
+  // ── Classifiche speciali 123 e 456 ─────────────────────────
+  // "Miglior seconda 123", "2° Miglior seconda 123" ecc.
+  const m123s = s.match(/^(?:(\d+)[°º]\s+)?Miglior\s+seconda\s+123$/i);
+  if (m123s) {
+    const idx = m123s[1] ? parseInt(m123s[1])-1 : 0;
+    return (specialMap.seconde123||[])[idx]?.sq?.id || null;
+  }
+  const m123t = s.match(/^(?:(\d+)[°º]\s+)?Miglior\s+terza\s+123$/i);
+  if (m123t) {
+    const idx = m123t[1] ? parseInt(m123t[1])-1 : 0;
+    return (specialMap.terze123||[])[idx]?.sq?.id || null;
+  }
+  const m456s = s.match(/^(?:(\d+)[°º]\s+)?Miglior\s+seconda\s+456$/i);
+  if (m456s) {
+    const idx = m456s[1] ? parseInt(m456s[1])-1 : 0;
+    return (specialMap.seconde456||[])[idx]?.sq?.id || null;
+  }
+  const m456t = s.match(/^(?:(\d+)[°º]\s+)?Miglior\s+terza\s+456$/i);
+  if (m456t) {
+    const idx = m456t[1] ? parseInt(m456t[1])-1 : 0;
+    return (specialMap.terze456||[])[idx]?.sq?.id || null;
   }
 
-  if (/miglior\s*2[°º]?/i.test(s) || /miglior\s*second/i.test(s)) return miglioriSecondi[0]?.sq?.id || null;
-  const mMig = s.match(/^(\d+)[°º]?\s*Miglior/i);
-  if (mMig) return miglioriSecondi[parseInt(mMig[1]) - 1]?.sq?.id || null;
+  // ── Migliori seconde/terze/quarte dai gironi qualifiche ───
+  // Formato: "Miglior seconda", "2° Miglior seconda", "10° Miglior terza", "Miglior quarta" ecc.
+  const NUMERI = {'miglior':0,'prima':0,'seconda':1,'terza':2,'quarta':3,'quinta':4,
+    'sesta':5,'settima':6,'ottava':7,'nona':8,'decima':9};
 
-  const mMigliorN = s.match(/^(miglior|peggio[a-z]*)?\s*(\d+)[°º]/i);
-  if (mMigliorN) {
-    const tipo = (mMigliorN[1]||'').toLowerCase();
-    const pos = parseInt(mMigliorN[2]);
-    const candidati = [];
-    for (const [nome, cl] of Object.entries(classificheGironi)) {
-      if (cl.length >= pos) candidati.push({ nome, sq: cl[pos-1].sq, stat: cl[pos-1] });
-    }
-    if (!candidati.length) return null;
-    candidati.sort((a, b) => {
-      const ptA = a.stat.pts, ptB = b.stat.pts;
-      if (ptB !== ptA) return tipo.startsWith('peggio') ? ptA - ptB : ptB - ptA;
-      const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
-      if (drB !== drA) return tipo.startsWith('peggio') ? drA - drB : drB - drA;
-      return tipo.startsWith('peggio') ? a.stat.gf - b.stat.gf : b.stat.gf - a.stat.gf;
-    });
-    return candidati[0]?.sq?.id || null;
+  const mMs = s.match(/^(?:(\w+)[°º]?\s+)?Miglior\s+second/i);
+  if (mMs) {
+    const raw = mMs[1]||''; const idx = raw?((NUMERI[raw.toLowerCase()]??parseInt(raw)-1)||0):0;
+    return (specialMap.seconde||[])[idx]?.sq?.id || null;
+  }
+  const mMt = s.match(/^(?:(\w+)[°º]?\s+)?Miglior\s+terz/i);
+  if (mMt) {
+    const raw = mMt[1]||''; const idx = raw?((NUMERI[raw.toLowerCase()]??parseInt(raw)-1)||0):0;
+    return (specialMap.terze||[])[idx]?.sq?.id || null;
+  }
+  const mMq = s.match(/^(?:(\w+)[°º]?\s+)?Miglior\s+quart/i);
+  if (mMq) {
+    const raw = mMq[1]||''; const idx = raw?((NUMERI[raw.toLowerCase()]??parseInt(raw)-1)||0):0;
+    return (specialMap.quarte||[])[idx]?.sq?.id || null;
   }
 
-  // Formato "3°A" o "4°B" senza spazio
-  const mShort = s.match(/^(\d+)[°º]([A-Za-z])$/);
-  if (mShort) {
-    const pos = parseInt(mShort[1]);
-    const lettera = mShort[2].toUpperCase();
-    const normK = (k) => k.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
-    const k = Object.keys(classificheGironi).find(k => {
-      const kn = normK(k);
-      return kn === lettera || kn.endsWith(' ' + lettera);
-    });
-    if (k) { const cl = classificheGironi[k]; if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null; }
-    return null; // Girone non ancora risolto
-  }
-
-  // Risoluzione generica: "N° <nome girone>" o "N° Girone X" o "N° X"
-  // Estrae il numero di posizione e cerca il girone nel dizionario
+  // ── Risoluzione generica N° Girone X ─────────────────────
   const mNum = s.match(/^(\d+)\s*[°º*o]?\s*(.+)$/i);
   if (mNum) {
     const pos = parseInt(mNum[1]);
     const resto = mNum[2].trim();
 
-    // Cerca prima match esatto con "Girone X" o "Gruppo X"
     const mGir = resto.match(/^(?:del\s*)?(Girone|Gruppo)\s+(.+)/i);
     if (mGir) {
-      const nomeGirone = mGir[1] + ' ' + mGir[2].trim();
-      const nomeAlt = (mGir[1] === 'Girone' ? 'Gruppo' : 'Girone') + ' ' + mGir[2].trim();
       const parteFinale = mGir[2].trim();
-      // Cerca in ordine: match esatto, case insensitive, endsWith, contains
+      const nomeGirone = mGir[1]+' '+parteFinale;
+      const nomeAlt = (mGir[1]==='Girone'?'Gruppo':'Girone')+' '+parteFinale;
       for (const cerca of [nomeGirone, nomeAlt]) {
         const k = Object.keys(classificheGironi).find(k =>
-          k.toLowerCase() === cerca.toLowerCase() ||
-          k.toLowerCase().endsWith(' ' + parteFinale.toLowerCase())
-        );
-        if (k) {
-          const cl = classificheGironi[k];
-          if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
-        }
+          k.toLowerCase()===cerca.toLowerCase() ||
+          k.toLowerCase().endsWith(' '+parteFinale.toLowerCase()));
+        if (k) { const cl=classificheGironi[k]; if(cl?.length>=pos) return cl[pos-1]?.sq?.id||null; }
       }
-      // Cerca solo la parte finale
       const k2 = Object.keys(classificheGironi).find(k =>
-        k.toLowerCase() === parteFinale.toLowerCase() ||
-        k.toUpperCase().endsWith(' ' + parteFinale.toUpperCase())
-      );
-      if (k2) {
-        const cl = classificheGironi[k2];
-        if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
-      }
+        k.toLowerCase()===parteFinale.toLowerCase() ||
+        k.toUpperCase().endsWith(' '+parteFinale.toUpperCase()));
+      if (k2) { const cl=classificheGironi[k2]; if(cl?.length>=pos) return cl[pos-1]?.sq?.id||null; }
       return null;
     }
 
-    // Match diretto con il nome del girone (es. "1° Girone A", "1° A", "1° ARANCIO", "1° Venerdi")
-    const keyword = resto.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    // Cerca il girone che contiene questa parola chiave (case insensitive, senza accenti)
-    const normKey = (s) => s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const normKey = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const keyword = normKey(resto);
     const k = Object.keys(classificheGironi).find(k => {
       const kn = normKey(k);
-      return kn === keyword ||
-        kn === 'GIRONE ' + keyword ||
-        kn === 'GRUPPO ' + keyword ||
-        kn.endsWith(' ' + keyword) ||
-        keyword === kn ||
-        keyword.endsWith(kn) ||
-        kn.includes(keyword);
+      return kn===keyword || kn==='GIRONE '+keyword || kn==='GRUPPO '+keyword ||
+        kn.endsWith(' '+keyword) || keyword.endsWith(kn) || kn.includes(keyword);
     });
-    if (k) {
-      const cl = classificheGironi[k];
-      if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
-    }
+    if (k) { const cl=classificheGironi[k]; if(cl?.length>=pos) return cl[pos-1]?.sq?.id||null; }
   }
-
   return null;
 }
+
 
 async function forzaRisoluzioneAccoppiamenti() {
   if (!STATE.activeCat) return;
@@ -979,79 +969,18 @@ async function renderClassifiche() {
     return lista;
   }
 
-  // Helper: raccoglie per pos filtrando per lista di nomi gironi
-  function _raccogliPerPosFiltra(classificheGironi, pos, nomiConsentiti) {
-    const lista = [];
-    for (const [nome, cl] of Object.entries(classificheGironi)) {
-      if (nomiConsentiti && !nomiConsentiti.some(n => nome.toUpperCase() === n.toUpperCase())) continue;
-      if (cl.length > pos && cl[pos]?.g > 0) {
-        lista.push({
-          girone: nome, sq: cl[pos].sq,
-          pts: cl[pos].pts, g: cl[pos].g, v: cl[pos].v,
-          p: cl[pos].p, s: cl[pos].s,
-          gf: cl[pos].gf, gs: cl[pos].gs,
-          dr: cl[pos].gf - cl[pos].gs
-        });
-      }
-    }
-    lista.sort((a,b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.dr !== a.dr) return b.dr - a.dr;
-      return b.gf - a.gf;
-    });
-    return lista;
-  }
-
-  // Identifica che tipo di gironi sono presenti
-  const nomiGironi = Object.keys(classificheGironi);
-  const gironiQualifiche = nomiGironi.filter(n => !/^GIRONE\s+\d+/i.test(n) && !/CHAMPIONS|EUROPA|PLATINUM|SILVER|GOLD|BRONZE/i.test(n));
-  const gironi123 = ['GIRONE 1','GIRONE 2','GIRONE 3'].filter(n => nomiGironi.some(k=>k.toUpperCase()===n));
-  const gironi456 = ['GIRONE 4','GIRONE 5','GIRONE 6'].filter(n => nomiGironi.some(k=>k.toUpperCase()===n));
-  const gironi789 = ['GIRONE 7','GIRONE 8','GIRONE 9','GIRONE 10'].filter(n => nomiGironi.some(k=>k.toUpperCase()===n));
-
-  // ── FASE 1: Classifiche Migliori dai Gironi Qualifiche (A-L) ──
   const seconde = _raccogliPerPos(classificheGironi, 1);
   const terze   = _raccogliPerPos(classificheGironi, 2);
   const quarte  = _raccogliPerPos(classificheGironi, 3);
 
   if (seconde.length >= 2) {
-    html += _renderClassificaSpeciale(seconde, '🥈 Migliori Seconde — Gironi Qualifiche', '#d97706', '#fffbeb', seconde.length);
+    html += _renderClassificaSpeciale(seconde, '🥈 Classifica Migliori Seconde', '#d97706', '#fffbeb', seconde.length);
   }
   if (terze.length >= 2) {
-    html += _renderClassificaSpeciale(terze, '🥉 Migliori Terze — Gironi Qualifiche', '#78716c', '#f5f5f4', terze.length);
+    html += _renderClassificaSpeciale(terze, '🥉 Classifica Migliori Terze', '#78716c', '#f5f5f4', terze.length);
   }
   if (quarte.length >= 2) {
-    html += _renderClassificaSpeciale(quarte, '4️⃣ Migliori Quarte — Gironi Qualifiche', '#6366f1', '#eef2ff', quarte.length);
-  }
-
-  // ── FASE 2: Classifiche Migliori dai Gironi Intermedi 1-2-3 ──
-  if (gironi123.length >= 2) {
-    const sec123 = _raccogliPerPosFiltra(classificheGironi, 1, gironi123);
-    const ter123 = _raccogliPerPosFiltra(classificheGironi, 2, gironi123);
-    if (sec123.length >= 1) {
-      html += `<div style="margin:16px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">
-        🏆 Champions League — Fase dai Gironi 1-2-3
-      </div>`;
-      html += _renderClassificaSpeciale(sec123, '🥈 Migliori Seconde Gironi 1-2-3', '#0891b2', '#ecfeff', sec123.length);
-    }
-    if (ter123.length >= 1) {
-      html += _renderClassificaSpeciale(ter123, '🥉 Migliori Terze Gironi 1-2-3', '#0891b2', '#ecfeff', ter123.length);
-    }
-  }
-
-  // ── FASE 2: Classifiche Migliori dai Gironi Intermedi 4-5-6 ──
-  if (gironi456.length >= 2) {
-    const sec456 = _raccogliPerPosFiltra(classificheGironi, 1, gironi456);
-    const ter456 = _raccogliPerPosFiltra(classificheGironi, 2, gironi456);
-    if (sec456.length >= 1) {
-      html += `<div style="margin:16px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">
-        🌍 Champions League Silver/Bronze — Fase dai Gironi 4-5-6
-      </div>`;
-      html += _renderClassificaSpeciale(sec456, '🥈 Migliori Seconde Gironi 4-5-6', '#7c3aed', '#f5f3ff', sec456.length);
-    }
-    if (ter456.length >= 1) {
-      html += _renderClassificaSpeciale(ter456, '🥉 Migliori Terze Gironi 4-5-6', '#7c3aed', '#f5f3ff', ter456.length);
-    }
+    html += _renderClassificaSpeciale(quarte, '4️⃣ Classifica Migliori Quarte', '#6366f1', '#eef2ff', quarte.length);
   }
 
   el.innerHTML = html || '<div class="empty-state">Nessun girone trovato.</div>';
