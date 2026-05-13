@@ -745,16 +745,19 @@ function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
   if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+  // "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE" e varianti con 123/456
+  if (/^\d+[°º]\s+CLASSIFICA/i.test(s)) return true;
   if (/^\d+[°º*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
   if (/^(miglior|peggio)/i.test(s)) return true;
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
   return false;
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[], risultatiKnockout={}) {
+function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={}, specialMap={}) {
   if (!placeholder) return null;
   const s = placeholder.trim();
 
+  // ── Vincente/Perdente ────────────────────────────────────
   const mSemVP = s.match(/(Vincente|Perdente)\s+SEMIFINALE\s*(\d+)/i);
   if (mSemVP) {
     const tipo = mSemVP[1].toLowerCase();
@@ -762,7 +765,6 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     if (!sem || !sem.giocata) return null;
     return tipo === 'vincente' ? (sem.gol_home >= sem.gol_away ? sem.home_id : sem.away_id) : (sem.gol_home <= sem.gol_away ? sem.home_id : sem.away_id);
   }
-
   const mQVP = s.match(/(Vincente|Perdente)\s+QUARTO\s*(\d+)/i);
   if (mQVP) {
     const tipo = mQVP[1].toLowerCase();
@@ -770,8 +772,6 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     if (!q || !q.giocata) return null;
     return tipo === 'vincente' ? (q.gol_home >= q.gol_away ? q.home_id : q.away_id) : (q.gol_home <= q.gol_away ? q.home_id : q.away_id);
   }
-
-  // Vincente/Perdente Finale N
   const mFinVP = s.match(/(Vincente|Perdente)\s+(?:Finale|FINALE)\s*(\d+)/i);
   if (mFinVP) {
     const tipo = mFinVP[1].toLowerCase();
@@ -781,27 +781,18 @@ function _resolvePlaceholder(placeholder, classificheGironi, miglioriSecondi=[],
     return tipo === 'vincente' ? (fin.gol_home >= fin.gol_away ? fin.home_id : fin.away_id) : (fin.gol_home <= fin.gol_away ? fin.home_id : fin.away_id);
   }
 
-  if (/miglior\s*2[°º]?/i.test(s) || /miglior\s*second/i.test(s)) return miglioriSecondi[0]?.sq?.id || null;
-  const mMig = s.match(/^(\d+)[°º]?\s*Miglior/i);
-  if (mMig) return miglioriSecondi[parseInt(mMig[1]) - 1]?.sq?.id || null;
-
-  const mMigliorN = s.match(/^(miglior|peggio[a-z]*)?\s*(\d+)[°º]/i);
-  if (mMigliorN) {
-    const tipo = (mMigliorN[1]||'').toLowerCase();
-    const pos = parseInt(mMigliorN[2]);
-    const candidati = [];
-    for (const [nome, cl] of Object.entries(classificheGironi)) {
-      if (cl.length >= pos) candidati.push({ nome, sq: cl[pos-1].sq, stat: cl[pos-1] });
+  // ── Formato "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE [123/456]" ──
+  // Questo è il formato principale dei gironi speciali classifica
+  const mClass = s.match(/^(\d+)[°º]\s+(.+)$/i);
+  if (mClass) {
+    const pos = parseInt(mClass[1]);
+    const nomeGirone = mClass[2].trim().toUpperCase();
+    // Cerca esatto in classificheGironi (include i gironi CLASSIFICA MIGLIORI SECONDE ecc.)
+    const k = Object.keys(classificheGironi).find(k => k.toUpperCase() === nomeGirone);
+    if (k) {
+      const cl = classificheGironi[k];
+      if (cl && cl.length >= pos) return cl[pos - 1]?.sq?.id || null;
     }
-    if (!candidati.length) return null;
-    candidati.sort((a, b) => {
-      const ptA = a.stat.pts, ptB = b.stat.pts;
-      if (ptB !== ptA) return tipo.startsWith('peggio') ? ptA - ptB : ptB - ptA;
-      const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
-      if (drB !== drA) return tipo.startsWith('peggio') ? drA - drB : drB - drA;
-      return tipo.startsWith('peggio') ? a.stat.gf - b.stat.gf : b.stat.gf - a.stat.gf;
-    });
-    return candidati[0]?.sq?.id || null;
   }
 
   // Formato "3°A" o "4°B" senza spazio
