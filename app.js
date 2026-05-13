@@ -642,10 +642,14 @@ async function verificaEGeneraTriangolari(categoriaId) {
       });
 
       // Salva classifica virtuale con stats reali
-      classificheGironi[g.nome.toUpperCase().trim()] = voci.map(v => ({
+      const clSpeciale = voci.map(v => ({
         sq: v.sq, g: v.g, v: v.v, p: v.p, s: v.s,
         gf: v.gf, gs: v.gs, pts: v.pts, rigori: 0
       }));
+      classificheGironi[g.nome.toUpperCase().trim()] = clSpeciale;
+      // Cache globale per renderClassifiche
+      if (!window._clSpecCache) window._clSpecCache = {};
+      window._clSpecCache[g.nome.toUpperCase().trim()] = clSpeciale;
 
       // Aggiorna girone_squadre con squadre reali nell'ordine della classifica
       for (let i = 0; i < voci.length; i++) {
@@ -846,6 +850,8 @@ async function renderClassifiche() {
   // VERSIONE v98-DEBUG — rimuovere dopo conferma deploy
   console.warn('=== renderClassifiche v98 LOADED ===');
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  // Aggiorna cache classifiche speciali
+  try { await verificaEGeneraTriangolari(STATE.activeCat); } catch(e) {}
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
 
@@ -945,37 +951,36 @@ async function renderClassifiche() {
     return classificheGironi[nomeUp] || null;
   }
 
-  // Legge un girone CLASSIFICA virtuale e costruisce la lista con stats reali dalla fonte
+
+  // Legge un girone CLASSIFICA virtuale e costruisce la lista con stats reali
   function _buildDaGironeVirtuale(g) {
-    // g.squadre sono già le squadre reali nell'ordine corretto (sorted by verificaEGeneraTriangolari)
-    // MA non hanno i punti. Li recuperiamo da classificheGironi cercando ogni squadra.
+    const nomeUp = (g.nome||'').toUpperCase().trim();
+    // 1. Prima leggi dalla cache globale (popolata da verificaEGeneraTriangolari)
+    const cached = window._clSpecCache && window._clSpecCache[nomeUp];
+    if (cached && cached.length) {
+      return cached.map(row => ({
+        sq: row.sq, pts: row.pts, g: row.g, v: row.v, p: row.p, s: row.s,
+        gf: row.gf, gs: row.gs, dr: row.gf - row.gs, girone: ''
+      }));
+    }
+    // 2. Fallback: cerca le stats di ogni squadra nel classificheGironi locale
     const lista = [];
     for (const sq of (g.squadre||[])) {
       if (!sq || !sq.id || !sq.nome || _isPlaceholder(sq.nome)) continue;
-      // Cerca questa squadra in tutti i gironi normali e prendi le sue stats
       let statFound = null;
       for (const cl of Object.values(classificheGironi)) {
         const row = cl.find(r => r.sq && r.sq.id === sq.id);
         if (row) { statFound = row; break; }
       }
-      if (statFound) {
-        lista.push({
-          sq, pts: statFound.pts, g: statFound.g,
-          v: statFound.v, p: statFound.p, s: statFound.s,
-          gf: statFound.gf, gs: statFound.gs, dr: statFound.gf - statFound.gs
-        });
-      } else {
-        lista.push({ sq, pts:0, g:0, v:0, p:0, s:0, gf:0, gs:0, dr:0 });
-      }
+      lista.push(statFound ? {
+        sq, pts: statFound.pts, g: statFound.g, v: statFound.v, p: statFound.p,
+        s: statFound.s, gf: statFound.gf, gs: statFound.gs, dr: statFound.gf - statFound.gs, girone: ''
+      } : { sq, pts:0, g:0, v:0, p:0, s:0, gf:0, gs:0, dr:0, girone: '' });
     }
-    // ri-ordina con i pts reali
-    lista.sort((a,b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.dr !== a.dr) return b.dr - a.dr;
-      return b.gf - a.gf;
-    });
+    lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : b.dr!==a.dr ? b.dr-a.dr : b.gf-a.gf);
     return lista;
   }
+
 
   function _buildSpeciale(pos, filtroNomi) {
     const lista = [];
