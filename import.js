@@ -72,7 +72,7 @@ function _ctNormalizzaPlaceholder(nome) {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const n = nome.trim();
-  // "N° Girone X" o "N° Girone Unico"
+  // "N° Girone X"
   if (/^\d+[°ºoa*]?\s*(Girone|GIR\.?|GIRONE)/i.test(n)) return true;
   // "1° A", "2° B" lettera singola
   if (/^\d+[°º*]?\s*[A-Z]$/.test(n)) return true;
@@ -84,11 +84,11 @@ function _isPlaceholder(nome) {
   if (/^\d+\s+(SILVER|GOLD|PLATINO|BRONZO|ARANCIO|VERDE|BLU)\s+\d+$/i.test(n)) return true;
   if (/^\d+[°ºoa*]?\s*(Arancio|Verde|Blu)$/i.test(n)) return true;
   if (/^\d+[°ºoa*]?\s*Finale\s*\d+$/i.test(n)) return true;
-  // "Miglior seconda", "2° Miglior seconda", "10° Miglior terza" ecc.
+  // "Miglior seconda", "2° Miglior seconda", "10° Miglior terza" (con o senza numero davanti)
   if (/^(\d+[°º]\s+)?Miglior\s+(seconda|terza|quarta)/i.test(n)) return true;
-  // "Miglior seconda 123", "2° Miglior seconda 456" ecc. (con suffisso gruppo)
+  // "Miglior seconda 123", "2° Miglior seconda 456" (con suffisso gruppo gironi)
   if (/^(\d+[°º]\s+)?Miglior\s+(seconda|terza|quarta)\s+\d+/i.test(n)) return true;
-  // Vecchio formato testuale
+  // vecchio formato
   if (/^(SECONDA|TERZA|QUARTA)\s*\d*$/i.test(n)) return true;
   return false;
 }
