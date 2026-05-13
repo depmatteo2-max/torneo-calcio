@@ -614,7 +614,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const voci = [];
       for (const slot of (gsSlots||[])) {
         const nomePH = slot.squadre?.nome || '';
-        const m = nomePH.match(/^(\d+)[°º]\s+(.+)$/i);
+        const m = nomePH.match(/^(\d+)[\u00b0\u00ba]\s+(.+)$/i);
         if (!m) continue;
         const pos = parseInt(m[1]);
         const nomeOrigine = m[2].trim().toUpperCase();
@@ -741,10 +741,10 @@ function _calcolaMiglioriSecondi(classificheGironi) {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
-  if (/^\d+[°º*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+  if (/^\d+[\u00b0\u00ba*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
   // "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE" e varianti con 123/456
-  if (/^\d+[°º]\s+CLASSIFICA/i.test(s)) return true;
-  if (/^\d+[°º*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
+  if (/^\d+[\u00b0\u00ba]\s+CLASSIFICA/i.test(s)) return true;
+  if (/^\d+[\u00b0\u00ba*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
   if (/^(miglior|peggio)/i.test(s)) return true;
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
   return false;
@@ -769,7 +769,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
 
   // Formato principale: "N° NOME GIRONE"
   // Es: "1° Girone A", "2° CLASSIFICA MIGLIORI SECONDE", "1° CLASSIFICA MIGLIORI SECONDE 123"
-  const mN = s.match(/^(\d+)\s*[°º]\s+(.+)$/i);
+  const mN = s.match(/^(\d+)\s*[\u00b0\u00ba]\s+(.+)$/i);
   if (mN) {
     const pos = parseInt(mN[1]);
     const nomeRicerca = mN[2].trim().toUpperCase();
@@ -789,7 +789,7 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   }
 
   // Formato breve: "3°A" senza spazio
-  const mShort = s.match(/^(\d+)[°º]([A-Za-z])$/);
+  const mShort = s.match(/^(\d+)[\u00b0\u00ba]([A-Za-z])$/);
   if (mShort) {
     const pos = parseInt(mShort[1]);
     const lettera = mShort[2].toUpperCase();
@@ -874,8 +874,7 @@ async function renderClassifiche() {
     // Prova prima con g.squadre (senza placeholder)
     let squadreValide = (g.squadre||[]).filter(s => s && s.id && s.nome && !_isPlaceholder(s.nome));
 
-    // Se g.squadre è vuoto o ha solo placeholder, ricava le squadre dalle partite giocate
-    // (le partite hanno già i join home:squadre e away:squadre con id/nome/logo)
+    // Se vuoto o solo placeholder, ricava le squadre dalle partite (hanno gia i join home/away)
     if (squadreValide.length < 2) {
       const sqMap = {};
       for (const p of (g.partite||[])) {
@@ -893,7 +892,6 @@ async function renderClassifiche() {
 
     if (g.partite.length <= 1) continue;
     if (!cl) continue;
-
     const played = g.partite.filter(p=>p.giocata).length;
     html += `<div class="card" style="margin-bottom:8px;">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
@@ -908,17 +906,16 @@ async function renderClassifiche() {
         <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
         <td>${row.sq.nome}</td>
         <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
+        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}}">${diff>0?'+':''}${diff}</td>
         <td class="pts-col">${row.pts}</td>
       </tr>`;
     });
     html += `</tbody></table>
       <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
-        Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
+        Spareggio: punti \u2192 scontro diretto \u2192 diff. reti \u2192 gol fatti \u2192 rigori
       </div>
     </div>`;
   }
-
   // ── CLASSIFICHE SPECIALI ─────────────────────────────────
   // Calcola direttamente da classificheGironi (già costruito sopra con calcGironeClassifica)
   // pos: 0=primo, 1=secondo, 2=terzo, 3=quarto
