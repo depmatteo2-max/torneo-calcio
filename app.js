@@ -602,62 +602,70 @@ async function verificaEGeneraTriangolari(categoriaId) {
     }
 
     // PASSO 2: calcola classifiche dei gironi CLASSIFICA SPECIALI
-    // Questi gironi hanno placeholder tipo "2° Girone A" = seconda del Girone A
-    // La loro classifica si calcola prendendo le statistiche originali di ogni squadra
+    // Questi gironi hanno slot tipo "2° Girone A" = seconda classificata del Girone A
+    // La classifica si calcola prendendo le statistiche reali di ogni squadra dal girone di origine
     for (const g of (gironi||[])) {
       if (!/CLASSIFICA/i.test(g.nome)) continue;
 
       const { data: gsSlots } = await db.from('girone_squadre')
-        .select('squadra_id, squadre(nome)').eq('girone_id', g.id);
+        .select('id, squadra_id, squadre(nome)').eq('girone_id', g.id);
 
-      // Per ogni slot, risolvi il placeholder e prendi le statistiche originali
       const vociClassifica = [];
       for (const slot of (gsSlots||[])) {
-        const nomePlaceholder = slot.squadre?.nome || '';
-        // Formato: "2° Girone A" → pos=2, girone="GIRONE A"
-        const m = nomePlaceholder.match(/^(\d+)[°º]\s+(.+)$/i);
+        const nomePH = slot.squadre?.nome || '';
+        // Formato atteso: "2° Girone A" oppure "2° Girone 1"
+        const m = nomePH.match(/^(\d+)[°º]\s+(.+)$/i);
         if (!m) continue;
         const pos = parseInt(m[1]);
-        const nomeGirone = m[2].trim().toUpperCase();
-        // Cerca la classifica del girone di origine
-        const clOrigine = classificheGironi[nomeGirone] || classificheGironi['GIRONE ' + nomeGirone];
-        if (!clOrigine || clOrigine.length < pos) continue;
-        const entry = clOrigine[pos - 1];
-        if (!entry) continue;
-        vociClassifica.push({ sq: entry.sq, stat: entry, girone: m[2].trim() });
+        const nomeGirOrigine = m[2].trim();
+        // Cerca nel dizionario classifiche (case insensitive)
+        const chiave = Object.keys(classificheGironi).find(k =>
+          k.toUpperCase() === nomeGirOrigine.toUpperCase() ||
+          k.toUpperCase() === ('GIRONE ' + nomeGirOrigine).toUpperCase()
+        );
+        if (!chiave) continue;
+        const clOrig = classificheGironi[chiave];
+        if (!clOrig || clOrig.length < pos) continue;
+        const row = clOrig[pos - 1]; // { sq, g, v, p, s, gf, gs, pts, rigori }
+        if (!row || !row.sq) continue;
+        vociClassifica.push({
+          slotId: slot.id,
+          slotSqId: slot.squadra_id,
+          sq: row.sq,
+          g: row.g, v: row.v, p: row.p, s: row.s,
+          gf: row.gf, gs: row.gs, pts: row.pts
+        });
       }
 
-      if (vociClassifica.length < 2) continue;
+      if (!vociClassifica.length) continue;
 
       // Ordina per punti → diff reti → gol fatti
       vociClassifica.sort((a, b) => {
-        if (b.stat.pts !== a.stat.pts) return b.stat.pts - a.stat.pts;
-        const drA = a.stat.gf - a.stat.gs, drB = b.stat.gf - b.stat.gs;
+        if (b.pts !== a.pts) return b.pts - a.pts;
+        const drA = a.gf - a.gs, drB = b.gf - b.gs;
         if (drB !== drA) return drB - drA;
-        return b.stat.gf - a.stat.gf;
+        return b.gf - a.gf;
       });
 
-      // Aggiorna girone_squadre con l'ordine corretto (sostituzione placeholder→reale)
-      // e salva la classifica
-      const clVirtuale = vociClassifica.map(v => ({ sq: v.sq, ...v.stat, pts: v.stat.pts, gf: v.stat.gf, gs: v.stat.gs }));
+      // Costruisci classifica virtuale nel formato standard e salvala
+      const clVirtuale = vociClassifica.map(v => ({
+        sq: v.sq, g: v.g, v: v.v, p: v.p, s: v.s,
+        gf: v.gf, gs: v.gs, pts: v.pts, rigori: 0
+      }));
       classificheGironi[g.nome] = clVirtuale;
       classificheGironi[g.nome.toUpperCase()] = clVirtuale;
 
-      // Aggiorna girone_squadre sostituendo i placeholder con le squadre reali nell'ordine corretto
-      let posizione = 0;
-      for (const slot of (gsSlots||[])) {
-        const nomePlaceholder = slot.squadre?.nome || '';
-        const m = nomePlaceholder.match(/^(\d+)[°º]\s+(.+)$/i);
-        if (!m) continue;
-        if (posizione >= vociClassifica.length) break;
-        const sqReale = vociClassifica[posizione].sq;
-        if (sqReale && sqReale.id !== slot.squadra_id) {
-          const giaPresente = (gsSlots||[]).some(r => r.squadra_id === sqReale.id);
+      // Aggiorna girone_squadre: sostituisci ogni placeholder con la squadra reale
+      // nell'ordine della classifica (1° slot → 1ª in classifica ecc.)
+      for (let i = 0; i < vociClassifica.length; i++) {
+        const voce = vociClassifica[i];
+        if (voce.sq.id !== voce.slotSqId) {
+          // Controlla che la squadra non sia già in un altro slot
+          const giaPresente = vociClassifica.some((v2, j) => j !== i && v2.slotSqId === voce.sq.id);
           if (!giaPresente) {
-            await db.from('girone_squadre').update({ squadra_id: sqReale.id }).eq('id', slot.id);
+            await db.from('girone_squadre').update({ squadra_id: voce.sq.id }).eq('id', voce.slotId);
           }
         }
-        posizione++;
       }
     }
 
@@ -937,6 +945,8 @@ async function renderClassifiche() {
   const classificheGironi = {};
   let html = '';
   for (const g of gironi) {
+    // I gironi CLASSIFICA MIGLIORI non hanno partite tra loro — skip calcolo normale
+    if (/CLASSIFICA/i.test(g.nome)) continue;
     if (g.partite.length <= 1) continue;
     const cl = calcGironeClassifica(g);
     classificheGironi[g.nome] = cl;
