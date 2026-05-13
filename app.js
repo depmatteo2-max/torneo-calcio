@@ -865,9 +865,10 @@ async function renderClassifiche() {
     return;
   }
 
+  // DEBUG TEMPORANEO
+  console.log('DEBUG gironi:', gironi.map(g => ({ nome: g.nome, hex: [...(g.nome||'')].map(c=>c.charCodeAt(0).toString(16)).join('-'), npt: g.partite.length })));
+
   // ── SEPARA gironi normali da gironi CLASSIFICA speciali ──────────────────
-  // Un girone è "speciale" se non ha partite (è virtuale) OPPURE il nome contiene
-  // varianti di "classifica/migliori" — usato come guard ridondante
   const _isSpeciale = g =>
     g.partite.length === 0 ||
     /classif|migliori/i.test(g.nome);
