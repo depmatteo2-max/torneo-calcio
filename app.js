@@ -847,18 +847,13 @@ function _riepilogoBanner(section) {
 async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  // VERSIONE v98-DEBUG — rimuovere dopo conferma deploy
-  console.warn('=== renderClassifiche v98 LOADED ===');
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
-  // Aggiorna cache classifiche speciali
-  try { await verificaEGeneraTriangolari(STATE.activeCat); } catch(e) {}
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
 
   if (!gironi.length) {
     const ko = await dbGetKnockout(STATE.activeCat);
     if (ko.length) {
-      el.innerHTML = '';
       STATE.currentSection = 'tabellone';
       document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
       const btnTab = document.querySelector('[data-section="tabellone"]');
@@ -866,63 +861,65 @@ async function renderClassifiche() {
       document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
       const secTab = document.getElementById('sec-tabellone');
       if (secTab) secTab.classList.add('active');
-      await renderTabellone();
-      return;
+      await renderTabellone(); return;
     }
-    el.innerHTML = '<div class="empty-state">Nessun girone trovato.</div>';
-    return;
+    el.innerHTML = '<div class="empty-state">Nessun girone trovato.</div>'; return;
   }
 
-  // ── SEPARA gironi normali da gironi CLASSIFICA speciali ──────────────────
-  // Un girone è "speciale" (virtuale, senza partite proprie) se:
-  // 1. Ha 0 partite, OPPURE
-  // 2. Il nome (normalizzato) contiene "classif" o "migliori", OPPURE
-  // 3. Tutte le sue partite hanno gol_home=0, gol_away=0 e giocata=false
-  //    e le sue squadre NON hanno placeholder (cioè è un girone virtuale già risolto)
-  const _nomeNorm = nome => (nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
-  const _isSpeciale = g => {
-    const n = _nomeNorm(g.nome);
-    if (n.includes('classif') || n.includes('migliori')) return true;
-    if (g.partite.length === 0) return true;
-    // Girone con partite MA tutte non giocate e squadre reali = girone fase successiva non ancora iniziata
-    // NON è speciale, è un girone normale futuro → non skippiamo
-    return false;
+  // Identifica gironi CLASSIFICA (virtuali, senza partite proprie significative)
+  // Un girone è "classifica speciale" se il nome contiene classific/migliori
+  // OPPURE se ha 0 partite tra squadre reali (tutte con home_id/away_id null o placeholder)
+  const _isGironeClassifica = g => {
+    const n = (g.nome||'').toLowerCase();
+    return n.includes('classif') || n.includes('migliori');
   };
 
-  // ── COSTRUISCE classificheGironi dai gironi con partite ──────────────────
+  // Costruisce mappa squadra_id → stats reali da tutti i gironi normali
+  // Calcola classificheGironi e statsPerSquadra in un unico passaggio
   const classificheGironi = {};
+  const statsPerSquadra = {}; // squadra_id → { sq, pts, g, v, p, s, gf, gs, gironeNome }
+
   let html = '';
+
   for (const g of gironi) {
-    if (_isSpeciale(g)) continue;  // salta gironi virtuali/classifica
+    if (_isGironeClassifica(g)) continue;
 
-    // Prova prima con g.squadre (senza placeholder)
-    let squadreValide = (g.squadre||[]).filter(s => s && s.id && s.nome && !_isPlaceholder(s.nome));
-
-    // Se vuoto o solo placeholder, ricava le squadre dalle partite (hanno gia i join home/away)
+    // Costruisce elenco squadre: prima da g.squadre, fallback dalle partite
+    let squadreValide = (g.squadre||[]).filter(s => s && s.id && !_isPlaceholder(s.nome));
     if (squadreValide.length < 2) {
       const sqMap = {};
-      for (const p of (g.partite||[])) {
-        if (p.home && p.home.id && p.home.nome && !_isPlaceholder(p.home.nome)) sqMap[p.home.id] = p.home;
-        if (p.away && p.away.id && p.away.nome && !_isPlaceholder(p.away.nome)) sqMap[p.away.id] = p.away;
+      for (const p of g.partite) {
+        if (p.home && p.home.id && !_isPlaceholder(p.home.nome)) sqMap[p.home.id] = p.home;
+        if (p.away && p.away.id && !_isPlaceholder(p.away.nome)) sqMap[p.away.id] = p.away;
       }
       squadreValide = Object.values(sqMap);
     }
+    if (squadreValide.length < 2) continue;
 
-    let cl = null;
-    if (squadreValide.length >= 2) {
-      cl = calcGironeClassifica({ squadre: squadreValide, partite: g.partite });
-      classificheGironi[g.nome.toUpperCase().trim()] = cl;
-    }
+    const cl = calcGironeClassifica({ squadre: squadreValide, partite: g.partite });
+    if (!cl.length) continue;
+    const key = g.nome.toUpperCase().trim();
+    classificheGironi[key] = cl;
 
+    // Salva stats per ogni squadra (per le classifiche speciali)
+    cl.forEach((row, idx) => {
+      if (!row.sq || !row.sq.id) return;
+      statsPerSquadra[row.sq.id] = {
+        sq: row.sq, pts: row.pts, g: row.g, v: row.v,
+        p: row.p, s: row.s, gf: row.gf, gs: row.gs,
+        pos: idx, gironeNome: g.nome.toUpperCase().trim()
+      };
+    });
+
+    // Render girone normale
     if (g.partite.length <= 1) continue;
-    if (!cl) continue;
-    const played = g.partite.filter(p=>p.giocata).length;
+    const played = g.partite.filter(p => p.giocata).length;
     html += `<div class="card" style="margin-bottom:8px;">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
       <table class="standings-table">
         <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead>
         <tbody>`;
-    cl.forEach((row,idx) => {
+    cl.forEach((row, idx) => {
       const q = idx < (cat?.qualificate||1);
       const diff = row.gf - row.gs;
       html += `<tr class="${q?'qualifies':''}">
@@ -930,100 +927,19 @@ async function renderClassifiche() {
         <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
         <td>${row.sq.nome}</td>
         <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}}">${diff>0?'+':''}${diff}</td>
-        <td class="pts-col">${row.pts}</td>
-      </tr>`;
+        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
+        <td class="pts-col">${row.pts}</td></tr>`;
     });
     html += `</tbody></table>
       <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
         Spareggio: punti \u2192 scontro diretto \u2192 diff. reti \u2192 gol fatti \u2192 rigori
-      </div>
-    </div>`;
+      </div></div>`;
   }
 
-  // ── CLASSIFICHE SPECIALI ─────────────────────────────────
-  // Strategia duale:
-  // A) Se classificheGironi ha dati (ci sono risultati), usa _buildSpeciale (legge dalla fonte)
-  // B) Se classificheGironi è vuoto O manca un girone, legge i gironi CLASSIFICA virtuali
-  //    che verificaEGeneraTriangolari ha già popolato con squadre ORDINATE con stats reali
-
-  function _statoGirone(nomeUp) {
-    return classificheGironi[nomeUp] || null;
-  }
-
-
-  // Legge un girone CLASSIFICA virtuale e costruisce la lista con stats reali
-  function _buildDaGironeVirtuale(g) {
-    const nomeUp = (g.nome||'').toUpperCase().trim();
-    // 1. Prima leggi dalla cache globale (popolata da verificaEGeneraTriangolari)
-    const cached = window._clSpecCache && window._clSpecCache[nomeUp];
-    if (cached && cached.length) {
-      return cached.map(row => ({
-        sq: row.sq, pts: row.pts, g: row.g, v: row.v, p: row.p, s: row.s,
-        gf: row.gf, gs: row.gs, dr: row.gf - row.gs, girone: ''
-      }));
-    }
-    // 2. Fallback: cerca le stats di ogni squadra nel classificheGironi locale
-    const lista = [];
-    for (const sq of (g.squadre||[])) {
-      if (!sq || !sq.id || !sq.nome || _isPlaceholder(sq.nome)) continue;
-      let statFound = null;
-      for (const cl of Object.values(classificheGironi)) {
-        const row = cl.find(r => r.sq && r.sq.id === sq.id);
-        if (row) { statFound = row; break; }
-      }
-      lista.push(statFound ? {
-        sq, pts: statFound.pts, g: statFound.g, v: statFound.v, p: statFound.p,
-        s: statFound.s, gf: statFound.gf, gs: statFound.gs, dr: statFound.gf - statFound.gs, girone: ''
-      } : { sq, pts:0, g:0, v:0, p:0, s:0, gf:0, gs:0, dr:0, girone: '' });
-    }
-    lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : b.dr!==a.dr ? b.dr-a.dr : b.gf-a.gf);
-    return lista;
-  }
-
-
-  function _buildSpeciale(pos, filtroNomi) {
-    const lista = [];
-    const chiavi = filtroNomi
-      ? filtroNomi
-      : Object.keys(classificheGironi).filter(k => /^GIRONE [A-Z]$/.test(k));
-
-    for (const k of chiavi) {
-      const cl = _statoGirone(k);
-      if (!cl || cl.length <= pos) continue;
-      const row = cl[pos];
-      if (!row || !row.sq) continue;
-      lista.push({
-        girone: k.replace('GIRONE ', ''),
-        sq: row.sq,
-        pts: row.pts, g: row.g, v: row.v,
-        p: row.p, s: row.s,
-        gf: row.gf, gs: row.gs,
-        dr: row.gf - row.gs
-      });
-    }
-    lista.sort((a,b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.dr !== a.dr) return b.dr - a.dr;
-      return b.gf - a.gf;
-    });
-    return lista;
-  }
-
-  // Restituisce una lista da un girone CLASSIFICA virtuale, oppure da _buildSpeciale se disponibile
-  function _getSpecialeList(pos, filtroNomi, nomeGironeVirtuale) {
-    const fromBuild = _buildSpeciale(pos, filtroNomi);
-    if (fromBuild.length) return fromBuild;
-    // Fallback: leggi il girone CLASSIFICA virtuale direttamente
-    // Usa confronto normalizzato (rimuove accenti e maiuscole)
-    const normTarget = _nomeNorm(nomeGironeVirtuale);
-    const gVirt = gironi.find(g => {
-      const n = _nomeNorm(g.nome);
-      return n === normTarget || n.includes(normTarget) || normTarget.includes(n);
-    });
-    if (!gVirt) return [];
-    return _buildDaGironeVirtuale(gVirt);
-  }
+  // ── CLASSIFICHE SPECIALI ──────────────────────────────────────────────────
+  // Legge i gironi CLASSIFICA dal DB: le loro g.squadre sono già le squadre reali
+  // nell'ordine corretto (verificaEGeneraTriangolari le ha già ordinate).
+  // I punti li prendiamo da statsPerSquadra costruito sopra.
 
   function _htmlSpeciale(lista, titolo, colore) {
     if (!lista.length) return '';
@@ -1039,15 +955,18 @@ async function renderClassifiche() {
           <th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th>
         </tr></thead>
         <tbody>
-          ${lista.map((row,idx)=>`<tr class="${idx===0?'qualifies':''}">
-            <td style="text-align:center;font-weight:800;color:${colore};">${idx+1}</td>
-            <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
-            <td style="font-weight:600;">${row.sq.nome}</td>
-            <td style="font-size:11px;color:var(--testo-xs);">${row.girone||''}</td>
-            <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-            <td class="${row.dr>0?'diff-pos':row.dr<0?'diff-neg':''}">${row.dr>0?'+':''}${row.dr}</td>
-            <td class="pts-col">${row.pts}</td>
-          </tr>`).join('')}
+          ${lista.map((row,idx) => {
+            const dr = row.gf - row.gs;
+            return `<tr class="${idx===0?'qualifies':''}">
+              <td style="text-align:center;font-weight:800;color:${colore};">${idx+1}</td>
+              <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
+              <td style="font-weight:600;">${row.sq.nome}</td>
+              <td style="font-size:11px;color:var(--testo-xs);">${row.girone||''}</td>
+              <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
+              <td class="${dr>0?'diff-pos':dr<0?'diff-neg':''}">${dr>0?'+':''}${dr}</td>
+              <td class="pts-col">${row.pts}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
       <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
@@ -1056,34 +975,81 @@ async function renderClassifiche() {
     </div>`;
   }
 
-  // Classifiche da gironi A-L
-  const _sec = _getSpecialeList(1, null, 'CLASSIFICA MIGLIORI SECONDE');
-  const _ter = _getSpecialeList(2, null, 'CLASSIFICA MIGLIORI TERZE');
-  const _qua = _getSpecialeList(3, null, 'CLASSIFICA MIGLIORI QUARTE');
-  if (_sec.length) html += _htmlSpeciale(_sec, '🥈 Classifica Migliori Seconde', '#d97706');
-  if (_ter.length) html += _htmlSpeciale(_ter, '🥉 Classifica Migliori Terze', '#78716c');
-  if (_qua.length) html += _htmlSpeciale(_qua, '4️⃣ Classifica Migliori Quarte', '#6366f1');
-
-  // Classifiche da gironi 1-2-3
-  const _s123 = _getSpecialeList(1, ['GIRONE 1','GIRONE 2','GIRONE 3'], 'CLASSIFICA MIGLIORI SECONDE 123');
-  const _t123 = _getSpecialeList(2, ['GIRONE 1','GIRONE 2','GIRONE 3'], 'CLASSIFICA MIGLIORI TERZE 123');
-  if (_s123.length) {
-    html += `<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">🏆 Champions League — Gironi 1-2-3</div>`;
-    html += _htmlSpeciale(_s123, '🥈 Migliori Seconde Gironi 1-2-3', '#0891b2');
+  // Costruisce lista speciale da un girone CLASSIFICA virtuale
+  function _buildDaGirone(gVirt) {
+    const lista = [];
+    for (const sq of (gVirt.squadre||[])) {
+      if (!sq || !sq.id || _isPlaceholder(sq.nome)) continue;
+      const stat = statsPerSquadra[sq.id];
+      if (stat) {
+        lista.push({ sq, pts: stat.pts, g: stat.g, v: stat.v, p: stat.p,
+          s: stat.s, gf: stat.gf, gs: stat.gs, girone: stat.gironeNome.replace('GIRONE ','') });
+      }
+      // Se stat non trovata (risultati non ancora inseriti): non mostrare — lista vuota = nessun render
+    }
+    lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf);
+    return lista;
   }
-  if (_t123.length) html += _htmlSpeciale(_t123, '🥉 Migliori Terze Gironi 1-2-3', '#0891b2');
 
-  // Classifiche da gironi 4-5-6
-  const _s456 = _getSpecialeList(1, ['GIRONE 4','GIRONE 5','GIRONE 6'], 'CLASSIFICA MIGLIORI SECONDE 456');
-  const _t456 = _getSpecialeList(2, ['GIRONE 4','GIRONE 5','GIRONE 6'], 'CLASSIFICA MIGLIORI TERZE 456');
-  if (_s456.length) {
-    html += `<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">🌍 Champions Silver/Bronze — Gironi 4-5-6</div>`;
-    html += _htmlSpeciale(_s456, '🥈 Migliori Seconde Gironi 4-5-6', '#7c3aed');
+  // Costruisce lista speciale da classificheGironi (pos = 0-based)
+  function _buildSpeciale(pos, filtroNomi) {
+    const chiavi = filtroNomi || Object.keys(classificheGironi).filter(k => /^GIRONE [A-Z]$/.test(k));
+    const lista = [];
+    for (const k of chiavi) {
+      const cl = classificheGironi[k];
+      if (!cl || cl.length <= pos) continue;
+      const row = cl[pos];
+      if (!row?.sq) continue;
+      lista.push({ sq: row.sq, pts: row.pts, g: row.g, v: row.v, p: row.p,
+        s: row.s, gf: row.gf, gs: row.gs, girone: k.replace('GIRONE ','') });
+    }
+    lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf);
+    return lista;
   }
-  if (_t456.length) html += _htmlSpeciale(_t456, '🥉 Migliori Terze Gironi 4-5-6', '#7c3aed');
+
+  // Trova il girone CLASSIFICA nel DB per nome (confronto flessibile)
+  const _trovaCl = nomeParte => gironi.find(g => {
+    const n = (g.nome||'').toLowerCase();
+    return _isGironeClassifica(g) && n.includes(nomeParte.toLowerCase());
+  });
+
+  // Helper: usa _buildSpeciale se ha dati, altrimenti legge dal girone virtuale nel DB
+  function _getSpeciale(pos, filtroNomi, nomeVirtuale) {
+    const fromSpec = _buildSpeciale(pos, filtroNomi);
+    if (fromSpec.length) return fromSpec;
+    const gv = _trovaCl(nomeVirtuale);
+    return gv ? _buildDaGirone(gv) : [];
+  }
+
+  // Classifiche da gironi A-L (qualifiche)
+  const sec = _getSpeciale(1, null, 'seconde');
+  const ter = _getSpeciale(2, null, 'terze');
+  const qua = _getSpeciale(3, null, 'quarte');
+  if (sec.length) html += _htmlSpeciale(sec, '🥈 Classifica Migliori Seconde', '#d97706');
+  if (ter.length) html += _htmlSpeciale(ter, '🥉 Classifica Migliori Terze', '#78716c');
+  if (qua.length) html += _htmlSpeciale(qua, '4\ufe0f\u20e3 Classifica Migliori Quarte', '#6366f1');
+
+  // Classifiche gironi 1-2-3
+  const s123 = _getSpeciale(1, ['GIRONE 1','GIRONE 2','GIRONE 3'], 'seconde 123');
+  const t123 = _getSpeciale(2, ['GIRONE 1','GIRONE 2','GIRONE 3'], 'terze 123');
+  if (s123.length) {
+    html += `<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">\ud83c\udfc6 Champions League \u2014 Gironi 1-2-3</div>`;
+    html += _htmlSpeciale(s123, '🥈 Migliori Seconde Gironi 1-2-3', '#0891b2');
+  }
+  if (t123.length) html += _htmlSpeciale(t123, '🥉 Migliori Terze Gironi 1-2-3', '#0891b2');
+
+  // Classifiche gironi 4-5-6
+  const s456 = _getSpeciale(1, ['GIRONE 4','GIRONE 5','GIRONE 6'], 'seconde 456');
+  const t456 = _getSpeciale(2, ['GIRONE 4','GIRONE 5','GIRONE 6'], 'terze 456');
+  if (s456.length) {
+    html += `<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">\ud83c\udf0d Champions Silver/Bronze \u2014 Gironi 4-5-6</div>`;
+    html += _htmlSpeciale(s456, '🥈 Migliori Seconde Gironi 4-5-6', '#7c3aed');
+  }
+  if (t456.length) html += _htmlSpeciale(t456, '🥉 Migliori Terze Gironi 4-5-6', '#7c3aed');
 
   el.innerHTML = html || '<div class="empty-state">Nessun girone trovato.</div>';
 }
+
 
 
 
