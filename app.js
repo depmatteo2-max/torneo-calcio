@@ -952,6 +952,7 @@ async function renderClassifiche() {
   // Raccoglie la N-esima classificata (pos=1→seconda, 2→terza, 3→quarta)
   // dai gironi specificati in filtroNomi (uppercase), oppure da tutti i gironi A-L
   function _buildListaSpeciale(pos, filtroNomi) {
+    // pos: 1=seconda classificata, 2=terza, 3=quarta (indice nell'array classifica)
     const lista = [];
     const chiavi = filtroNomi
       ? filtroNomi.map(n => n.toUpperCase())
@@ -960,12 +961,15 @@ async function renderClassifiche() {
     for (const chiave of chiavi) {
       const cl = classificheGironi[chiave];
       if (!cl || cl.length <= pos) continue;
-      const row = cl[pos]; // pos=1→seconda (indice 1), pos=2→terza ecc.
-      if (!row?.sq || !row.g) continue;
+      const row = cl[pos];
+      if (!row?.sq) continue; // skip se manca la squadra
       lista.push({
         girone: chiave.replace(/^GIRONE /, ''),
-        sq: row.sq, pts: row.pts, g: row.g, v: row.v,
-        p: row.p, s: row.s, gf: row.gf, gs: row.gs, dr: row.gf - row.gs
+        sq: row.sq,
+        pts: row.pts || 0, g: row.g || 0, v: row.v || 0,
+        p: row.p || 0, s: row.s || 0,
+        gf: row.gf || 0, gs: row.gs || 0,
+        dr: (row.gf || 0) - (row.gs || 0)
       });
     }
     lista.sort((a,b) => {
@@ -975,10 +979,21 @@ async function renderClassifiche() {
     });
     return lista;
   }
+  // DEBUG temporaneo — rimuovere dopo verifica
+  const _chiavi = Object.keys(classificheGironi);
+  console.log('[SPE] classificheGironi chiavi:', _chiavi);
+  const _girAL = _chiavi.filter(k => /^GIRONE [A-Z]$/.test(k));
+  console.log('[SPE] gironi A-L trovati:', _girAL);
+  _girAL.forEach(k => {
+    const cl = classificheGironi[k];
+    console.log('[SPE]', k, '→', cl?.length, 'squadre, 2ª:', cl?.[1]?.sq?.nome, 'pts:', cl?.[1]?.pts, 'g:', cl?.[1]?.g);
+  });
+
   // Classifiche dai gironi A-L (punti e stats reali)
   const seconde = _buildListaSpeciale(1, null);
   const terze   = _buildListaSpeciale(2, null);
   const quarte  = _buildListaSpeciale(3, null);
+  console.log('[SPE] seconde trovate:', seconde.length, seconde.map(s=>s.sq?.nome+':'+s.pts));
 
   if (seconde.length >= 2)
     html += _renderClassificaSpeciale(seconde, '🥈 Classifica Migliori Seconde', '#d97706', '#fffbeb', seconde.length);
