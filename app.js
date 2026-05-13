@@ -865,15 +865,20 @@ async function renderClassifiche() {
     return;
   }
 
-  // Calcola tutte le classifiche
+  // Calcola tutte le classifiche (gironi A-L, 1-10, finali — tutti tranne CLASSIFICA)
   const classificheGironi = {};
   let html = '';
   for (const g of gironi) {
-    // I gironi CLASSIFICA MIGLIORI non hanno partite tra loro — skip calcolo normale
-    if (/CLASSIFICA/i.test(g.nome)) continue;
-    if (g.partite.length <= 1) continue;
-    const cl = calcGironeClassifica(g);
+    if (/CLASSIFICA/i.test(g.nome)) continue; // gironi virtuali — skip
+    // Includi anche gironi con placeholder già risolti (es. gironi 1-10 con squadre reali)
+    const partiteGiocate = g.partite.filter(p => p.giocata && p.home_id && p.away_id);
+    if (!partiteGiocate.length) continue;
+    // Filtra solo squadre reali (non placeholder)
+    const squadreReali = g.squadre ? g.squadre.filter(s => !_isPlaceholder(s.nome)) : [];
+    if (squadreReali.length < 2) continue;
+    const cl = calcGironeClassifica({ squadre: squadreReali, partite: g.partite });
     classificheGironi[g.nome.toUpperCase().trim()] = cl;
+    if (g.partite.length <= 1) continue; // non mostrare nella UI se ha solo 1 partita
     const played = g.partite.filter(p=>p.giocata).length;
     html += `<div class="card" style="margin-bottom:8px;">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
@@ -936,22 +941,21 @@ async function renderClassifiche() {
     </div>`;
   }
 
-  // Raccoglie stats dalla posizione pos di ogni girone
-  // filtroNomi = array di nomi esatti (es ['GIRONE 1','GIRONE 2','GIRONE 3'])
-  // filtroNomi = null → prende tutti i gironi qualifiche (nome singola lettera A-L)
+  // Raccoglie la N-esima classificata (pos=1→seconda, 2→terza, 3→quarta)
+  // dai gironi specificati in filtroNomi (uppercase), oppure da tutti i gironi A-L
   function _buildListaSpeciale(pos, filtroNomi) {
     const lista = [];
-    const chiavi = Object.keys(classificheGironi);
-    const chiaviFiltrate = filtroNomi
-      ? filtroNomi.map(n => n.toUpperCase()).filter(n => chiavi.includes(n))
-      : chiavi.filter(k => /^GIRONE [A-Z]$/.test(k));
+    const chiavi = filtroNomi
+      ? filtroNomi.map(n => n.toUpperCase())
+      : Object.keys(classificheGironi).filter(k => /^GIRONE [A-Z]$/.test(k));
 
-    for (const chiave of chiaviFiltrate) {
+    for (const chiave of chiavi) {
       const cl = classificheGironi[chiave];
-      if (!cl || cl.length <= pos || !cl[pos]?.g) continue;
-      const row = cl[pos];
+      if (!cl || cl.length <= pos) continue;
+      const row = cl[pos]; // pos=1→seconda (indice 1), pos=2→terza ecc.
+      if (!row?.sq || !row.g) continue;
       lista.push({
-        girone: chiave.replace('GIRONE ',''),
+        girone: chiave.replace(/^GIRONE /, ''),
         sq: row.sq, pts: row.pts, g: row.g, v: row.v,
         p: row.p, s: row.s, gf: row.gf, gs: row.gs, dr: row.gf - row.gs
       });
