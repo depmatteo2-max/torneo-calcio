@@ -916,9 +916,9 @@ async function renderClassifiche() {
       };
     });
 
-    // Render girone normale
-    if (g.partite.length <= 1) continue;
+    // Render girone normale solo se ha almeno una partita giocata
     const played = g.partite.filter(p => p.giocata).length;
+    if (played === 0) continue;
     html += `<div class="card" style="margin-bottom:8px;">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
       <table class="standings-table">
@@ -986,11 +986,11 @@ async function renderClassifiche() {
     for (const sq of (gVirt.squadre||[])) {
       if (!sq || !sq.id || _isPlaceholder(sq.nome)) continue;
       const stat = statsPerSquadra[sq.id];
-      if (stat) {
+      // Solo se la squadra ha giocato almeno una partita
+      if (stat && stat.g > 0) {
         lista.push({ sq, pts: stat.pts, g: stat.g, v: stat.v, p: stat.p,
           s: stat.s, gf: stat.gf, gs: stat.gs, girone: stat.gironeNome.replace('GIRONE ','') });
       }
-      // Se stat non trovata (risultati non ancora inseriti): non mostrare — lista vuota = nessun render
     }
     lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf);
     return lista;
@@ -1005,6 +1005,7 @@ async function renderClassifiche() {
       if (!cl || cl.length <= pos) continue;
       const row = cl[pos];
       if (!row?.sq) continue;
+      if (row.g === 0) continue; // salta squadre senza partite giocate
       lista.push({ sq: row.sq, pts: row.pts, g: row.g, v: row.v, p: row.p,
         s: row.s, gf: row.gf, gs: row.gs, girone: k.replace('GIRONE ','') });
     }
@@ -1052,7 +1053,11 @@ async function renderClassifiche() {
   }
   if (t456.length) html += _htmlSpeciale(t456, '🥉 Migliori Terze Gironi 4-5-6', '#7c3aed');
 
-  el.innerHTML = html || '<div class="empty-state">Nessun girone trovato.</div>';
+  if (!html && !sec.length && !ter.length && !qua.length && !s123.length && !t123.length && !s456.length && !t456.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato ancora inserito.<br><span style="font-size:13px;color:var(--testo-xs);">Le classifiche appariranno dopo le prime partite.</span></div>';
+  } else {
+    el.innerHTML = html;
+  }
 }
 
 
