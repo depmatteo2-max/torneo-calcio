@@ -121,5 +121,3 @@ renderClassifiche = async function() {
 
   el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
 };
-renderClassifiche();
-console.log('✅ PATCH APPLICATA');
