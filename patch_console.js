@@ -19,16 +19,19 @@ renderClassifiche = async function() {
     var g = gironi[gi];
     if (isClassif(g)) continue;
 
-    // Squadre valide
+    // Squadre valide (solo primo passaggio - senza placeholder)
     var sqMap = {};
     for (var pi=0; pi<g.partite.length; pi++) {
       var p = g.partite[pi];
       if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
       if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
     }
-    var sq = (g.squadre||[]).filter(function(s){return s&&s.id&&!isPlaceh(s.nome);});
-    if (sq.length < 2) sq = Object.values(sqMap);
+    var sq = Object.values(sqMap);
+    if (sq.length < 2) sq = (g.squadre||[]).filter(function(s){return s&&s.id&&!isPlaceh(s.nome);});
     if (sq.length < 2) continue;
+    // Se non abbiamo tutte le squadre, salta - sarà il secondo passaggio a gestirlo
+    var expectedSq = 4; // ogni girone ha 4 squadre
+    if (sq.length < expectedSq) continue;
 
     var cl = calcGironeClassifica({squadre:sq, partite:g.partite});
     if (!cl.length) continue;
@@ -158,7 +161,9 @@ renderClassifiche = async function() {
     var g2 = gironi[gi2];
     if (isClassif(g2)) continue;
     var key2 = g2.nome.toUpperCase().trim();
-    if (classificheGironi[key2]) continue; // già processato
+    // Salta solo se già processato con tutte le squadre (4)
+    var existing = classificheGironi[key2];
+    if (existing && existing.length >= 4) continue;
 
     // Prova a risolvere le squadre dai placeholder
     var sqMap2 = {};
