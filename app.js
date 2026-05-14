@@ -978,6 +978,7 @@ async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  await _aggiornaResolver(STATE.activeCat);
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
   let tuttePartite = [];
@@ -1036,9 +1037,9 @@ async function renderRisultati() {
         ${p.inserito_da?`<span class="match-meta-author">✏️ ${p.inserito_da}</span>`:''}
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <div class="match-team">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>`;
+        <div class="match-team">${logoHTML(p.home,'sm')}<span>${_resolveNomePH(p.home?.nome)||'?'}</span></div>`;
     r += p.giocata ? `<div class="match-score">${p.gol_home} — ${p.gol_away}</div>` : `<div class="match-score pending">vs</div>`;
-    r += `<div class="match-team right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div></div>`;
+    r += `<div class="match-team right"><span>${_resolveNomePH(p.away?.nome)||'?'}</span>${logoHTML(p.away,'sm')}</div></div>`;
     if (mH.length||mA.length) {
       r += `<div class="match-scorers">`;
       mH.forEach(m=>r+=`<span class="scorer-chip">⚽ ${m.nome}${m.minuto?' '+m.minuto+"'":''}  ${p.home?.nome||''}</span>`);
@@ -3791,3 +3792,114 @@ async function resetCompleto() {
     await renderCurrentSection();
   } catch(e) { console.error(e); _simLog('❌ ' + e.message); toast('Errore: ' + e.message); }
 }
+
+// ── Risolve placeholder nei nomi squadra ─────────────────────────────────
+// Chiamata all'avvio e dopo ogni render di classifiche
+let _clGlobale = {}; // classificheGironi globale
+let _clSpecGlobale = {}; // classifiche speciali globale
+
+function _resolveNomePH(nome) {
+  if (!nome) return nome;
+  const m = String(nome).match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
+  if (!m) return nome;
+  const pos = parseInt(m[1]) - 1;
+  const gname = m[2].trim().toUpperCase();
+  const cl = _clGlobale[gname];
+  if (cl && cl[pos]?.sq) return cl[pos].sq.nome;
+  const sp = _clSpecGlobale[gname];
+  if (sp && sp[pos]?.sq) return sp[pos].sq.nome;
+  return nome;
+}
+
+async function _aggiornaResolver(categoriaId) {
+  try {
+    const gironi = await getGironiWithData(categoriaId);
+    const isPlaceh = s => !s || /^\d+[°\u00ba\u00b0]?\s/.test(s) || /^(miglior|peggior)/i.test(s);
+    const clG = {};
+    
+    // Primo passaggio: gironi con squadre reali
+    for (const g of gironi) {
+      const n = (g.nome||'').toLowerCase();
+      if (n.includes('classif') || n.includes('migliori')) continue;
+      const sqMap = {};
+      for (const p of g.partite) {
+        if (p.home?.id && !isPlaceh(p.home.nome)) sqMap[p.home.id] = p.home;
+        if (p.away?.id && !isPlaceh(p.away.nome)) sqMap[p.away.id] = p.away;
+      }
+      const sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      const cl = calcGironeClassifica({squadre: sq, partite: g.partite});
+      if (cl.length) clG[g.nome.toUpperCase().trim()] = cl;
+    }
+
+    // Classifiche speciali (seconde/terze/quarte) da gironi A-L
+    const sortFn = (a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf;
+    const keysAL = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
+    const clSp = {};
+    ['CLASSIFICA MIGLIORI SECONDE','CLASSIFICA MIGLIORI TERZE','CLASSIFICA MIGLIORI QUARTE'].forEach((nome, i) => {
+      const pos = i + 1;
+      const lista = [];
+      keysAL.forEach(k => { const cl=clG[k]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
+      lista.sort(sortFn);
+      clSp[nome] = lista;
+    });
+
+    // Resolver per classifiche speciali di fase 2 (123, 456)
+    const resolvePH = (nome) => {
+      if (!nome) return null;
+      const m2 = String(nome).match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
+      if (!m2) return null;
+      const pos2 = parseInt(m2[1]) - 1;
+      const gn = m2[2].trim().toUpperCase();
+      const cl2 = clG[gn]; if (cl2?.[pos2]?.sq) return cl2[pos2].sq;
+      const sp2 = clSp[gn]; if (sp2?.[pos2]?.sq) return sp2[pos2].sq;
+      return null;
+    };
+
+    // Secondo passaggio: gironi 1-10 con placeholder
+    for (const g of gironi) {
+      const n = (g.nome||'').toLowerCase();
+      if (n.includes('classif') || n.includes('migliori')) continue;
+      const key = g.nome.toUpperCase().trim();
+      if (clG[key]?.length >= 4) continue;
+      const sqMap2 = {};
+      for (const p of g.partite) {
+        const hSq = (p.home && !isPlaceh(p.home.nome)) ? p.home : resolvePH(p.home?.nome);
+        const aSq = (p.away && !isPlaceh(p.away.nome)) ? p.away : resolvePH(p.away?.nome);
+        if (hSq?.id) sqMap2[hSq.id] = hSq;
+        if (aSq?.id) sqMap2[aSq.id] = aSq;
+      }
+      const sq2 = Object.values(sqMap2);
+      if (sq2.length < 2) continue;
+      const partiteRisolte = g.partite.map(p => ({
+        home_id: ((p.home && !isPlaceh(p.home.nome)) ? p.home : resolvePH(p.home?.nome))?.id,
+        away_id: ((p.away && !isPlaceh(p.away.nome)) ? p.away : resolvePH(p.away?.nome))?.id,
+        gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata
+      }));
+      const cl2 = calcGironeClassifica({squadre: sq2, partite: partiteRisolte});
+      if (cl2.length) clG[key] = cl2;
+    }
+
+    // Classifiche speciali 123 e 456
+    ['CLASSIFICA MIGLIORI SECONDE 123','CLASSIFICA MIGLIORI TERZE 123'].forEach((nome, i) => {
+      const pos = i + 1;
+      const chiavi = ['GIRONE 1','GIRONE 2','GIRONE 3'];
+      const lista = [];
+      chiavi.forEach(k => { const cl=clG[k.toUpperCase()]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
+      lista.sort(sortFn);
+      clSp[nome] = lista;
+    });
+    ['CLASSIFICA MIGLIORI SECONDE 456','CLASSIFICA MIGLIORI TERZE 456'].forEach((nome, i) => {
+      const pos = i + 1;
+      const chiavi = ['GIRONE 4','GIRONE 5','GIRONE 6'];
+      const lista = [];
+      chiavi.forEach(k => { const cl=clG[k.toUpperCase()]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
+      lista.sort(sortFn);
+      clSp[nome] = lista;
+    });
+
+    _clGlobale = clG;
+    _clSpecGlobale = clSp;
+  } catch(e) { console.warn('_aggiornaResolver:', e); }
+}
+
