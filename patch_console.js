@@ -1,4 +1,3 @@
-
 renderClassifiche = async function() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
@@ -76,10 +75,23 @@ renderClassifiche = async function() {
 
   var buildPos = function(pos, chiavi) {
     var lista=[];
-    (chiavi||Object.keys(classificheGironi).filter(function(k){return /^GIRONE [A-Z]$/.test(k);})).forEach(function(k){
-      var cl=classificheGironi[k]; if(!cl||cl.length<=pos) return;
+    var keys = chiavi || Object.keys(classificheGironi).filter(function(k){return /^GIRONE [A-Z]$/.test(k);});
+    // Also try fuzzy match for numbered gironi (GIRONE 1, GIRONE 2 etc)
+    var resolveKey = function(wanted) {
+      if(classificheGironi[wanted]) return wanted;
+      // Try case variations
+      var up = wanted.toUpperCase().trim();
+      if(classificheGironi[up]) return up;
+      // Try finding partial match
+      var found = Object.keys(classificheGironi).find(function(k){ return k.toUpperCase().replace(/\s+/g,' ').trim() === up; });
+      return found || null;
+    };
+    keys.forEach(function(k){
+      var rk = resolveKey(k);
+      if(!rk) return;
+      var cl=classificheGironi[rk]; if(!cl||cl.length<=pos) return;
       var row=cl[pos]; if(!row||!row.sq||row.g===0) return;
-      lista.push({sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,girone:k.replace('GIRONE ','')});
+      lista.push({sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,girone:rk.replace('GIRONE ','')});
     });
     lista.sort(function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;});
     return lista;
@@ -102,6 +114,8 @@ renderClassifiche = async function() {
     var r=buildPos(pos,chiavi); return r.length?r:buildGironeVirt(nomeConj);
   };
 
+  // Debug: show available girone keys
+  console.log('[CLASSIF] Chiavi disponibili:', Object.keys(classificheGironi).join(', '));
   var sec=getList(1,null,'migliori seconde');
   var ter=getList(2,null,'migliori terze');
   var qua=getList(3,null,'migliori quarte');
