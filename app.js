@@ -948,36 +948,36 @@ async function renderClassifiche() {
 
   function _htmlSpeciale(lista, titolo, colore) {
     if (!lista.length) return '';
-    return `<div class="card" style="margin-bottom:8px;border-left:4px solid ${colore};">
-      <div class="card-title" style="color:${colore};">${titolo}
-        <span class="badge badge-gray">${lista.length} squadre</span>
-      </div>
-      <table class="standings-table">
-        <thead><tr>
-          <th style="text-align:center;">#</th>
-          <th colspan="2">Squadra</th>
-          <th>G.ne</th>
-          <th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th>
-        </tr></thead>
-        <tbody>
-          ${lista.map((row,idx) => {
-            const dr = row.gf - row.gs;
-            return `<tr class="${idx===0?'qualifies':''}">
-              <td style="text-align:center;font-weight:800;color:${colore};">${idx+1}</td>
-              <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
-              <td style="font-weight:600;">${row.sq.nome}</td>
-              <td style="font-size:11px;color:var(--testo-xs);">${row.girone||''}</td>
-              <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-              <td class="${dr>0?'diff-pos':dr<0?'diff-neg':''}">${dr>0?'+':''}${dr}</td>
-              <td class="pts-col">${row.pts}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-      <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
-        Spareggio: punti \u2192 diff. reti \u2192 gol fatti
-      </div>
-    </div>`;
+    let rows = '';
+    lista.forEach((row, idx) => {
+      const dr = row.gf - row.gs;
+      rows += '<tr class="' + (idx===0?'qualifies':'') + '">' +
+        '<td style="text-align:center;font-weight:800;color:' + colore + ';">' + (idx+1) + '</td>' +
+        '<td style="padding-right:4px;">' + logoHTML(row.sq,'sm') + '</td>' +
+        '<td style="font-weight:600;">' + row.sq.nome + '</td>' +
+        '<td style="font-size:11px;color:var(--testo-xs);">' + (row.girone||'') + '</td>' +
+        '<td>' + row.g + '</td><td>' + row.v + '</td><td>' + row.p + '</td><td>' + row.s + '</td>' +
+        '<td class="' + (dr>0?'diff-pos':dr<0?'diff-neg':'') + '">' + (dr>0?'+':'') + dr + '</td>' +
+        '<td class="pts-col">' + row.pts + '</td>' +
+        '</tr>';
+    });
+    return '<div class="card" style="margin-bottom:8px;border-left:4px solid ' + colore + ';">' +
+      '<div class="card-title" style="color:' + colore + ';">' + titolo +
+        '<span class="badge badge-gray">' + lista.length + ' squadre</span>' +
+      '</div>' +
+      '<table class="standings-table">' +
+        '<thead><tr>' +
+          '<th style="text-align:center;">#</th>' +
+          '<th colspan="2">Squadra</th>' +
+          '<th>G.ne</th>' +
+          '<th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+      '<div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">' +
+        'Spareggio: punti → diff. reti → gol fatti' +
+      '</div>' +
+    '</div>';
   }
 
   // Costruisce lista speciale da un girone CLASSIFICA virtuale
