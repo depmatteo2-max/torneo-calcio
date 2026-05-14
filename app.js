@@ -850,6 +850,8 @@ async function renderClassifiche() {
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
+  // DEBUG — rimuovere dopo
+  console.table(gironi.map(g => ({ nome: g.nome, npt: g.partite.length, nsq: g.squadre.length, isClassif: /classif|migliori/i.test(g.nome) })));
 
   if (!gironi.length) {
     const ko = await dbGetKnockout(STATE.activeCat);
