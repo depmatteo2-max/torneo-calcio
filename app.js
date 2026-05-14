@@ -848,10 +848,11 @@ async function renderClassifiche() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  // Forza pulizia cache per dati aggiornati
+  if (typeof _cacheInvalid === 'function') _cacheInvalid('gwd_');
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
-  // DEBUG — rimuovere dopo
-  console.table(gironi.map(g => ({ nome: g.nome, npt: g.partite.length, nsq: g.squadre.length, isClassif: /classif|migliori/i.test(g.nome) })));
+  console.log('[RC-NEW] gironi totali:', gironi.length, 'classif:', gironi.filter(g=>/classif|migliori/i.test((g.nome||'').toLowerCase())).length);
 
   if (!gironi.length) {
     const ko = await dbGetKnockout(STATE.activeCat);
@@ -884,7 +885,9 @@ async function renderClassifiche() {
   let html = '';
 
   for (const g of gironi) {
-    if (_isGironeClassifica(g)) continue;
+    const _skip = _isGironeClassifica(g);
+    console.log('[RC-LOOP]', g.nome, 'skip:', _skip, 'npt:', g.partite.length);
+    if (_skip) continue;
 
     // Costruisce elenco squadre: prima da g.squadre, fallback dalle partite
     let squadreValide = (g.squadre||[]).filter(s => s && s.id && !_isPlaceholder(s.nome));
