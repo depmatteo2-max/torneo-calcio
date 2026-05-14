@@ -260,21 +260,21 @@ renderClassifiche = async function() {
 // ── OVERRIDE renderRisultati — risolve placeholder nei nomi ──────────────
 var _origRenderRisultati = renderRisultati;
 renderRisultati = async function() {
+  // Assicura che le classifiche siano calcolate (popola window._resolveNome)
+  if (!window._resolveNome) {
+    try { await renderClassifiche(); } catch(e) {}
+  }
   await _origRenderRisultati.apply(this, arguments);
-  // Dopo il render, sostituisce i placeholder nei nomi squadra
+  // Sostituisce i placeholder nei nomi squadra
   var resolve = window._resolveNome;
   if (!resolve) return;
   var el = document.getElementById('sec-risultati');
   if (!el) return;
-  // Trova tutti gli span con nomi squadra e sostituisce i placeholder
   el.querySelectorAll('.match-team span').forEach(function(span) {
     var txt = span.textContent.trim();
-    if (/^\d+[°º]?\s+\S/.test(txt)) {
-      span.textContent = resolve(txt);
+    if (/^\d+[°\u00ba\u00b0]?\s+\S/.test(txt)) {
+      var resolved = resolve(txt);
+      if (resolved !== txt) span.textContent = resolved;
     }
-  });
-  // Aggiorna anche i titoli delle partite non ancora risolti
-  el.querySelectorAll('.match-meta-girone').forEach(function(span) {
-    // non tocchiamo il nome del girone
   });
 };
