@@ -845,220 +845,128 @@ function _riepilogoBanner(section) {
 //  PUBLIC: CLASSIFICHE
 // ============================================================
 async function renderClassifiche() {
-  const el = document.getElementById('sec-classifiche');
+  var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
-  // Forza pulizia cache per dati aggiornati
+  el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
   if (typeof _cacheInvalid === 'function') _cacheInvalid('gwd_');
-  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
-  const gironi = await getGironiWithData(STATE.activeCat);
-  console.log('[RC-NEW] gironi totali:', gironi.length, 'classif:', gironi.filter(g=>/classif|migliori/i.test((g.nome||'').toLowerCase())).length);
+  var gironi = await getGironiWithData(STATE.activeCat);
+  var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
-  if (!gironi.length) {
-    const ko = await dbGetKnockout(STATE.activeCat);
-    if (ko.length) {
-      STATE.currentSection = 'tabellone';
-      document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b => b.classList.remove('active'));
-      const btnTab = document.querySelector('[data-section="tabellone"]');
-      if (btnTab) btnTab.classList.add('active');
-      document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
-      const secTab = document.getElementById('sec-tabellone');
-      if (secTab) secTab.classList.add('active');
-      await renderTabellone(); return;
+  var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
+  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s); };
+
+  // Costruisce statsPerSquadra da gironi normali
+  var statsPerSquadra = {};
+  var classificheGironi = {};
+  var html = '';
+
+  for (var gi=0; gi<gironi.length; gi++) {
+    var g = gironi[gi];
+    if (isClassif(g)) continue;
+
+    // Squadre valide
+    var sqMap = {};
+    for (var pi=0; pi<g.partite.length; pi++) {
+      var p = g.partite[pi];
+      if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
+      if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
     }
-    el.innerHTML = '<div class="empty-state">Nessun girone trovato.</div>'; return;
-  }
+    var sq = (g.squadre||[]).filter(function(s){return s&&s.id&&!isPlaceh(s.nome);});
+    if (sq.length < 2) sq = Object.values(sqMap);
+    if (sq.length < 2) continue;
 
-  // Identifica gironi CLASSIFICA (virtuali, senza partite proprie significative)
-  // Un girone è "classifica speciale" se il nome contiene classific/migliori
-  // OPPURE se ha 0 partite tra squadre reali (tutte con home_id/away_id null o placeholder)
-  const _isGironeClassifica = g => {
-    const n = (g.nome||'').toLowerCase();
-    return n.includes('classif') || n.includes('migliori');
-  };
-
-  // Costruisce mappa squadra_id → stats reali da tutti i gironi normali
-  // Calcola classificheGironi e statsPerSquadra in un unico passaggio
-  const classificheGironi = {};
-  const statsPerSquadra = {}; // squadra_id → { sq, pts, g, v, p, s, gf, gs, gironeNome }
-
-  let html = '';
-
-  for (const g of gironi) {
-    const _skip = _isGironeClassifica(g);
-    console.log('[RC-LOOP]', g.nome, 'skip:', _skip, 'npt:', g.partite.length);
-    if (_skip) continue;
-
-    // Costruisce elenco squadre: prima da g.squadre, fallback dalle partite
-    let squadreValide = (g.squadre||[]).filter(s => s && s.id && !_isPlaceholder(s.nome));
-    if (squadreValide.length < 2) {
-      const sqMap = {};
-      for (const p of g.partite) {
-        if (p.home && p.home.id && !_isPlaceholder(p.home.nome)) sqMap[p.home.id] = p.home;
-        if (p.away && p.away.id && !_isPlaceholder(p.away.nome)) sqMap[p.away.id] = p.away;
-      }
-      squadreValide = Object.values(sqMap);
-    }
-    if (squadreValide.length < 2) continue;
-
-    const cl = calcGironeClassifica({ squadre: squadreValide, partite: g.partite });
+    var cl = calcGironeClassifica({squadre:sq, partite:g.partite});
     if (!cl.length) continue;
-    const key = g.nome.toUpperCase().trim();
+    var key = g.nome.toUpperCase().trim();
     classificheGironi[key] = cl;
 
-    // Salva stats per ogni squadra (per le classifiche speciali)
-    cl.forEach((row, idx) => {
-      if (!row.sq || !row.sq.id) return;
-      statsPerSquadra[row.sq.id] = {
-        sq: row.sq, pts: row.pts, g: row.g, v: row.v,
-        p: row.p, s: row.s, gf: row.gf, gs: row.gs,
-        pos: idx, gironeNome: g.nome.toUpperCase().trim()
-      };
+    cl.forEach(function(row,idx){
+      if (!row.sq||!row.sq.id) return;
+      statsPerSquadra[row.sq.id] = {sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,gironeNome:key};
     });
 
-    // Render girone normale solo se ha almeno una partita giocata
-    const played = g.partite.filter(p => p.giocata).length;
-    if (played === 0) continue;
-    html += `<div class="card" style="margin-bottom:8px;">
-      <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
-      <table class="standings-table">
-        <thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead>
-        <tbody>`;
-    cl.forEach((row, idx) => {
-      const q = idx < (cat?.qualificate||1);
-      const diff = row.gf - row.gs;
-      html += `<tr class="${q?'qualifies':''}">
-        <td><span class="${q?'q-dot':'nq-dot'}"></span></td>
-        <td style="padding-right:4px;">${logoHTML(row.sq,'sm')}</td>
-        <td>${row.sq.nome}</td>
-        <td>${row.g}</td><td>${row.v}</td><td>${row.p}</td><td>${row.s}</td>
-        <td class="${diff>0?'diff-pos':diff<0?'diff-neg':''}">${diff>0?'+':''}${diff}</td>
-        <td class="pts-col">${row.pts}</td></tr>`;
+    var played = g.partite.filter(function(p){return p.giocata;}).length;
+    if (played===0) continue;
+
+    html += '<div class="card" style="margin-bottom:8px;">';
+    html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
+    html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
+    cl.forEach(function(row,idx){
+      var q=idx<(cat&&cat.qualificate||1);
+      var diff=row.gf-row.gs;
+      html += '<tr class="'+(q?'qualifies':'')+'"><td><span class="'+(q?'q-dot':'nq-dot')+'"></span></td>';
+      html += '<td>'+logoHTML(row.sq,'sm')+'</td><td>'+row.sq.nome+'</td>';
+      html += '<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
+      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'>'+(diff>0?'+':'')+diff+'</td>';
+      html += '<td class="pts-col">'+row.pts+'</td></tr>';
     });
-    html += `</tbody></table>
-      <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
-        Spareggio: punti \u2192 scontro diretto \u2192 diff. reti \u2192 gol fatti \u2192 rigori
-      </div></div>`;
+    html += '</tbody></table></div>';
   }
 
-  // ── CLASSIFICHE SPECIALI ──────────────────────────────────────────────────
-  // Legge i gironi CLASSIFICA dal DB: le loro g.squadre sono già le squadre reali
-  // nell'ordine corretto (verificaEGeneraTriangolari le ha già ordinate).
-  // I punti li prendiamo da statsPerSquadra costruito sopra.
-
-  function _htmlSpeciale(lista, titolo, colore) {
+  // Classifiche speciali
+  var mkSpeciale = function(lista, titolo, colore) {
     if (!lista.length) return '';
-    let rows = '';
-    lista.forEach((row, idx) => {
-      const dr = row.gf - row.gs;
-      rows += '<tr class="' + (idx===0?'qualifies':'') + '">' +
-        '<td style="text-align:center;font-weight:800;color:' + colore + ';">' + (idx+1) + '</td>' +
-        '<td style="padding-right:4px;">' + logoHTML(row.sq,'sm') + '</td>' +
-        '<td style="font-weight:600;">' + row.sq.nome + '</td>' +
-        '<td style="font-size:11px;color:var(--testo-xs);">' + (row.girone||'') + '</td>' +
-        '<td>' + row.g + '</td><td>' + row.v + '</td><td>' + row.p + '</td><td>' + row.s + '</td>' +
-        '<td class="' + (dr>0?'diff-pos':dr<0?'diff-neg':'') + '">' + (dr>0?'+':'') + dr + '</td>' +
-        '<td class="pts-col">' + row.pts + '</td>' +
-        '</tr>';
+    var rows='';
+    lista.forEach(function(row,idx){
+      var dr=row.gf-row.gs;
+      rows+='<tr class="'+(idx===0?'qualifies':'')+'"><td style="text-align:center;font-weight:800;color:'+colore+';">'+(idx+1)+'</td>';
+      rows+='<td>'+logoHTML(row.sq,'sm')+'</td><td style="font-weight:600;">'+row.sq.nome+'</td>';
+      rows+='<td style="font-size:11px;color:var(--testo-xs);">'+(row.girone||'')+'</td>';
+      rows+='<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
+      rows+='<td class="'+(dr>0?'diff-pos':dr<0?'diff-neg':'')+'">'+( dr>0?'+':'')+dr+'</td>';
+      rows+='<td class="pts-col">'+row.pts+'</td></tr>';
     });
-    return '<div class="card" style="margin-bottom:8px;border-left:4px solid ' + colore + ';">' +
-      '<div class="card-title" style="color:' + colore + ';">' + titolo +
-        '<span class="badge badge-gray">' + lista.length + ' squadre</span>' +
-      '</div>' +
-      '<table class="standings-table">' +
-        '<thead><tr>' +
-          '<th style="text-align:center;">#</th>' +
-          '<th colspan="2">Squadra</th>' +
-          '<th>G.ne</th>' +
-          '<th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th>' +
-        '</tr></thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>' +
-      '<div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">' +
-        'Spareggio: punti → diff. reti → gol fatti' +
-      '</div>' +
-    '</div>';
-  }
+    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+colore+';"><div class="card-title" style="color:'+colore+';">'+titolo+'<span class="badge badge-gray">'+lista.length+' squadre</span></div><table class="standings-table"><thead><tr><th>#</th><th colspan="2">Squadra</th><th>G.ne</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  };
 
-  // Costruisce lista speciale da un girone CLASSIFICA virtuale
-  function _buildDaGirone(gVirt) {
-    const lista = [];
-    for (const sq of (gVirt.squadre||[])) {
-      if (!sq || !sq.id || _isPlaceholder(sq.nome)) continue;
-      const stat = statsPerSquadra[sq.id];
-      // Solo se la squadra ha giocato almeno una partita
-      if (stat && stat.g > 0) {
-        lista.push({ sq, pts: stat.pts, g: stat.g, v: stat.v, p: stat.p,
-          s: stat.s, gf: stat.gf, gs: stat.gs, girone: stat.gironeNome.replace('GIRONE ','') });
-      }
-    }
-    lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf);
+  var buildPos = function(pos, chiavi) {
+    var lista=[];
+    (chiavi||Object.keys(classificheGironi).filter(function(k){return /^GIRONE [A-Z]$/.test(k);})).forEach(function(k){
+      var cl=classificheGironi[k]; if(!cl||cl.length<=pos) return;
+      var row=cl[pos]; if(!row||!row.sq||row.g===0) return;
+      lista.push({sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,girone:k.replace('GIRONE ','')});
+    });
+    lista.sort(function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;});
     return lista;
-  }
+  };
 
-  // Costruisce lista speciale da classificheGironi (pos = 0-based)
-  function _buildSpeciale(pos, filtroNomi) {
-    const chiavi = filtroNomi || Object.keys(classificheGironi).filter(k => /^GIRONE [A-Z]$/.test(k));
-    const lista = [];
-    for (const k of chiavi) {
-      const cl = classificheGironi[k];
-      if (!cl || cl.length <= pos) continue;
-      const row = cl[pos];
-      if (!row?.sq) continue;
-      if (row.g === 0) continue; // salta squadre senza partite giocate
-      lista.push({ sq: row.sq, pts: row.pts, g: row.g, v: row.v, p: row.p,
-        s: row.s, gf: row.gf, gs: row.gs, girone: k.replace('GIRONE ','') });
-    }
-    lista.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf);
+  var buildGironeVirt = function(nomeConj) {
+    var gv=gironi.find(function(g){return isClassif(g)&&(g.nome||'').toLowerCase().includes(nomeConj.toLowerCase());});
+    if(!gv) return [];
+    var lista=[];
+    (gv.squadre||[]).forEach(function(sq){
+      if(!sq||!sq.id||isPlaceh(sq.nome)) return;
+      var stat=statsPerSquadra[sq.id];
+      if(stat&&stat.g>0) lista.push({sq:stat.sq,pts:stat.pts,g:stat.g,v:stat.v,p:stat.p,s:stat.s,gf:stat.gf,gs:stat.gs,girone:stat.gironeNome.replace('GIRONE ','')});
+    });
+    lista.sort(function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;});
     return lista;
-  }
+  };
 
-  // Trova il girone CLASSIFICA nel DB per nome (confronto flessibile)
-  const _trovaCl = nomeParte => gironi.find(g => {
-    const n = (g.nome||'').toLowerCase();
-    return _isGironeClassifica(g) && n.includes(nomeParte.toLowerCase());
-  });
+  var getList = function(pos, chiavi, nomeConj) {
+    var r=buildPos(pos,chiavi); return r.length?r:buildGironeVirt(nomeConj);
+  };
 
-  // Helper: usa _buildSpeciale se ha dati, altrimenti legge dal girone virtuale nel DB
-  function _getSpeciale(pos, filtroNomi, nomeVirtuale) {
-    const fromSpec = _buildSpeciale(pos, filtroNomi);
-    if (fromSpec.length) return fromSpec;
-    const gv = _trovaCl(nomeVirtuale);
-    return gv ? _buildDaGirone(gv) : [];
-  }
+  var sec=getList(1,null,'migliori seconde');
+  var ter=getList(2,null,'migliori terze');
+  var qua=getList(3,null,'migliori quarte');
+  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde','#d97706');
+  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze','#78716c');
+  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte','#6366f1');
 
-  // Classifiche da gironi A-L (qualifiche)
-  const sec = _getSpeciale(1, null, 'seconde');
-  const ter = _getSpeciale(2, null, 'terze');
-  const qua = _getSpeciale(3, null, 'quarte');
-  if (sec.length) html += _htmlSpeciale(sec, '🥈 Classifica Migliori Seconde', '#d97706');
-  if (ter.length) html += _htmlSpeciale(ter, '🥉 Classifica Migliori Terze', '#78716c');
-  if (qua.length) html += _htmlSpeciale(qua, '4\ufe0f\u20e3 Classifica Migliori Quarte', '#6366f1');
+  var s123=getList(1,['GIRONE 1','GIRONE 2','GIRONE 3'],'seconde 123');
+  var t123=getList(2,['GIRONE 1','GIRONE 2','GIRONE 3'],'terze 123');
+  if(s123.length) html+=mkSpeciale(s123,'🥈 Migliori Seconde Gironi 1-2-3','#0891b2');
+  if(t123.length) html+=mkSpeciale(t123,'🥉 Migliori Terze Gironi 1-2-3','#0891b2');
 
-  // Classifiche gironi 1-2-3
-  const s123 = _getSpeciale(1, ['GIRONE 1','GIRONE 2','GIRONE 3'], 'seconde 123');
-  const t123 = _getSpeciale(2, ['GIRONE 1','GIRONE 2','GIRONE 3'], 'terze 123');
-  if (s123.length) {
-    html += `<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">\ud83c\udfc6 Champions League \u2014 Gironi 1-2-3</div>`;
-    html += _htmlSpeciale(s123, '🥈 Migliori Seconde Gironi 1-2-3', '#0891b2');
-  }
-  if (t123.length) html += _htmlSpeciale(t123, '🥉 Migliori Terze Gironi 1-2-3', '#0891b2');
+  var s456=getList(1,['GIRONE 4','GIRONE 5','GIRONE 6'],'seconde 456');
+  var t456=getList(2,['GIRONE 4','GIRONE 5','GIRONE 6'],'terze 456');
+  if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
+  if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
 
-  // Classifiche gironi 4-5-6
-  const s456 = _getSpeciale(1, ['GIRONE 4','GIRONE 5','GIRONE 6'], 'seconde 456');
-  const t456 = _getSpeciale(2, ['GIRONE 4','GIRONE 5','GIRONE 6'], 'terze 456');
-  if (s456.length) {
-    html += `<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;">\ud83c\udf0d Champions Silver/Bronze \u2014 Gironi 4-5-6</div>`;
-    html += _htmlSpeciale(s456, '🥈 Migliori Seconde Gironi 4-5-6', '#7c3aed');
-  }
-  if (t456.length) html += _htmlSpeciale(t456, '🥉 Migliori Terze Gironi 4-5-6', '#7c3aed');
+  el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
+};
 
-  if (!html && !sec.length && !ter.length && !qua.length && !s123.length && !t123.length && !s456.length && !t456.length) {
-    el.innerHTML = '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato ancora inserito.<br><span style="font-size:13px;color:var(--testo-xs);">Le classifiche appariranno dopo le prime partite.</span></div>';
-  } else {
-    el.innerHTML = html;
-  }
-}
 
 
 
