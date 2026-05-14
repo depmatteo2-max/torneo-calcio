@@ -1,4 +1,3 @@
-
 renderClassifiche = async function() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
@@ -258,14 +257,60 @@ renderClassifiche = async function() {
 
 
 // ── OVERRIDE renderRisultati — risolve placeholder nei nomi ──────────────
+// Costruisce il resolver in modo autonomo senza toccare il DOM
+async function _buildResolverIfNeeded() {
+  if (window._resolveNome) return;
+  try {
+    var gironi = await getGironiWithData(STATE.activeCat);
+    var isPlacehR = function(s) { if(!s)return true; return /^\d+[°\u00ba\u00b0]?\s/.test(s)||/^(miglior|peggior)/i.test(s); };
+    var clG = {};
+    var clSp = {};
+    // Primo passaggio: gironi con squadre reali
+    for (var i=0; i<gironi.length; i++) {
+      var g = gironi[i];
+      var n = (g.nome||'').toLowerCase();
+      if (n.includes('classif')||n.includes('migliori')) continue;
+      var sqMap = {};
+      for (var j=0; j<g.partite.length; j++) {
+        var p = g.partite[j];
+        if (p.home&&p.home.id&&!isPlacehR(p.home.nome)) sqMap[p.home.id]=p.home;
+        if (p.away&&p.away.id&&!isPlacehR(p.away.nome)) sqMap[p.away.id]=p.away;
+      }
+      var sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      var cl = calcGironeClassifica({squadre:sq, partite:g.partite});
+      if (cl.length) clG[g.nome.toUpperCase().trim()] = cl;
+    }
+    // Classifiche speciali A-L
+    var keysAL = Object.keys(clG).filter(function(k){return /^GIRONE [A-Z]$/.test(k);});
+    var sortFn = function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;};
+    ['CLASSIFICA MIGLIORI SECONDE','CLASSIFICA MIGLIORI TERZE','CLASSIFICA MIGLIORI QUARTE'].forEach(function(nome, idx) {
+      var pos = idx + 1;
+      var lista = [];
+      keysAL.forEach(function(k){ var cl=clG[k]; if(cl&&cl[pos]&&cl[pos].g>0) lista.push(cl[pos]); });
+      lista.sort(sortFn);
+      clSp[nome] = lista;
+    });
+    // Funzione resolver
+    window._resolveNome = function(nome) {
+      if (!nome) return nome;
+      var m = (nome+'').match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
+      if (!m) return nome;
+      var pos = parseInt(m[1]) - 1;
+      var gname = m[2].trim().toUpperCase();
+      var cl = clG[gname];
+      if (cl && cl[pos] && cl[pos].sq) return cl[pos].sq.nome;
+      var sp = clSp[gname];
+      if (sp && sp[pos] && sp[pos].sq) return sp[pos].sq.nome;
+      return nome;
+    };
+  } catch(e) { console.warn('_buildResolverIfNeeded error:', e); }
+}
+
 var _origRenderRisultati = renderRisultati;
 renderRisultati = async function() {
-  // Assicura che le classifiche siano calcolate (popola window._resolveNome)
-  if (!window._resolveNome) {
-    try { await renderClassifiche(); } catch(e) {}
-  }
+  await _buildResolverIfNeeded();
   await _origRenderRisultati.apply(this, arguments);
-  // Sostituisce i placeholder nei nomi squadra
   var resolve = window._resolveNome;
   if (!resolve) return;
   var el = document.getElementById('sec-risultati');
