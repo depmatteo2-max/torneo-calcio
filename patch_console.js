@@ -237,5 +237,44 @@ renderClassifiche = async function() {
   if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
   if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
 
+  // Salva globalmente per renderRisultati
+  window._classificheGironi = classificheGironi;
+  window._clSpeciali = clSpeciali;
+  window._resolveNome = function(nome) {
+    if (!nome) return nome;
+    var m = (nome+'').match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
+    if (!m) return nome;
+    var pos = parseInt(m[1]) - 1;
+    var gname = m[2].trim().toUpperCase();
+    var cl = classificheGironi[gname];
+    if (cl && cl.length > pos && cl[pos] && cl[pos].sq) return cl[pos].sq.nome;
+    var sp = clSpeciali[gname];
+    if (sp && sp.length > pos && sp[pos] && sp[pos].sq) return sp[pos].sq.nome;
+    return nome;
+  };
+
   el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
+};
+
+
+// ── OVERRIDE renderRisultati — risolve placeholder nei nomi ──────────────
+var _origRenderRisultati = renderRisultati;
+renderRisultati = async function() {
+  await _origRenderRisultati.apply(this, arguments);
+  // Dopo il render, sostituisce i placeholder nei nomi squadra
+  var resolve = window._resolveNome;
+  if (!resolve) return;
+  var el = document.getElementById('sec-risultati');
+  if (!el) return;
+  // Trova tutti gli span con nomi squadra e sostituisce i placeholder
+  el.querySelectorAll('.match-team span').forEach(function(span) {
+    var txt = span.textContent.trim();
+    if (/^\d+[°º]?\s+\S/.test(txt)) {
+      span.textContent = resolve(txt);
+    }
+  });
+  // Aggiorna anche i titoli delle partite non ancora risolti
+  el.querySelectorAll('.match-meta-girone').forEach(function(span) {
+    // non tocchiamo il nome del girone
+  });
 };
