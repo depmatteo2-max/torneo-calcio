@@ -115,18 +115,43 @@ renderClassifiche = async function() {
     var r=buildPos(pos,chiavi); return r.length?r:buildGironeVirt(nomeConj);
   };
 
+  // Costruisce prima le classifiche speciali da A-L (seconde/terze/quarte)
+  // così possono essere usate per risolvere Gironi 4-10
+  var clSpeciali = {};
+  // Seconde da A-L
+  var keysAL = Object.keys(classificheGironi).filter(function(k){return /^GIRONE [A-Z]$/.test(k);});
+  var listaSec=[],listaTer=[],listaQua=[];
+  keysAL.forEach(function(k){
+    var cl=classificheGironi[k];
+    if(cl&&cl[1]&&cl[1].g>0) listaSec.push({rank:null,sq:cl[1].sq,pts:cl[1].pts,g:cl[1].g,v:cl[1].v,p:cl[1].p,s:cl[1].s,gf:cl[1].gf,gs:cl[1].gs});
+    if(cl&&cl[2]&&cl[2].g>0) listaTer.push({rank:null,sq:cl[2].sq,pts:cl[2].pts,g:cl[2].g,v:cl[2].v,p:cl[2].p,s:cl[2].s,gf:cl[2].gf,gs:cl[2].gs});
+    if(cl&&cl[3]&&cl[3].g>0) listaQua.push({rank:null,sq:cl[3].sq,pts:cl[3].pts,g:cl[3].g,v:cl[3].v,p:cl[3].p,s:cl[3].s,gf:cl[3].gf,gs:cl[3].gs});
+  });
+  var sortFn = function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;};
+  listaSec.sort(sortFn); listaTer.sort(sortFn); listaQua.sort(sortFn);
+  // Assegna rank e salva in clSpeciali
+  listaSec.forEach(function(r,i){r.rank=i+1;}); 
+  listaTer.forEach(function(r,i){r.rank=i+1;});
+  listaQua.forEach(function(r,i){r.rank=i+1;});
+  clSpeciali['CLASSIFICA MIGLIORI SECONDE'] = listaSec;
+  clSpeciali['CLASSIFICA MIGLIORI TERZE'] = listaTer;
+  clSpeciali['CLASSIFICA MIGLIORI QUARTE'] = listaQua;
+
   // SECONDO PASSAGGIO: gironi 1-10 e finali con placeholder
-  // Risolve i placeholder nelle partite usando classificheGironi già costruito
+  // Risolve placeholder come "3° CLASSIFICA MIGLIORI SECONDE" o "1° Girone A"
   var resolvePhName = function(nome) {
     if (!nome) return null;
-    // Pattern: "N° NOME GIRONE" -> prende posizione N dalla classifica di NOME GIRONE
     var m = nome.match(/^(\d+)[°º]?\s+(.+)$/i);
     if (!m) return null;
     var pos = parseInt(m[1]) - 1;
     var gname = m[2].trim().toUpperCase();
+    // Cerca prima in classificheGironi (gironi normali)
     var cl = classificheGironi[gname];
-    if (!cl || cl.length <= pos) return null;
-    return cl[pos].sq || null;
+    if (cl && cl.length > pos) return cl[pos].sq || null;
+    // Poi cerca in clSpeciali (classifiche speciali da A-L)
+    var sp = clSpeciali[gname] || clSpeciali[m[2].trim()];
+    if (sp && sp.length > pos) return sp[pos].sq || null;
+    return null;
   };
 
   for (var gi2=0; gi2<gironi.length; gi2++) {
@@ -179,21 +204,31 @@ renderClassifiche = async function() {
     html += '</tbody></table></div>';
   }
 
-  console.log('[CLASSIF] Chiavi dopo 2° passaggio:', Object.keys(classificheGironi).join(', '));
-  var sec=getList(1,null,'migliori seconde');
-  var ter=getList(2,null,'migliori terze');
-  var qua=getList(3,null,'migliori quarte');
-  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde','#d97706');
-  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze','#78716c');
-  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte','#6366f1');
+  // Mostra classifiche speciali da A-L
+  var fmtSp = function(lista) { return lista.map(function(r){ return {sq:r.sq,pts:r.pts,g:r.g,v:r.v,p:r.p,s:r.s,gf:r.gf,gs:r.gs,girone:''}; }); };
+  if(listaSec.length) html+=mkSpeciale(fmtSp(listaSec),'🥈 Classifica Migliori Seconde (Gironi A-L)','#d97706');
+  if(listaTer.length) html+=mkSpeciale(fmtSp(listaTer),'🥉 Classifica Migliori Terze (Gironi A-L)','#78716c');
+  if(listaQua.length) html+=mkSpeciale(fmtSp(listaQua),'4️⃣ Classifica Migliori Quarte (Gironi A-L)','#6366f1');
 
-  var s123=getList(1,['GIRONE 1','GIRONE 2','GIRONE 3'],'seconde 123');
-  var t123=getList(2,['GIRONE 1','GIRONE 2','GIRONE 3'],'terze 123');
+  // Classifiche speciali 123 e 456 dai gironi 1-2-3 e 4-5-6
+  var buildPosDirect = function(pos, chiavi) {
+    var lista=[];
+    chiavi.forEach(function(k){
+      var cl=classificheGironi[k.toUpperCase()]; 
+      if(!cl||cl.length<=pos) return;
+      var row=cl[pos]; if(!row||!row.sq||row.g===0) return;
+      lista.push({sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,girone:k.replace(/GIRONE /i,'')});
+    });
+    lista.sort(sortFn);
+    return lista;
+  };
+  var s123=buildPosDirect(1,['GIRONE 1','GIRONE 2','GIRONE 3']);
+  var t123=buildPosDirect(2,['GIRONE 1','GIRONE 2','GIRONE 3']);
   if(s123.length) html+=mkSpeciale(s123,'🥈 Migliori Seconde Gironi 1-2-3','#0891b2');
   if(t123.length) html+=mkSpeciale(t123,'🥉 Migliori Terze Gironi 1-2-3','#0891b2');
 
-  var s456=getList(1,['GIRONE 4','GIRONE 5','GIRONE 6'],'seconde 456');
-  var t456=getList(2,['GIRONE 4','GIRONE 5','GIRONE 6'],'terze 456');
+  var s456=buildPosDirect(1,['GIRONE 4','GIRONE 5','GIRONE 6']);
+  var t456=buildPosDirect(2,['GIRONE 4','GIRONE 5','GIRONE 6']);
   if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
   if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
 
