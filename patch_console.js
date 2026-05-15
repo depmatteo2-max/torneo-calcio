@@ -8,18 +8,31 @@ window._aggiornaResolver = async function(categoriaId) {
   var res = function(nome) {
     if (!nome) return null;
     var s = String(nome).trim();
-    var m = s.match(/^(\d+)[°º]?\s+Girone\s+([A-Z0-9]+)$/i);
-    if (m) { var cl=clG['GIRONE '+m[2].toUpperCase()]; return cl && cl[parseInt(m[1])-1] && cl[parseInt(m[1])-1].sq || null; }
-    m = s.match(/^(\d+)[°º]?\s+(.+)$/i);
+    // Rimuovi qualsiasi carattere ° o º (gradi/ordinale) per normalizzare
+    var sn = s.replace(/[°°º˚]/g, '').replace(/\s+/g, ' ').trim();
+    // Formato "N Girone X" (es "4 Girone 3", "1 Girone A")
+    var m = sn.match(/^(\d+)\s+Girone\s+(\S+)$/i);
     if (m) {
-      var pos=parseInt(m[1])-1, key=m[2].trim().toUpperCase(), kn=key.replace(/-/g,'');
-      if (clG[key] && clG[key][pos] && clG[key][pos].sq) return clG[key][pos].sq;
-      for (var k in clSp) { if (k.replace(/-/g,'')===kn) { return clSp[k] && clSp[k][pos] && clSp[k][pos].sq || null; } }
+      var cl = clG['GIRONE ' + m[2].toUpperCase()];
+      var pos0 = parseInt(m[1]) - 1;
+      return cl && cl[pos0] && cl[pos0].sq || null;
+    }
+    // Formato "N CLASSIFICA/NOME" generico
+    m = sn.match(/^(\d+)\s+(.+)$/i);
+    if (m) {
+      var pos1 = parseInt(m[1]) - 1;
+      var key = m[2].trim().toUpperCase();
+      var kn = key.replace(/-/g, '');
+      if (clG[key] && clG[key][pos1] && clG[key][pos1].sq) return clG[key][pos1].sq;
+      for (var k in clSp) {
+        if (k.replace(/-/g,'') === kn) { return clSp[k] && clSp[k][pos1] && clSp[k][pos1].sq || null; }
+      }
       return null;
     }
-    m = s.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*([\d\-]+)?$/i);
+    // Formato "Miglior seconda/terza 123/456/4-5-6"
+    m = sn.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*([\d\-]+)?$/i);
     if (m) {
-      var t=m[1].toLowerCase(), g2=(m[2]||'').replace(/-/g,'');
+      var t = m[1].toLowerCase(), g2 = (m[2]||'').replace(/-/g,'');
       var key2 = t==='second' ? 'CLASSIFICA MIGLIORI SECONDE' : t==='terz' ? 'CLASSIFICA MIGLIORI TERZE' : 'CLASSIFICA MIGLIORI QUARTE';
       if (g2==='123') key2+=' 123'; else if (g2==='456') key2+=' 456';
       return clSp[key2] && clSp[key2][0] && clSp[key2][0].sq || null;
