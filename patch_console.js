@@ -117,9 +117,7 @@ window._aggiornaResolver = async function(categoriaId) {
   console.log('_aggiornaResolver OK: clG='+Object.keys(clG).length+' clSp='+Object.keys(clSp).length);
 };
 
-// Esegui subito e ricarica classifiche
+// Popola _clGlobale all'avvio (usato da renderClassifiche)
 if (typeof STATE !== 'undefined' && STATE.activeCat) {
-  window._aggiornaResolver(STATE.activeCat).then(function() {
-    if (typeof renderClassifiche === 'function') renderClassifiche();
-  });
+  window._aggiornaResolver(STATE.activeCat);
 }
