@@ -849,6 +849,7 @@ async function renderClassifiche() {
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
   if (typeof _cacheInvalid === 'function') _cacheInvalid('gwd_');
+  await _aggiornaResolver(STATE.activeCat);
   var gironi = await getGironiWithData(STATE.activeCat);
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
@@ -947,20 +948,32 @@ async function renderClassifiche() {
     var r=buildPos(pos,chiavi); return r.length?r:buildGironeVirt(nomeConj);
   };
 
-  var sec=getList(1,null,'migliori seconde');
-  var ter=getList(2,null,'migliori terze');
-  var qua=getList(3,null,'migliori quarte');
-  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde','#d97706');
-  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze','#78716c');
-  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte','#6366f1');
+  // Usa _clGlobale/_clSpecGlobale calcolati da _aggiornaResolver (già chiamato sopra)
+  var clG = window._clGlobale || {};
+  var clSp = window._clSpecGlobale || {};
+  var fmtG = function(lista) {
+    return (lista||[]).filter(function(r){return r&&r.sq&&r.g>0;}).map(function(r){
+      var gn = '';
+      Object.keys(clG).forEach(function(k){ 
+        if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ',''); 
+      });
+      return {sq:r.sq,pts:r.pts,g:r.g,v:r.v,p:r.p,s:r.s,gf:r.gf,gs:r.gs,girone:gn};
+    });
+  };
+  var sec=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE']);
+  var ter=fmtG(clSp['CLASSIFICA MIGLIORI TERZE']);
+  var qua=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE']);
+  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde (A-L)','#d97706');
+  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze (A-L)','#78716c');
+  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte (A-L)','#6366f1');
 
-  var s123=getList(1,['GIRONE 1','GIRONE 2','GIRONE 3'],'seconde 123');
-  var t123=getList(2,['GIRONE 1','GIRONE 2','GIRONE 3'],'terze 123');
+  var s123=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 123']);
+  var t123=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 123']);
   if(s123.length) html+=mkSpeciale(s123,'🥈 Migliori Seconde Gironi 1-2-3','#0891b2');
   if(t123.length) html+=mkSpeciale(t123,'🥉 Migliori Terze Gironi 1-2-3','#0891b2');
 
-  var s456=getList(1,['GIRONE 4','GIRONE 5','GIRONE 6'],'seconde 456');
-  var t456=getList(2,['GIRONE 4','GIRONE 5','GIRONE 6'],'terze 456');
+  var s456=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 456']);
+  var t456=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 456']);
   if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
   if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
 
