@@ -3816,8 +3816,8 @@ async function _aggiornaResolver(categoriaId) {
     const gironi = await getGironiWithData(categoriaId);
     const isPlaceh = s => !s || /^\d+[°\u00ba\u00b0]?\s/.test(s) || /^(miglior|peggior)/i.test(s);
     const clG = {};
-    
-    // Primo passaggio: gironi con squadre reali
+
+    // Primo passaggio: gironi con squadre reali (A-L)
     for (const g of gironi) {
       const n = (g.nome||'').toLowerCase();
       if (n.includes('classif') || n.includes('migliori')) continue;
@@ -3832,27 +3832,65 @@ async function _aggiornaResolver(categoriaId) {
       if (cl.length) clG[g.nome.toUpperCase().trim()] = cl;
     }
 
-    // Classifiche speciali (seconde/terze/quarte) da gironi A-L
     const sortFn = (a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf;
+
+    // Classifiche speciali da A-L
     const keysAL = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
     const clSp = {};
-    ['CLASSIFICA MIGLIORI SECONDE','CLASSIFICA MIGLIORI TERZE','CLASSIFICA MIGLIORI QUARTE'].forEach((nome, i) => {
-      const pos = i + 1;
-      const lista = [];
-      keysAL.forEach(k => { const cl=clG[k]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
-      lista.sort(sortFn);
-      clSp[nome] = lista;
-    });
 
-    // Resolver per classifiche speciali di fase 2 (123, 456)
-    const resolvePH = (nome) => {
+    const makeSpeciale = (chiavi, pos) => {
+      const lista = [];
+      chiavi.forEach(k => { const cl=clG[k]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
+      lista.sort(sortFn);
+      return lista;
+    };
+
+    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpeciale(keysAL, 1);
+    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpeciale(keysAL, 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpeciale(keysAL, 3);
+
+    // Resolver per qualsiasi placeholder
+    const resolveSq = (nome) => {
       if (!nome) return null;
-      const m2 = String(nome).match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
-      if (!m2) return null;
-      const pos2 = parseInt(m2[1]) - 1;
-      const gn = m2[2].trim().toUpperCase();
-      const cl2 = clG[gn]; if (cl2?.[pos2]?.sq) return cl2[pos2].sq;
-      const sp2 = clSp[gn]; if (sp2?.[pos2]?.sq) return sp2[pos2].sq;
+      const s = String(nome).trim();
+
+      // Formato "N° Girone X" o "N° GIRONE X"
+      let m = s.match(/^(\d+)[°\u00ba\u00b0]?\s+Girone\s+([A-Z0-9]+)$/i);
+      if (m) {
+        const pos = parseInt(m[1]) - 1;
+        const cl = clG['GIRONE ' + m[2].toUpperCase()];
+        return cl?.[pos]?.sq || null;
+      }
+
+      // Formato "N° CLASSIFICA MIGLIORI ..." o "N° Miglior* ..."
+      m = s.match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
+      if (m) {
+        const pos = parseInt(m[1]) - 1;
+        const key = m[2].trim().toUpperCase();
+        // Cerca in clG (gironi numerati)
+        if (clG[key]?.[pos]?.sq) return clG[key][pos].sq;
+        // Cerca in clSp (classifiche speciali)
+        for (const [k, lista] of Object.entries(clSp)) {
+          if (k.includes(key) || key.includes(k.replace('CLASSIFICA MIGLIORI ',''))) {
+            return lista?.[pos]?.sq || null;
+          }
+        }
+        return null;
+      }
+
+      // Formato "Miglior seconda 123" (senza numero = primo/migliore)
+      m = s.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*(\d+)?$/i);
+      if (m) {
+        const tipo = m[1].toLowerCase();
+        const gruppo = m[2] || '';
+        let key = tipo === 'second' ? 'CLASSIFICA MIGLIORI SECONDE' :
+                  tipo === 'terz'   ? 'CLASSIFICA MIGLIORI TERZE' :
+                                      'CLASSIFICA MIGLIORI QUARTE';
+        if (gruppo === '123') key += ' 123';
+        else if (gruppo === '456') key += ' 456';
+        return clSp[key]?.[0]?.sq || null;
+      }
+
       return null;
     };
 
@@ -3864,42 +3902,61 @@ async function _aggiornaResolver(categoriaId) {
       if (clG[key]?.length >= 4) continue;
       const sqMap2 = {};
       for (const p of g.partite) {
-        const hSq = (p.home && !isPlaceh(p.home.nome)) ? p.home : resolvePH(p.home?.nome);
-        const aSq = (p.away && !isPlaceh(p.away.nome)) ? p.away : resolvePH(p.away?.nome);
+        const hSq = (p.home && !isPlaceh(p.home.nome)) ? p.home : resolveSq(p.home?.nome);
+        const aSq = (p.away && !isPlaceh(p.away.nome)) ? p.away : resolveSq(p.away?.nome);
         if (hSq?.id) sqMap2[hSq.id] = hSq;
         if (aSq?.id) sqMap2[aSq.id] = aSq;
       }
       const sq2 = Object.values(sqMap2);
       if (sq2.length < 2) continue;
       const partiteRisolte = g.partite.map(p => ({
-        home_id: ((p.home && !isPlaceh(p.home.nome)) ? p.home : resolvePH(p.home?.nome))?.id,
-        away_id: ((p.away && !isPlaceh(p.away.nome)) ? p.away : resolvePH(p.away?.nome))?.id,
+        home_id: ((p.home && !isPlaceh(p.home.nome)) ? p.home : resolveSq(p.home?.nome))?.id,
+        away_id: ((p.away && !isPlaceh(p.away.nome)) ? p.away : resolveSq(p.away?.nome))?.id,
         gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata
       }));
       const cl2 = calcGironeClassifica({squadre: sq2, partite: partiteRisolte});
       if (cl2.length) clG[key] = cl2;
     }
 
-    // Classifiche speciali 123 e 456
-    ['CLASSIFICA MIGLIORI SECONDE 123','CLASSIFICA MIGLIORI TERZE 123'].forEach((nome, i) => {
-      const pos = i + 1;
-      const chiavi = ['GIRONE 1','GIRONE 2','GIRONE 3'];
-      const lista = [];
-      chiavi.forEach(k => { const cl=clG[k.toUpperCase()]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
-      lista.sort(sortFn);
-      clSp[nome] = lista;
-    });
-    ['CLASSIFICA MIGLIORI SECONDE 456','CLASSIFICA MIGLIORI TERZE 456'].forEach((nome, i) => {
-      const pos = i + 1;
-      const chiavi = ['GIRONE 4','GIRONE 5','GIRONE 6'];
-      const lista = [];
-      chiavi.forEach(k => { const cl=clG[k.toUpperCase()]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
-      lista.sort(sortFn);
-      clSp[nome] = lista;
-    });
+    // Classifiche speciali 123 e 456 dai gironi 1-3 e 4-6
+    clSp['CLASSIFICA MIGLIORI SECONDE 123'] = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 1);
+    clSp['CLASSIFICA MIGLIORI TERZE 123']   = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 2);
+    clSp['CLASSIFICA MIGLIORI SECONDE 456'] = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 1);
+    clSp['CLASSIFICA MIGLIORI TERZE 456']   = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 2);
+
+    // Terzo passaggio: gironi finali (Champions/Europa) con placeholder complessi
+    for (const g of gironi) {
+      const n = (g.nome||'').toLowerCase();
+      if (n.includes('classif') || n.includes('migliori')) continue;
+      const key = g.nome.toUpperCase().trim();
+      if (clG[key]?.length >= 3) continue;
+      const sqMap3 = {};
+      for (const p of g.partite) {
+        const hSq = (p.home && !isPlaceh(p.home.nome)) ? p.home : resolveSq(p.home?.nome);
+        const aSq = (p.away && !isPlaceh(p.away.nome)) ? p.away : resolveSq(p.away?.nome);
+        if (hSq?.id) sqMap3[hSq.id] = hSq;
+        if (aSq?.id) sqMap3[aSq.id] = aSq;
+      }
+      const sq3 = Object.values(sqMap3);
+      if (sq3.length < 2) continue;
+      const partiteRisolte3 = g.partite.map(p => ({
+        home_id: ((p.home && !isPlaceh(p.home.nome)) ? p.home : resolveSq(p.home?.nome))?.id,
+        away_id: ((p.away && !isPlaceh(p.away.nome)) ? p.away : resolveSq(p.away?.nome))?.id,
+        gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata
+      }));
+      const cl3 = calcGironeClassifica({squadre: sq3, partite: partiteRisolte3});
+      if (cl3.length) clG[key] = cl3;
+    }
 
     _clGlobale = clG;
     _clSpecGlobale = clSp;
+
+    // Aggiorna il resolver globale
+    window._resolveNome = (nome) => {
+      const sq = resolveSq(nome);
+      return sq ? sq.nome : nome;
+    };
+
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
 
