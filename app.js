@@ -3870,19 +3870,22 @@ async function _aggiornaResolver(categoriaId) {
         // Cerca in clG (gironi numerati)
         if (clG[key]?.[pos]?.sq) return clG[key][pos].sq;
         // Cerca in clSp (classifiche speciali)
+        // Normalizza rimuovendo trattini (es "4-5-6" → "456")
+        const keyNorm = key.replace(/-/g,'');
         for (const [k, lista] of Object.entries(clSp)) {
-          if (k.includes(key) || key.includes(k.replace('CLASSIFICA MIGLIORI ',''))) {
+          const kNorm = k.replace(/-/g,'');
+          if (kNorm.includes(keyNorm) || keyNorm.includes(kNorm.replace('CLASSIFICA MIGLIORI ',''))) {
             return lista?.[pos]?.sq || null;
           }
         }
         return null;
       }
 
-      // Formato "Miglior seconda 123" (senza numero = primo/migliore)
-      m = s.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*(\d+)?$/i);
+      // Formato "Miglior seconda 123" o "Miglior seconda 4-5-6" (senza numero davanti = primo)
+      m = s.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*([\d\-]+)?$/i);
       if (m) {
         const tipo = m[1].toLowerCase();
-        const gruppo = m[2] || '';
+        const gruppo = (m[2] || '').replace(/-/g,''); // normalizza "4-5-6" → "456"
         let key = tipo === 'second' ? 'CLASSIFICA MIGLIORI SECONDE' :
                   tipo === 'terz'   ? 'CLASSIFICA MIGLIORI TERZE' :
                                       'CLASSIFICA MIGLIORI QUARTE';
