@@ -967,15 +967,16 @@ async function renderClassifiche() {
   if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze (A-L)','#78716c');
   if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte (A-L)','#6366f1');
 
-  var s123=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 123']);
-  var t123=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 123']);
-  if(s123.length) html+=mkSpeciale(s123,'🥈 Migliori Seconde Gironi 1-2-3','#0891b2');
-  if(t123.length) html+=mkSpeciale(t123,'🥉 Migliori Terze Gironi 1-2-3','#0891b2');
-
-  var s456=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 456']);
-  var t456=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 456']);
-  if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
-  if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
+  // Gruppi 1-2-3, 4-5-6, 7-8-9 (MC Lion Trophy)
+  [['123','1-2-3','#0891b2'],['456','4-5-6','#7c3aed'],['789','7-8-9','#059669']].forEach(function(info){
+    var g=info[0],label=info[1],colore=info[2];
+    var s=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE '+g]||clSp['CLASSIFICA MIGLIORI SECONDE '+label]);
+    var t=fmtG(clSp['CLASSIFICA MIGLIORI TERZE '+g]||clSp['CLASSIFICA MIGLIORI TERZE '+label]);
+    var q=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE '+g]||clSp['CLASSIFICA MIGLIORI QUARTE '+label]);
+    if(s.length) html+=mkSpeciale(s,'🥈 Migliori Seconde Gironi '+label,colore);
+    if(t.length) html+=mkSpeciale(t,'🥉 Migliori Terze Gironi '+label,colore);
+    if(q.length) html+=mkSpeciale(q,'4️⃣ Migliori Quarte Gironi '+label,colore);
+  });
 
   el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
 };
@@ -3856,17 +3857,22 @@ async function _aggiornaResolver(categoriaId) {
         }
         return null;
       }
-      // Formato "Miglior seconda/terza 123/456/4-5-6"
-      m = s.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*([\d\-]+)?$/i);
+      // Formato "Miglior seconda/terza/quarta 123/456/789/4-5-6" 
+      // Anche: "MIGLIOR SECONDA 123", "SECONDA MIGLIOR SECONDA 123", "N MIGLIOR TERZA 456"
+      m = s.match(/^(\d+\s+)?(miglior|peggior|\d+\.?\s+miglior)[ei]?\s+(second|terz|quart)[ao]\s*([\d\-]*)?$/i);
+      if (!m) m = s.match(/^(miglior[ei]?\s+(second|terz|quart)[ao])\s*([\d\-]*)$/i);
       if (m) {
-        const tipo = m[1].toLowerCase();
-        const gruppo = (m[2]||'').replace(/-/g,'');
-        let key = tipo==='second' ? 'CLASSIFICA MIGLIORI SECONDE' :
-                  tipo==='terz'   ? 'CLASSIFICA MIGLIORI TERZE' :
-                                    'CLASSIFICA MIGLIORI QUARTE';
-        if (gruppo==='123') key += ' 123';
-        else if (gruppo==='456') key += ' 456';
-        return clSp[key]?.[0]?.sq || null;
+        // Estrae posizione (es "2 MIGLIOR SECONDA" → pos=1, "MIGLIOR SECONDA" → pos=0)
+        const numPre = parseInt(s.match(/^(\d+)/)?.[1] || '1') - 1;
+        const tipoM = s.match(/(second|terz|quart)/i)?.[1]?.toLowerCase();
+        const gruppoRaw = s.match(/([\d][\d\-]*)\s*$$/)?.[1] || '';
+        const gruppo = gruppoRaw.replace(/-/g,'');
+        let key = tipoM==='second' ? 'CLASSIFICA MIGLIORI SECONDE' :
+                  tipoM==='terz'   ? 'CLASSIFICA MIGLIORI TERZE' :
+                                     'CLASSIFICA MIGLIORI QUARTE';
+        if (['123','456','789'].includes(gruppo)) key += ' ' + gruppo;
+        const lista = clSp[key] || clSp[key.replace(/ (\d)(\d)(\d)/, ' $1-$2-$3')] || [];
+        return lista[numPre]?.sq || null;
       }
       return null;
     };
@@ -3929,11 +3935,25 @@ async function _aggiornaResolver(categoriaId) {
       if (cl?.length) clG[key] = cl;
     }
 
-    // PASSO 4: Classifiche speciali 123 e 456
+    // PASSO 4: Classifiche speciali 123, 456, 789 (MC Lion ha 9 gironi numerati)
     clSp['CLASSIFICA MIGLIORI SECONDE 123'] = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 1);
     clSp['CLASSIFICA MIGLIORI TERZE 123']   = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE 123']  = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 3);
     clSp['CLASSIFICA MIGLIORI SECONDE 456'] = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 1);
     clSp['CLASSIFICA MIGLIORI TERZE 456']   = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE 456']  = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 3);
+    clSp['CLASSIFICA MIGLIORI SECONDE 789'] = makeSpeciale(['GIRONE 7','GIRONE 8','GIRONE 9'], 1);
+    clSp['CLASSIFICA MIGLIORI TERZE 789']   = makeSpeciale(['GIRONE 7','GIRONE 8','GIRONE 9'], 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE 789']  = makeSpeciale(['GIRONE 7','GIRONE 8','GIRONE 9'], 3);
+    // Alias con trattini (il DB potrebbe usare "4-5-6" invece di "456")
+    ['123','456','789'].forEach(g => {
+      const gd = g.split('').join('-');
+      ['SECONDE','TERZE','QUARTE'].forEach(t => {
+        const k1 = 'CLASSIFICA MIGLIORI ' + t + ' ' + g;
+        const k2 = 'CLASSIFICA MIGLIORI ' + t + ' ' + gd;
+        if (clSp[k1]?.length) clSp[k2] = clSp[k1];
+      });
+    });
 
     // PASSO 5: Gironi Champions/Europa (usano tutti i placeholder precedenti)
     for (const g of gironi) {

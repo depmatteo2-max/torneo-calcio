@@ -26,6 +26,63 @@ const ROUND_META = {
   'FINALE 7-8 POSTO'     : { order: 24, consolazione: true,  emoji: '🎖️', desc: 'Finale 7°-8°' },
   'FINALE 9-10 POSTO'    : { order: 25, consolazione: true,  emoji: '🎖️', desc: 'Finale 9°-10°' },
   'FINALE 11-12 POSTO'   : { order: 26, consolazione: true,  emoji: '🎖️', desc: 'Finale 11°-12°' },
+  // MC Lion Trophy — Gironi fase 2 (numerati 1-10)
+  'GIRONE 3'  : { order: 10, consolazione: false, emoji: '3️⃣', desc: 'Girone 3' },
+  'GIRONE 4'  : { order: 11, consolazione: false, emoji: '4️⃣', desc: 'Girone 4' },
+  'GIRONE 5'  : { order: 12, consolazione: false, emoji: '5️⃣', desc: 'Girone 5' },
+  'GIRONE 6'  : { order: 13, consolazione: false, emoji: '6️⃣', desc: 'Girone 6' },
+  'GIRONE 7'  : { order: 14, consolazione: false, emoji: '7️⃣', desc: 'Girone 7' },
+  'GIRONE 8'  : { order: 15, consolazione: false, emoji: '8️⃣', desc: 'Girone 8' },
+  'GIRONE 9'  : { order: 16, consolazione: false, emoji: '9️⃣', desc: 'Girone 9' },
+  'GIRONE 10' : { order: 17, consolazione: false, emoji: '🔟', desc: 'Girone 10' },
+  // MC Lion Trophy — Gironi finali Champions/Europa League
+  'GIRONE CHAMPIONS LEAGUE TOP'      : { order: 20, consolazione: false, emoji: '🏆', desc: 'Champions League Top' },
+  'GIRONE CHAMPIONS LEAGUE PLATINUM' : { order: 21, consolazione: false, emoji: '🥇', desc: 'Champions League Platinum' },
+  'GIRONE CHAMPIONS LEAGUE GOLD'     : { order: 22, consolazione: false, emoji: '🥈', desc: 'Champions League Gold' },
+  'GIRONE CHAMPIONS LEAGUE SILVER'   : { order: 23, consolazione: false, emoji: '🥉', desc: 'Champions League Silver' },
+  'GIRONE CHAMPIONS LEAGUE BRONZE'   : { order: 24, consolazione: true,  emoji: '🏅', desc: 'Champions League Bronze' },
+  'GIRONE EUROPA LEAGUE TOP'         : { order: 25, consolazione: true,  emoji: '🌍', desc: 'Europa League Top' },
+  'GIRONE EUROPA LEAGUE PLATINUM'    : { order: 26, consolazione: true,  emoji: '🌍', desc: 'Europa League Platinum' },
+  'GIRONE EUROPA LEAGUE GOLD'        : { order: 27, consolazione: true,  emoji: '🌍', desc: 'Europa League Gold' },
+  'GIRONE EUROPA LEAGUE SILVER'      : { order: 28, consolazione: true,  emoji: '🌍', desc: 'Europa League Silver' },
+  'GIRONE EUROPA LEAGUE BRONZE'      : { order: 29, consolazione: true,  emoji: '🌍', desc: 'Europa League Bronze' },
+  // MC Lion Trophy — Gironi finali Topolino/Paperino ecc. (Primi Calci 2018)
+  'GIRONE TOPOLINO' : { order: 20, consolazione: false, emoji: '🐭', desc: 'Girone Topolino' },
+  'GIRONE PAPERINO' : { order: 21, consolazione: false, emoji: '🦆', desc: 'Girone Paperino' },
+  'GIRONE PIPPO'    : { order: 22, consolazione: false, emoji: '🐶', desc: 'Girone Pippo' },
+  'GIRONE QUI'      : { order: 23, consolazione: true,  emoji: '🐤', desc: 'Girone Qui' },
+  'GIRONE QUO'      : { order: 24, consolazione: true,  emoji: '🐤', desc: 'Girone Quo' },
+  // Quarti di finale (Esordienti 2013)
+  'QUARTO DI FINALE 1'  : { order: 30, consolazione: false, emoji: '⚔️', desc: 'Quarto di finale 1' },
+  'QUARTO DI FINALE 2'  : { order: 31, consolazione: false, emoji: '⚔️', desc: 'Quarto di finale 2' },
+  'QUARTO DI FINALE 3'  : { order: 32, consolazione: false, emoji: '⚔️', desc: 'Quarto di finale 3' },
+  'QUARTO DI FINALE 4'  : { order: 33, consolazione: false, emoji: '⚔️', desc: 'Quarto di finale 4' },
+  'QUARTO DI FINALE 5'  : { order: 34, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 5' },
+  'QUARTO DI FINALE 6'  : { order: 35, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 6' },
+  'QUARTO DI FINALE 7'  : { order: 36, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 7' },
+  'QUARTO DI FINALE 8'  : { order: 37, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 8' },
+  'QUARTO DI FINALE 9'  : { order: 38, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 9' },
+  'QUARTO DI FINALE 10' : { order: 39, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 10' },
+  'QUARTO DI FINALE 11' : { order: 40, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 11' },
+  'QUARTO DI FINALE 12' : { order: 41, consolazione: true,  emoji: '⚔️', desc: 'Quarto di finale 12' },
+  'GARA 1' : { order: 30, consolazione: false, emoji: '⚔️', desc: 'Gara 1' },
+  'GARA 2' : { order: 31, consolazione: false, emoji: '⚔️', desc: 'Gara 2' },
+  'GARA 3' : { order: 32, consolazione: false, emoji: '⚔️', desc: 'Gara 3' },
+  'GARA 4' : { order: 33, consolazione: false, emoji: '⚔️', desc: 'Gara 4' },
+  'GARA 5' : { order: 34, consolazione: true,  emoji: '⚔️', desc: 'Gara 5' },
+  'GARA 6' : { order: 35, consolazione: true,  emoji: '⚔️', desc: 'Gara 6' },
+  'GARA 7' : { order: 36, consolazione: true,  emoji: '⚔️', desc: 'Gara 7' },
+  'GARA 8' : { order: 37, consolazione: true,  emoji: '⚔️', desc: 'Gara 8' },
+  'GARA 9' : { order: 38, consolazione: true,  emoji: '⚔️', desc: 'Gara 9' },
+  'GARA 10': { order: 39, consolazione: true,  emoji: '⚔️', desc: 'Gara 10' },
+  'GARA 11': { order: 40, consolazione: true,  emoji: '⚔️', desc: 'Gara 11' },
+  'GARA 12': { order: 41, consolazione: true,  emoji: '⚔️', desc: 'Gara 12' },
+  'GARA 13': { order: 42, consolazione: true,  emoji: '⚔️', desc: 'Gara 13' },
+  'GARA 14': { order: 43, consolazione: true,  emoji: '⚔️', desc: 'Gara 14' },
+  'GARA 15': { order: 44, consolazione: true,  emoji: '⚔️', desc: 'Gara 15' },
+  'GARA 16': { order: 45, consolazione: true,  emoji: '⚔️', desc: 'Gara 16' },
+  'GARA 17': { order: 46, consolazione: true,  emoji: '⚔️', desc: 'Gara 17' },
+  'GARA 18': { order: 47, consolazione: true,  emoji: '⚔️', desc: 'Gara 18' },
 };
 
 function _getRoundMeta(roundRaw) {
@@ -35,7 +92,10 @@ function _getRoundMeta(roundRaw) {
   if (/^FINALE\s+\d+[-\u2013]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
   if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '\uD83C\uDFC6', desc: r } };
   if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '\u2694\uFE0F', desc: r } };
-  if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '\uD83C\uDFDF\uFE0F', desc: r } };
+  if (/^GIRONE\s+\w/.test(r)) return { key: r, meta: { order: 5, consolazione: /EUROPA/i.test(r), emoji: /CHAMPIONS/i.test(r) ? '\uD83C\uDFC6' : /EUROPA/i.test(r) ? '\uD83C\uDF0D' : '\uD83C\uDFDF\uFE0F', desc: r } };
+  if (/^GARA\s+\d+$/.test(r)) { const n=parseInt(r.match(/\d+/)[0]); return { key: r, meta: { order: 30+n, consolazione: n>6, emoji: '\u2694\uFE0F', desc: r } }; }
+  if (/^QUARTO\s+DI\s+FINALE\s+\d+$/i.test(r)) { const n=parseInt(r.match(/\d+/)[0]); return { key: r, meta: { order: 30+n, consolazione: n>4, emoji: '\u2694\uFE0F', desc: r } }; }
+  if (/^SEMIFINALE\s+[A-Z]/.test(r)) return { key: r, meta: { order: 50, consolazione: /C|D|E|F|G|H|I|L|M|N/.test(r.split(/\s+/)[1]||''), emoji: '\u2694\uFE0F', desc: r } };
   const m = r.match(/^FINALE\s+(\d+)/);
   if (m) { const p1=parseInt(m[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'\uD83C\uDFC6':p1===3?'\uD83E\uDD49':'\uD83C\uDF96\uFE0F', desc: r } }; }
   return null;
