@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>🦁 MC Lion Trophy 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* ══════════════════════════════════════════
+       MC LION TROPHY 2026 — Design System
+       Palette: Rosso #D42B2B, Giallo #F5A800,
+                Blu #1A4FA0, Bianco, Nero profondo
+    ══════════════════════════════════════════ */
+    :root {
+      --rosso:     #D42B2B;
+      --rosso-dark:#A81E1E;
+      --giallo:    #F5A800;
+      --giallo-light:#FFD166;
+      --blu:       #1A4FA0;
+      --blu-dark:  #0f3070;
+      --blu-light: #2563c4;
+      --nero:      #0D0D0D;
+      --nero2:     #161616;
+      --nero3:     #1e1e1e;
+      --nero4:     #282828;
+      --grigio:    #333;
+      --testo:     #F5F0E8;
+      --testo2:    #b0a898;
+      --testo-xs:  #6b6257;
+      --bordo:     #2a2520;
+      --bordo2:    #3a332b;
+      --verde:     #2ecc71;
+      --font-titolo: 'Bebas Neue', 'Impact', sans-serif;
+      --font-body:   'Nunito', 'Segoe UI', sans-serif;
+    }
+
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior:smooth; }
+    body {
+      font-family: var(--font-body);
+      background: var(--nero);
+      color: var(--testo);
+      min-height: 100vh;
+      overscroll-behavior: none;
+    }
+
+    /* ── TEXTURE DI SFONDO ── */
+    body::before {
+      content:'';
+      position:fixed; inset:0; z-index:0; pointer-events:none;
+      background-image:
+        repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 40px,
+          rgba(212,43,43,0.018) 40px,
+          rgba(212,43,43,0.018) 41px
+        ),
+        repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 40px,
+          rgba(245,168,0,0.012) 40px,
+          rgba(245,168,0,0.012) 41px
+        );
+    }
+
+    /* ════════════════════════════════
+       LOADING SCREEN
+    ════════════════════════════════ */
+    #loading-screen {
+      position:fixed; inset:0; z-index:9999;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:0;
+      background: linear-gradient(160deg, #0D0D0D 0%, #1A0A0A 50%, #0D1020 100%);
+    }
+    #loading-screen .load-logo {
+      font-size:80px;
+      animation: lionBounce 1.2s ease-in-out infinite;
+      filter: drop-shadow(0 0 30px rgba(245,168,0,0.5));
+    }
+    #loading-screen .load-title {
+      font-family: var(--font-titolo);
+      font-size: 42px;
+      letter-spacing: 6px;
+      background: linear-gradient(90deg, var(--rosso), var(--giallo), var(--rosso));
+      background-size: 200%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 2s infinite linear;
+      margin-top: 12px;
+    }
+    #loading-screen .load-sub {
+      font-size: 13px;
+      color: var(--testo-xs);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+    #loading-screen .load-bar {
+      width: 160px; height: 3px;
+      background: var(--bordo2);
+      border-radius: 2px;
+      margin-top: 28px;
+      overflow: hidden;
+    }
+    #loading-screen .load-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--rosso), var(--giallo));
+      border-radius: 2px;
+      animation: loadBar 1.5s ease-in-out infinite;
+    }
+    @keyframes lionBounce {
+      0%,100%{ transform:translateY(0) rotate(-3deg); }
+      50%{ transform:translateY(-12px) rotate(3deg); }
+    }
+    @keyframes shimmer {
+      0%{ background-position:0% } 100%{ background-position:200% }
+    }
+    @keyframes loadBar {
+      0%{ width:0%; margin-left:0 }
+      50%{ width:80%; margin-left:10% }
+      100%{ width:0%; margin-left:100% }
+    }
+    #loading-img { width:64px; height:64px; object-fit:contain; display:none; border-radius:10px; }
+
+    /* ════════════════════════════════
+       MAIN APP
+    ════════════════════════════════ */
+    #main-app { display:none; flex-direction:column; min-height:100vh; position:relative; z-index:1; }
+
+    /* ════════════════════════════════
+       HEADER
+    ════════════════════════════════ */
+    .app-header {
+      background: linear-gradient(135deg, var(--rosso-dark) 0%, var(--rosso) 40%, #8B1010 100%);
+      border-bottom: 3px solid var(--giallo);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top:0; z-index:100;
+      min-height: 56px;
+      box-shadow: 0 4px 20px rgba(212,43,43,0.4);
+    }
+    .header-left { display:flex; align-items:center; gap:10px; }
+    #header-logo {
+      width: 42px; height: 42px;
+      object-fit: contain;
+      border-radius: 8px;
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
+    }
+    .header-titles {}
+    #header-title {
+      font-family: var(--font-titolo);
+      font-size: 22px;
+      letter-spacing: 2px;
+      color: white;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      line-height: 1;
+    }
+    #header-date {
+      font-size: 10px;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+    .header-right { display:flex; align-items:center; gap:8px; }
+    #btn-admin-login {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.8);
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: var(--font-body);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      transition: all .2s;
+    }
+    #btn-admin-login:hover { background:rgba(0,0,0,0.5); color:white; }
+
+    /* ════════════════════════════════
+       TORNEO BAR
+    ════════════════════════════════ */
+    #torneo-bar {
+      background: var(--nero2);
+      border-bottom: 1px solid var(--bordo);
+      padding: 6px 12px;
+      display: none;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .torneo-btn {
+      background: transparent;
+      border: 1px solid var(--bordo2);
+      color: var(--testo2);
+      padding: 4px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: var(--font-body);
+      font-weight: 700;
+      margin-right: 6px;
+      transition: all .2s;
+    }
+    .torneo-btn.active {
+      background: var(--rosso);
+      border-color: var(--rosso);
+      color: white;
+    }
+
+    /* ════════════════════════════════
+       CAT BAR — pill animata
+    ════════════════════════════════ */
+    #cat-bar {
+      background: var(--nero2);
+      border-bottom: 2px solid var(--bordo);
+      padding: 8px 12px;
+      overflow-x: auto;
+      white-space: nowrap;
+      display: none;
+    }
+    .cat-btn {
+      display: inline-block;
+      background: var(--nero3);
+      border: 1px solid var(--bordo2);
+      color: var(--testo2);
+      padding: 6px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: var(--font-body);
+      font-weight: 700;
+      margin-right: 6px;
+      letter-spacing: 0.3px;
+      transition: all .25s;
+      white-space: nowrap;
+    }
+    .cat-btn.active {
+      background: linear-gradient(135deg, var(--giallo), #e09000);
+      border-color: var(--giallo);
+      color: var(--nero);
+      box-shadow: 0 2px 12px rgba(245,168,0,0.3);
+    }
+
+    /* ════════════════════════════════
+       GIORNATA BAR
+    ════════════════════════════════ */
+    #giornata-bar {
+      background: var(--nero3);
+      border-bottom: 1px solid var(--bordo);
+      padding: 5px 12px;
+      overflow-x: auto;
+      white-space: nowrap;
+      display: none;
+    }
+    .giornata-btn {
+      background: transparent;
+      border: 1px solid var(--bordo2);
+      color: var(--testo-xs);
+      padding: 3px 10px;
+      border-radius: 14px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: var(--font-body);
+      font-weight: 700;
+      margin-right: 5px;
+      transition: all .2s;
+    }
+    .giornata-btn.active {
+      background: var(--blu);
+      border-color: var(--blu-light);
+      color: white;
+    }
+
+    /* ════════════════════════════════
+       MAIN CONTENT
+    ════════════════════════════════ */
+    #main-content { flex:1; overflow-y:auto; padding-bottom:80px; }
+    .section { display:none; padding:12px; }
+    .section.active { display:block; }
+
+    /* ════════════════════════════════
+       PUB NAV — bottom bar rosso/giallo
+    ════════════════════════════════ */
+    #pub-nav {
+      position: fixed; bottom:0; left:0; right:0;
+      background: linear-gradient(0deg, var(--nero) 0%, var(--nero2) 100%);
+      border-top: 2px solid var(--rosso);
+      display: none;
+      padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+      z-index: 200;
+      justify-content: space-around;
+    }
+    .nav-btn {
+      background: none; border: none;
+      color: var(--testo-xs);
+      display: flex; flex-direction: column;
+      align-items: center; gap: 3px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: var(--font-body);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      transition: color .2s;
+      min-width: 60px;
+    }
+    .nav-btn .nav-icon { font-size:22px; transition: transform .2s; }
+    .nav-btn.active { color: var(--giallo); }
+    .nav-btn.active .nav-icon { transform:scale(1.15) translateY(-2px); filter:drop-shadow(0 0 6px rgba(245,168,0,0.6)); }
+
+    /* ════════════════════════════════
+       ADMIN NAV
+    ════════════════════════════════ */
+    #admin-nav {
+      position: fixed; bottom:0; left:0; right:0;
+      background: var(--blu-dark);
+      border-top: 2px solid var(--giallo);
+      display: none;
+      padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+      z-index: 200;
+      justify-content: space-around;
+      flex-wrap: wrap;
+    }
+    .admin-btn {
+      background: none; border: none;
+      color: rgba(255,255,255,0.5);
+      display: flex; flex-direction: column;
+      align-items: center; gap: 2px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 9px;
+      font-family: var(--font-body);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: color .2s;
+    }
+    .admin-btn .nav-icon { font-size:20px; }
+    .admin-btn.active { color: var(--giallo); }
+
+    /* ════════════════════════════════
+       CARDS
+    ════════════════════════════════ */
+    .card {
+      background: var(--nero2);
+      border: 1px solid var(--bordo);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content:'';
+      position:absolute; top:0; left:0; right:0; height:3px;
+      background: linear-gradient(90deg, var(--rosso), var(--giallo), var(--blu));
+      opacity: 0.6;
+    }
+    .card-title {
+      font-family: var(--font-titolo);
+      font-size: 18px;
+      letter-spacing: 1px;
+      color: var(--testo);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 10px;
+      font-family: var(--font-body);
+    }
+    .badge-gray { background:var(--nero4); color:var(--testo2); border:1px solid var(--bordo2); }
+    .badge-green { background:rgba(46,204,113,.15); color:var(--verde); border:1px solid rgba(46,204,113,.3); }
+    .badge-orange { background:rgba(212,43,43,.15); color:var(--rosso); border:1px solid rgba(212,43,43,.3); }
+
+    /* ════════════════════════════════
+       STANDINGS TABLE
+    ════════════════════════════════ */
+    .standings-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .standings-table th {
+      color: var(--testo-xs);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 6px;
+      text-align: center;
+      border-bottom: 1px solid var(--bordo);
+    }
+    .standings-table td {
+      padding: 7px 6px;
+      text-align: center;
+      border-bottom: 1px solid var(--bordo);
+    }
+    .standings-table tr:last-child td { border-bottom: none; }
+    .standings-table td:nth-child(3) { text-align:left; font-weight:700; }
+    .standings-table .qualifies { background: rgba(212,43,43,0.07); }
+    .standings-table .qualifies td:nth-child(3) { color: var(--giallo); }
+    .q-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--giallo); box-shadow:0 0 6px rgba(245,168,0,0.5); }
+    .nq-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--bordo2); }
+    .diff-pos { color:var(--verde); font-weight:700; }
+    .diff-neg { color:var(--rosso); font-weight:700; }
+    .pts-col { font-weight:900; font-size:15px; color:var(--giallo); }
+
+    /* ════════════════════════════════
+       LOGO SQUADRA
+    ════════════════════════════════ */
+    .sq-logo { width:24px; height:24px; border-radius:50%; object-fit:contain; background:var(--nero3); border:1px solid var(--bordo2); }
+    .sq-logo-sm { width:20px; height:20px; }
+    .sq-initial {
+      width:24px; height:24px; border-radius:50%;
+      background:linear-gradient(135deg, var(--rosso), var(--rosso-dark));
+      border:1px solid var(--bordo2);
+      display:inline-flex; align-items:center; justify-content:center;
+      font-size:10px; font-weight:900; color:white; text-transform:uppercase;
+    }
+    .sq-initial-sm { width:20px; height:20px; font-size:9px; }
+
+    /* ════════════════════════════════
+       MATCH CARDS
+    ════════════════════════════════ */
+    .match-card {
+      background: var(--nero3);
+      border: 1px solid var(--bordo);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      transition: border-color .2s;
+    }
+    .match-card:hover { border-color: var(--bordo2); }
+    .match-header { font-size:10px; color:var(--testo-xs); margin-bottom:6px; display:flex; gap:8px; flex-wrap:wrap; letter-spacing:0.3px; }
+    .match-teams { display:flex; align-items:center; gap:8px; }
+    .match-team { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
+    .match-team.right { flex-direction:row-reverse; text-align:right; }
+    .match-score { font-family:var(--font-titolo); font-size:22px; font-weight:400; color:var(--giallo); min-width:54px; text-align:center; letter-spacing:2px; }
+    .match-score.pending { color:var(--testo-xs); font-size:13px; font-family:var(--font-body); font-weight:700; }
+    .inserito-da { font-size:10px; color:var(--testo-xs); margin-top:4px; }
+
+    /* ════════════════════════════════
+       TABELLONE / KNOCKOUT
+    ════════════════════════════════ */
+    .ko-round { margin-bottom:16px; }
+    .ko-round-title {
+      font-family: var(--font-titolo);
+      font-size: 16px;
+      letter-spacing: 1px;
+      color: var(--giallo);
+      margin-bottom: 8px;
+      padding: 6px 12px;
+      background: linear-gradient(90deg, rgba(212,43,43,0.15), transparent);
+      border-left: 3px solid var(--rosso);
+      border-radius: 0 6px 6px 0;
+    }
+    .ko-match {
+      background: var(--nero3);
+      border: 1px solid var(--bordo);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      display: flex; align-items:center; gap:10px;
+    }
+    .ko-team { flex:1; font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; }
+    .ko-team.right { flex-direction:row-reverse; text-align:right; }
+    .ko-score { font-family:var(--font-titolo); font-size:18px; color:var(--giallo); min-width:40px; text-align:center; letter-spacing:1px; }
+    .ko-info { font-size:10px; color:var(--testo-xs); text-align:center; min-width:50px; }
+
+    /* ════════════════════════════════
+       ADMIN SECTIONS
+    ════════════════════════════════ */
+    .admin-section { padding:12px; }
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:12px; color:var(--testo2); margin-bottom:5px; font-weight:700; letter-spacing:0.3px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width:100%;
+      background: var(--nero3);
+      border: 1px solid var(--bordo2);
+      color: var(--testo);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: var(--font-body);
+      outline: none;
+      transition: border-color .2s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: var(--giallo); }
+    .btn { padding:10px 20px; border-radius:8px; border:none; cursor:pointer; font-size:14px; font-weight:700; font-family:var(--font-body); transition:all .2s; letter-spacing:0.3px; }
+    .btn-primary { background:linear-gradient(135deg, var(--rosso), var(--rosso-dark)); color:white; box-shadow:0 3px 12px rgba(212,43,43,0.3); }
+    .btn-primary:hover { transform:translateY(-1px); box-shadow:0 5px 16px rgba(212,43,43,0.4); }
+    .btn-secondary { background:var(--nero3); color:var(--testo); border:1px solid var(--bordo2); }
+    .btn-danger { background:#4a0f0f; color:#fca5a5; border:1px solid #7f1d1d; }
+
+    /* ════════════════════════════════
+       EMPTY STATE
+    ════════════════════════════════ */
+    .empty-state { text-align:center; padding:50px 20px; color:var(--testo-xs); font-size:14px; }
+    .empty-state .icon { font-size:56px; margin-bottom:14px; opacity:0.6; }
+
+    /* ════════════════════════════════
+       RIEPILOGO BANNER
+    ════════════════════════════════ */
+    .riepilogo-banner {
+      display:flex; align-items:center; justify-content:space-between;
+      background: linear-gradient(135deg, rgba(212,43,43,0.12), rgba(26,79,160,0.12));
+      border: 1px solid rgba(212,43,43,0.3);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      width:100%; cursor:pointer;
+      font-family: var(--font-body);
+      color: var(--testo);
+      gap: 10px;
+      transition: border-color .2s;
+    }
+    .riepilogo-banner:hover { border-color: var(--rosso); }
+    .riepilogo-banner-left { display:flex; align-items:center; gap:10px; }
+    .riepilogo-banner-icon { font-size:28px; }
+    .riepilogo-banner-title { font-family:var(--font-titolo); font-size:18px; letter-spacing:1px; }
+    .riepilogo-banner-sub { font-size:11px; color:var(--testo-xs); }
+    .riepilogo-banner-arrow { font-size:18px; color:var(--giallo); }
+
+    /* ════════════════════════════════
+       TOAST
+    ════════════════════════════════ */
+    #toast {
+      position:fixed; bottom:90px; left:50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--nero2);
+      border: 1px solid var(--bordo2);
+      color: var(--testo);
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 13px; font-weight:700;
+      z-index: 9999;
+      opacity: 0;
+      transition: all .3s;
+      pointer-events: none;
+      white-space: nowrap;
+      max-width: 90vw;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ════════════════════════════════
+       SCROLLBAR
+    ════════════════════════════════ */
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--bordo2); border-radius:2px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--rosso); }
+
+    /* ════════════════════════════════
+       SEZIONE SELEZIONE TORNEO
+    ════════════════════════════════ */
+    .sel-torneo-card {
+      background: linear-gradient(135deg, var(--nero2), var(--nero3));
+      border: 2px solid var(--bordo);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .25s;
+    }
+    .sel-torneo-card:hover { border-color: var(--rosso); transform:translateY(-2px); }
+    .sel-torneo-card .icon { font-size:40px; margin-bottom:8px; }
+    .sel-torneo-card .nome { font-family:var(--font-titolo); font-size:20px; letter-spacing:1px; color:var(--giallo); }
+    .sel-torneo-card .data { font-size:12px; color:var(--testo-xs); margin-top:4px; }
+    #sel-logo { width:80px; height:80px; object-fit:contain; border-radius:12px; margin:0 auto 12px; display:block; }
+  </style>
+</head>
+<body>
+
+<!-- ══ LOADING SCREEN ══ -->
+<div id="loading-screen">
+  <img id="loading-img" src="" alt="">
+  <div class="load-logo">🦁</div>
+  <div class="load-title">MC LION TROPHY</div>
+  <div class="load-sub">11° Trofeo Valle d'Aosta Calcio 2026</div>
+  <div class="load-bar"><div class="load-bar-fill"></div></div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="main-app">
+
+  <!-- Header -->
+  <div class="app-header">
+    <div class="header-left">
+      <img id="header-logo" src="" alt="" style="display:none">
+      <div class="header-titles">
+        <div id="header-title">🦁 MC LION TROPHY</div>
+        <div id="header-date">12-13-14 Giugno 2026 · Valle d'Aosta</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="btn-admin-login" onclick="mostraLogin()">⚙️ Admin</button>
+    </div>
+  </div>
+
+  <!-- Torneo bar -->
+  <div id="torneo-bar"></div>
+
+  <!-- Cat bar -->
+  <div id="cat-bar"></div>
+
+  <!-- Giornata bar -->
+  <div id="giornata-bar"></div>
+
+  <!-- Main content -->
+  <div id="main-content">
+    <!-- Sezioni pubbliche -->
+    <div id="sec-classifiche" class="section active"></div>
+    <div id="sec-risultati"   class="section"></div>
+    <div id="sec-tabellone"   class="section"></div>
+    <!-- Sezioni admin -->
+    <div id="sec-a-tornei"    class="section admin-section"></div>
+    <div id="sec-a-setup"     class="section admin-section"></div>
+    <div id="sec-a-risultati" class="section admin-section"></div>
+    <div id="sec-a-knockout"  class="section admin-section"></div>
+    <div id="sec-a-loghi"     class="section admin-section"></div>
+    <div id="sec-a-campi"     class="section admin-section"></div>
+    <div id="sec-a-crea"      class="section admin-section"></div>
+    <div id="sec-a-modifica"  class="section admin-section"></div>
+    <!-- Footer -->
+    <div id="app-footer"></div>
+  </div>
+
+  <!-- Nav pubblica -->
+  <nav id="pub-nav">
+    <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">
+      <span class="nav-icon">📊</span>Classifiche
+    </button>
+    <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">
+      <span class="nav-icon">⚽</span>Risultati
+    </button>
+    <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">
+      <span class="nav-icon">🏆</span>Tabellone
+    </button>
+  </nav>
+
+  <!-- Nav admin -->
+  <nav id="admin-nav">
+    <button class="admin-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">
+      <span class="nav-icon">⚽</span>Risultati
+    </button>
+    <button class="admin-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">
+      <span class="nav-icon">🏆</span>Tabellone
+    </button>
+    <button class="admin-btn" data-section="a-setup" onclick="showSection('a-setup',this)">
+      <span class="nav-icon">📥</span>Import
+    </button>
+    <button class="admin-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">
+      <span class="nav-icon">🖼️</span>Loghi
+    </button>
+    <button class="admin-btn" data-section="a-tornei" onclick="showSection('a-tornei',this)">
+      <span class="nav-icon">🗂️</span>Tornei
+    </button>
+    <button class="admin-btn" onclick="logout()">
+      <span class="nav-icon">🚪</span>Esci
+    </button>
+  </nav>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Scripts — ORDINE OBBLIGATORIO -->
+<script src="config.js?v=20260530"></script>
+<script src="db.js?v=20260530"></script>
+<script src="app.js?v=20260530"></script>
+<script src="import.js?v=20260530"></script>
+
+</body>
+</html>
