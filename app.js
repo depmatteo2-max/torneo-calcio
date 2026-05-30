@@ -60,7 +60,7 @@ function mostraSelezioneTeorneo() {
         ${attivi.map(t => `
           <button onclick="selezionaTorneoPublic(${t.id})"
             style="background:white;border:2px solid #e8edf2;border-radius:14px;padding:16px 20px;text-align:left;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.06);transition:all 0.15s ease;font-family:inherit;"
-            onmouseover="this.style.borderColor='#E85C00';this.style.transform='translateY(-1px)'"
+            onmouseover="this.style.borderColor='#D42B2B';this.style.transform='translateY(-1px)'"
             onmouseout="this.style.borderColor='#e8edf2';this.style.transform='translateY(0)'">
             <div style="font-size:16px;font-weight:700;color:#1a2a3a;">${t.nome}</div>
             <div style="font-size:13px;color:#888;margin-top:3px;">📅 ${t.data || 'Data da definire'} &nbsp;•&nbsp; 🔴 Live</div>
@@ -815,7 +815,7 @@ async function forzaRisoluzioneAccoppiamenti() {
 function _mostraNotificaTriangolari() {
   const old=document.getElementById('notifica-triangolari'); if(old)old.remove();
   const div=document.createElement('div'); div.id='notifica-triangolari';
-  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Gironi completati! Triangolari aggiornati.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
+  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#D42B2B;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Gironi completati! Triangolari aggiornati.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
   document.body.appendChild(div);
   setTimeout(()=>{ if(div.parentNode)div.remove(); },6000);
 }
@@ -963,12 +963,12 @@ async function renderClassifiche() {
   var sec=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE']);
   var ter=fmtG(clSp['CLASSIFICA MIGLIORI TERZE']);
   var qua=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE']);
-  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde (A-L)','#d97706');
-  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze (A-L)','#78716c');
-  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte (A-L)','#6366f1');
+  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde (A-L)','#F5A800');
+  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze (A-L)','#C0C0C0');
+  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte (A-L)','#1A4FA0');
 
   // Gruppi 1-2-3, 4-5-6, 7-8-9 (MC Lion Trophy)
-  [['123','1-2-3','#0891b2'],['456','4-5-6','#7c3aed'],['789','7-8-9','#059669']].forEach(function(info){
+  [['123','1-2-3','#D42B2B'],['456','4-5-6','#1A4FA0'],['789','7-8-9','#2ecc71']].forEach(function(info){
     var g=info[0],label=info[1],colore=info[2];
     var s=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE '+g]||clSp['CLASSIFICA MIGLIORI SECONDE '+label]);
     var t=fmtG(clSp['CLASSIFICA MIGLIORI TERZE '+g]||clSp['CLASSIFICA MIGLIORI TERZE '+label]);
@@ -1116,20 +1116,30 @@ async function renderTabellone() {
   const squadre=await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
   if (!ko.length) { el.innerHTML='<div class="empty-state">Tabellone non ancora generato.</div>'; return; }
-  const ROUND_COLORS={'PLATINO':'#FFD700','GOLD':'#FFA500','SILVER':'#C0C0C0','BRONZO':'#CD7F32','WHITE':'#B0BEC5'};
+  const ROUND_COLORS={
+    'PLATINO':'#FFD700','GOLD':'#F5A800','SILVER':'#C0C0C0','BRONZO':'#CD7F32','WHITE':'#B0BEC5',
+    'GIRONE CHAMPIONS LEAGUE TOP':'#D42B2B','GIRONE CHAMPIONS LEAGUE PLATINUM':'#A81E1E',
+    'GIRONE CHAMPIONS LEAGUE GOLD':'#F5A800','GIRONE CHAMPIONS LEAGUE SILVER':'#1A4FA0',
+    'GIRONE CHAMPIONS LEAGUE BRONZE':'#2563c4',
+    'GIRONE EUROPA LEAGUE TOP':'#2ecc71','GIRONE EUROPA LEAGUE PLATINUM':'#27ae60',
+    'GIRONE EUROPA LEAGUE GOLD':'#1e8449','GIRONE EUROPA LEAGUE SILVER':'#196f3d',
+    'GIRONE EUROPA LEAGUE BRONZE':'#145a32',
+    'GIRONE TOPOLINO':'#D42B2B','GIRONE PAPERINO':'#1A4FA0',
+    'GIRONE PIPPO':'#F5A800','GIRONE QUI':'#2ecc71','GIRONE QUO':'#8e44ad',
+  };
   const renderRounds=(matches,label)=>{
     if (!matches.length) return '';
     const rounds={}; matches.forEach(m=>{ if(!rounds[m.round_name])rounds[m.round_name]=[]; rounds[m.round_name].push(m); });
     let h=`<div class="section-label">${label}</div>`;
     for (const [rname,rmatch] of Object.entries(rounds)) {
       const rkey=Object.keys(ROUND_COLORS).find(k=>rname.toUpperCase().includes(k));
-      const color=ROUND_COLORS[rkey]||'#E85C00';
+      const color=ROUND_COLORS[rkey]||'#D42B2B';
       h+=`<div class="card" style="border-top:4px solid ${color};margin-bottom:12px;"><div class="card-title">${rname}</div>`;
       for (const m of rmatch) {
         const hm=m.home_id?sqMap[m.home_id]:null; const am=m.away_id?sqMap[m.away_id]:null;
         const hmNome=hm?hm.nome:(m.note_home||'In attesa...'); const amNome=am?am.nome:(m.note_away||'In attesa...');
         const isPending=!hm||!am;
-        const orario=m.orario||m.campo?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#bbb;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`:'';
+        const orario=m.orario||m.campo?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#F5A800;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#bbb;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`:'';
         h+=`<div class="match-result" style="border-bottom:1px solid #f0f0f0;padding-bottom:10px;margin-bottom:8px;">${orario}<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="match-team"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${isPending?'':logoHTML(hm,'sm')}${hmNome}</span></div><div class="match-score ${!m.giocata?'pending':''}">${m.giocata?m.gol_home+' — '+m.gol_away:'vs'}</div><div class="match-team right"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${amNome}${isPending?'':logoHTML(am,'sm')}</span></div></div></div>`;
       }
       h+=`</div>`;
@@ -1218,10 +1228,10 @@ async function renderAdminSetup() {
   if (!STATE.activeTorneo) { el.innerHTML='<div class="empty-state">Crea prima un torneo.</div>'; return; }
   const t=STATE.tornei.find(x=>x.id===STATE.activeTorneo);
   const tutteSquadre=await dbGetSquadre(STATE.activeTorneo);
-  let html=`<div style="background:#fff3e0;border-radius:10px;padding:12px 16px;margin-bottom:14px;"><div style="font-size:13px;color:#bf360c;">Torneo attivo: <strong>${t?.nome||'?'}</strong></div></div>`;
+  let html=`<div style="background:rgba(212,43,43,0.08);border-radius:10px;padding:12px 16px;margin-bottom:14px;"><div style="font-size:13px;color:#bf360c;">Torneo attivo: <strong>${t?.nome||'?'}</strong></div></div>`;
   if (tutteSquadre.length) {
     html+=`<div class="section-label">Squadre (${tutteSquadre.length})</div><div class="card" style="margin-bottom:14px;"><div style="display:flex;flex-wrap:wrap;gap:6px;">`;
-    tutteSquadre.forEach(sq=>{ html+=`<span style="display:inline-flex;align-items:center;gap:5px;background:#fff3e0;border:1px solid #ffcc80;border-radius:99px;padding:3px 10px;font-size:12px;color:#E85C00;">${logoHTML(sq,'sm')} ${sq.nome}</span>`; });
+    tutteSquadre.forEach(sq=>{ html+=`<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(212,43,43,0.08);border:1px solid rgba(212,43,43,0.25);border-radius:99px;padding:3px 10px;font-size:12px;color:#D42B2B;">${logoHTML(sq,'sm')} ${sq.nome}</span>`; });
     html+=`</div></div>`;
   }
   html+=`<div class="section-label">Categorie configurate</div>`;
@@ -1577,7 +1587,7 @@ async function renderAdminRisultati() {
       else if(p.gol_home<p.gol_away)badge=`<span class="badge badge-green">${p.away?.nome} vince</span>`;
       else badge=`<span class="badge badge-blue">Pareggio</span>`;
     }
-    const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${p.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${p.orario}</span>`:''}${p.campo?`<span style="font-size:11px;color:#888;">📍 ${p.campo}</span>`:''}
+    const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${p.orario?`<span style="font-size:11px;font-weight:700;color:#F5A800;">🕐 ${p.orario}</span>`:''}${p.campo?`<span style="font-size:11px;color:#888;">📍 ${p.campo}</span>`:''}
       <span style="font-size:11px;color:#bbb;">${p._girone}</span>${p.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${p.inserito_da}</span>`:''}</div>`;
     const _pgIdx = tuttePartite.indexOf(p);
     const _prevGiorno = _pgIdx > 0 ? tuttePartite[_pgIdx-1].giorno : null;
@@ -1664,20 +1674,30 @@ async function renderAdminKnockout() {
   const pending=ko.filter(k=>(!k.home_id||!k.away_id)&&(k.note_home||k.note_away));
   let html='';
   if (pending.length) {
-    html+=`<div class="card" style="border-left:4px solid #e67e22;margin-bottom:14px;"><div style="font-size:13px;font-weight:700;color:#e67e22;">⏳ ${pending.length} accoppiamenti in attesa dei gironi</div><button class="btn btn-p btn-sm" style="margin-top:10px;" onclick="risolviManuale()">🔄 Risolvi ora</button></div>`;
+    html+=`<div class="card" style="border-left:4px solid #A81E1E;margin-bottom:14px;"><div style="font-size:13px;font-weight:700;color:#A81E1E;">⏳ ${pending.length} accoppiamenti in attesa dei gironi</div><button class="btn btn-p btn-sm" style="margin-top:10px;" onclick="risolviManuale()">🔄 Risolvi ora</button></div>`;
   }
   if (!ko.length) { el.innerHTML=html+'<div class="empty-state">Nessuna partita. Importa un Excel con FASE_FINALE.</div>'; return; }
   const rounds={}; ko.forEach(m=>{ if(!rounds[m.round_name])rounds[m.round_name]=[]; rounds[m.round_name].push(m); });
-  const ROUND_COLORS={'PLATINO':'#FFD700','GOLD':'#FFA500','SILVER':'#C0C0C0','BRONZO':'#CD7F32','WHITE':'#B0BEC5'};
+  const ROUND_COLORS={
+    'PLATINO':'#FFD700','GOLD':'#F5A800','SILVER':'#C0C0C0','BRONZO':'#CD7F32','WHITE':'#B0BEC5',
+    'GIRONE CHAMPIONS LEAGUE TOP':'#D42B2B','GIRONE CHAMPIONS LEAGUE PLATINUM':'#A81E1E',
+    'GIRONE CHAMPIONS LEAGUE GOLD':'#F5A800','GIRONE CHAMPIONS LEAGUE SILVER':'#1A4FA0',
+    'GIRONE CHAMPIONS LEAGUE BRONZE':'#2563c4',
+    'GIRONE EUROPA LEAGUE TOP':'#2ecc71','GIRONE EUROPA LEAGUE PLATINUM':'#27ae60',
+    'GIRONE EUROPA LEAGUE GOLD':'#1e8449','GIRONE EUROPA LEAGUE SILVER':'#196f3d',
+    'GIRONE EUROPA LEAGUE BRONZE':'#145a32',
+    'GIRONE TOPOLINO':'#D42B2B','GIRONE PAPERINO':'#1A4FA0',
+    'GIRONE PIPPO':'#F5A800','GIRONE QUI':'#2ecc71','GIRONE QUO':'#8e44ad',
+  };
   for (const [rname,rmatch] of Object.entries(rounds)) {
     const rkey=Object.keys(ROUND_COLORS).find(k=>rname.toUpperCase().includes(k));
-    const color=ROUND_COLORS[rkey]||'#E85C00';
+    const color=ROUND_COLORS[rkey]||'#D42B2B';
     const done=rmatch.filter(m=>m.giocata).length;
     html+=`<div class="card" style="border-top:4px solid ${color};margin-bottom:14px;"><div class="card-title">${rname}<span class="badge badge-gray">${done}/${rmatch.length} giocate</span></div>`;
     for (const m of rmatch) {
       const hm=m.home_id?sqMap[m.home_id]:null; const am=m.away_id?sqMap[m.away_id]:null;
-      const hmNome=hm?hm.nome:`<em style="color:#e67e22;">${m.note_home||'?'}</em>`;
-      const amNome=am?am.nome:`<em style="color:#e67e22;">${m.note_away||'?'}</em>`;
+      const hmNome=hm?hm.nome:`<em style="color:#A81E1E;">${m.note_home||'?'}</em>`;
+      const amNome=am?am.nome:`<em style="color:#A81E1E;">${m.note_away||'?'}</em>`;
       const risolto=!!(hm&&am);
       let badge='';
       if (m.giocata) {
@@ -1685,7 +1705,7 @@ async function renderAdminKnockout() {
         else if(m.gol_home<m.gol_away)badge=`<span class="badge badge-green">${am?.nome} vince</span>`;
         else badge=`<span class="badge badge-blue">Pareggio</span>`;
       }
-      const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`;
+      const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#F5A800;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`;
       html+=`<div class="admin-match"><div class="admin-match-header">${orInfo}
         <div style="display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;">
           <div class="admin-team-name">${logoHTML(hm,'sm')}<span>${hmNome}</span></div>
@@ -1696,7 +1716,7 @@ async function renderAdminKnockout() {
           <div class="match-actions">
             ${risolto?`<button class="btn btn-p btn-sm" onclick="saveKO(${m.id})">✓ Conferma</button>`:''}
             ${badge}
-            ${!risolto?`<span style="font-size:11px;color:#e67e22;">⏳ In attesa gironi</span>`:''}
+            ${!risolto?`<span style="font-size:11px;color:#A81E1E;">⏳ In attesa gironi</span>`:''}
           </div>
         </div>
       </div></div>`;
@@ -1794,9 +1814,9 @@ function _addSimBtn() {
   if (document.getElementById('sim-toggle-btn')) return;
   const btn = document.createElement('button');
   btn.id = 'sim-toggle-btn'; btn.textContent = '🎮'; btn.title = 'Modalità Simulazione';
-  btn.style.cssText = 'background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;border-radius:8px;padding:6px 10px;font-size:15px;cursor:pointer;transition:all .18s;';
+  btn.style.cssText = 'background:rgba(212,43,43,0.12);border:1px solid rgba(212,43,43,0.3);color:#F5A800;border-radius:8px;padding:6px 10px;font-size:15px;cursor:pointer;transition:all .18s;';
   btn.onmouseover = () => btn.style.background = 'rgba(245,158,11,0.25)';
-  btn.onmouseout  = () => btn.style.background = 'rgba(245,158,11,0.12)';
+  btn.onmouseout  = () => btn.style.background = 'rgba(212,43,43,0.12)';
   btn.onclick = toggleSimulazione;
   const headerRight = document.querySelector('.header-right');
   if (headerRight) headerRight.insertBefore(btn, headerRight.firstChild);
@@ -3631,16 +3651,16 @@ function toggleSimulazione() {
 function _renderSimPanel() {
   const existing = document.getElementById('sim-panel'); if (existing) { existing.remove(); return; }
   const panel = document.createElement('div'); panel.id = 'sim-panel';
-  panel.style.cssText = 'position:fixed;bottom:80px;right:16px;z-index:8000;background:#0f172a;border:2px solid #f59e0b;border-radius:14px;padding:16px;width:290px;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:var(--font-display,sans-serif);';
+  panel.style.cssText = 'position:fixed;bottom:80px;right:16px;z-index:8000;background:#0f172a;border:2px solid #F5A800;border-radius:14px;padding:16px;width:290px;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-family:var(--font-display,sans-serif);';
   panel.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="color:#f59e0b;font-size:14px;font-weight:800;letter-spacing:.04em;">🎮 SIMULAZIONE</div>
+      <div style="color:#F5A800;font-size:14px;font-weight:800;letter-spacing:.04em;">🎮 SIMULAZIONE</div>
       <button onclick="document.getElementById('sim-panel').remove()" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit;">✕</button>
     </div>
     <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">Genera risultati casuali per testare il sistema.</div>
     <div style="display:flex;flex-direction:column;gap:8px;">
-      <button onclick="simulaRisultati()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">⚽ SIMULA TUTTI I RISULTATI</button>
-      <button onclick="simulaRisultatiGirone()" style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);color:#f59e0b;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚽ Simula solo girone attivo</button>
+      <button onclick="simulaRisultati()" style="background:linear-gradient(135deg,#F5A800,#d97706);border:none;color:#000;border-radius:8px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">⚽ SIMULA TUTTI I RISULTATI</button>
+      <button onclick="simulaRisultatiGirone()" style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(212,43,43,0.4);color:#F5A800;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚽ Simula solo girone attivo</button>
       <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
       <button onclick="resetRisultati()" style="background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:8px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 RESET — Azzera tutti i risultati</button>
       <button onclick="resetRisultatiGirone()" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);color:#f87171;border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Reset solo categoria attiva</button>
@@ -3971,4 +3991,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
