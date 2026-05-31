@@ -758,10 +758,10 @@ function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
   if (/^\d+[\u00b0\u00ba*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
-  // "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE" e varianti con 123/456
   if (/^\d+[\u00b0\u00ba]\s+CLASSIFICA/i.test(s)) return true;
   if (/^\d+[\u00b0\u00ba*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
   if (/^(miglior|peggio)/i.test(s)) return true;
+  if (/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone/i.test(s)) return true;
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
   return false;
 }
@@ -783,34 +783,63 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     return tipo === 'vincente' ? vince : perde;
   }
 
-  // Formato principale: "N° NOME GIRONE"
-  // Es: "1° Girone A", "2° CLASSIFICA MIGLIORI SECONDE", "1° CLASSIFICA MIGLIORI SECONDE 123"
+  // Mappa parole → posizione
+  const ordMap = {
+    'prima':0,'secondo':1,'seconda':1,'terza':2,'quarta':3,'quinta':4,
+    'sesta':5,'settima':6,'ottava':7,'nona':8,'decima':9
+  };
+
+  // Formato "PRIMA GIRONE A", "SECONDA GIRONE B" ecc.
+  const mParola = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
+  if (mParola) {
+    const pos = ordMap[mParola[1].toLowerCase()] ?? 0;
+    const chiave = 'GIRONE ' + mParola[2].toUpperCase();
+    const cl = classificheGironi[chiave] || classificheGironi[mParola[2].toUpperCase()];
+    if (cl && cl.length > pos) return cl[pos]?.sq?.id || null;
+    return null;
+  }
+
+  // Formato "MIGLIOR SECONDA", "SECONDA MIGLIOR SECONDA", "OTTAVA MIGLIOR QUARTA" ecc.
+  // Con eventuale suffisso gruppo: "MIGLIOR SECONDA 123", "TERZA MIGLIOR TERZA 456"
+  const mMigl = s.match(/^((?:prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+)?miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
+  if (mMigl) {
+    const prefStr = (mMigl[1]||'').trim().toLowerCase();
+    const pos = prefStr ? (ordMap[prefStr] ?? 0) : 0;
+    const tipo = mMigl[2].toLowerCase();
+    const gruppo = (mMigl[3]||'').replace(/-/g,'');
+    let chiave = tipo==='second' ? 'CLASSIFICA MIGLIORI SECONDE' :
+                 tipo==='terz'   ? 'CLASSIFICA MIGLIORI TERZE' :
+                                   'CLASSIFICA MIGLIORI QUARTE';
+    if (gruppo) chiave += ' ' + gruppo;
+    // Cerca anche con alias trattini
+    const lista = classificheGironi[chiave] ||
+                  classificheGironi[chiave.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')] || [];
+    if (lista.length > pos) return lista[pos]?.sq?.id || null;
+    return null;
+  }
+
+  // Formato "N° Girone A" (con simbolo grado)
   const mN = s.match(/^(\d+)\s*[\u00b0\u00ba]\s+(.+)$/i);
   if (mN) {
-    const pos = parseInt(mN[1]);
+    const pos = parseInt(mN[1]) - 1;
     const nomeRicerca = mN[2].trim().toUpperCase();
-
-    // Cerca nel dizionario classificheGironi (tutte le chiavi sono uppercase)
-    // Prova: esatto, poi con prefisso GIRONE
     const chiave =
       classificheGironi[nomeRicerca] ? nomeRicerca :
       classificheGironi['GIRONE ' + nomeRicerca] ? 'GIRONE ' + nomeRicerca :
       Object.keys(classificheGironi).find(k => k === nomeRicerca || k === 'GIRONE ' + nomeRicerca);
-
     if (chiave) {
       const cl = classificheGironi[chiave];
-      if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+      if (cl && cl.length > pos) return cl[pos]?.sq?.id || null;
     }
-    return null; // girone non ancora calcolato
+    return null;
   }
 
-  // Formato breve: "3°A" senza spazio
+  // Formato breve "3°A"
   const mShort = s.match(/^(\d+)[\u00b0\u00ba]([A-Za-z])$/);
   if (mShort) {
-    const pos = parseInt(mShort[1]);
-    const lettera = mShort[2].toUpperCase();
-    const cl = classificheGironi['GIRONE ' + lettera] || classificheGironi[lettera];
-    if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+    const pos = parseInt(mShort[1]) - 1;
+    const cl = classificheGironi['GIRONE ' + mShort[2].toUpperCase()] || classificheGironi[mShort[2].toUpperCase()];
+    if (cl && cl.length > pos) return cl[pos]?.sq?.id || null;
   }
 
   return null;
@@ -4020,4 +4049,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
