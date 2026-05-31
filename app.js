@@ -46,7 +46,7 @@ async function init() {
 
 function mostraSelezioneTeorneo() {
   const attivi = STATE.tornei.filter(t => t.attivo);
-  document.getElementById('pub-nav').style.display = 'none';
+  document.getElementById('pub-nav').style.display = 'flex';
   document.getElementById('admin-nav').style.display = 'none';
   document.getElementById('cat-bar').style.display = 'none';
   document.getElementById('torneo-bar').style.display = 'none';
@@ -78,7 +78,7 @@ async function selezionaTorneoPublic(id) {
     '<div id="sec-tabellone" class="sec"></div><div id="sec-a-tornei" class="sec"></div>' +
     '<div id="sec-a-setup" class="sec"></div><div id="sec-a-loghi" class="sec"></div>' +
     '<div id="sec-a-risultati" class="sec"></div><div id="sec-a-knockout" class="sec"></div><div id="sec-a-crea" class="sec"></div><div id="sec-a-modifica" class="sec"></div>';
-  document.getElementById('pub-nav').style.display = 'flex';
+  document.getElementById('pub-nav').style.display = 'flex'; // sempre visibile
   document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
   const btnClass = document.querySelector('[data-section="classifiche"]');
   if (btnClass) btnClass.classList.add('active');
@@ -231,7 +231,7 @@ function mostraSelezioneCat() {
     const l = getLogo();
     if (l) { const img = el.querySelector('#hero-logo'); if(img){img.src=l;img.style.display='block';} }
   }
-  document.getElementById('pub-nav').style.display = 'none';
+  // pub-nav sempre visibile per il pubblico
   document.getElementById('cat-bar').style.display = 'none';
   STATE.currentSection = 'classifiche';
 }
@@ -245,7 +245,7 @@ async function selezionaCategoriaPublic(catId) {
   await _caricaGiornate();
   renderTorneoBar();
   renderCatBar();
-  document.getElementById('pub-nav').style.display = 'flex';
+  document.getElementById('pub-nav').style.display = 'flex'; // sempre visibile
   document.getElementById('cat-bar').style.display = '';
   document.querySelectorAll('#pub-nav .nav-btn').forEach(b => b.classList.remove('active'));
   const btnAttivo = document.querySelector('[data-section="' + STATE.currentSection + '"]');
@@ -321,7 +321,7 @@ async function cambiaTorneo() {
   try { localStorage.removeItem('spe_torneo'); } catch(e) {}
   _clearSavedCat();
   STATE.tornei = await dbGetTornei();
-  document.getElementById('pub-nav').style.display = 'none';
+  // pub-nav sempre visibile per il pubblico
   if (document.getElementById('admin-nav')) document.getElementById('admin-nav').style.display = 'none';
   const catBar = document.getElementById('cat-bar'); if (catBar) catBar.innerHTML = '';
   const torneoBar = document.getElementById('torneo-bar'); if (torneoBar) torneoBar.style.display = 'none';
