@@ -34,6 +34,21 @@
       --verde:     #2ecc71;
       --font-titolo: 'Bebas Neue', 'Impact', sans-serif;
       --font-body:   'Nunito', 'Segoe UI', sans-serif;
+      /* Variabili compatibilità */
+      --shadow: 0 1px 4px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+      --radius: 10px;
+      --bordo-lt: rgba(42,37,32,0.5);
+      --sfondo: #1e1e1e;
+      --arancio: #F5A800;
+      --arancio-bg: rgba(245,168,0,0.08);
+      --blu-bg: rgba(26,79,160,0.1);
+      --blu-lt: #2563c4;
+      --verde-bg: rgba(46,204,113,0.08);
+      --rosso-bg: rgba(212,43,43,0.08);
+      --testo-lt: #b0a898;
+      --testo-2: #b0a898;
     }
 
     * { box-sizing:border-box; margin:0; padding:0; }
@@ -580,6 +595,80 @@
     .sel-torneo-card .nome { font-family:var(--font-titolo); font-size:20px; letter-spacing:1px; color:var(--giallo); }
     .sel-torneo-card .data { font-size:12px; color:var(--testo-xs); margin-top:4px; }
     #sel-logo { width:80px; height:80px; object-fit:contain; border-radius:12px; margin:0 auto 12px; display:block; }
+
+    /* ── Classi compatibilità app.js ── */
+    .sec { display:none; padding:12px; }
+    .sec.active { display:block; }
+    .footer-credits { text-align:center; padding:20px; font-size:12px; color:var(--testo-xs); }
+    .footer-credits a { color:var(--giallo); text-decoration:none; }
+    .section-label { font-size:11px; font-weight:700; color:var(--testo-xs); text-transform:uppercase; letter-spacing:.08em; margin:14px 0 8px; display:flex; align-items:center; gap:8px; }
+    .section-label::after { content:''; flex:1; height:1px; background:var(--bordo); }
+    .cat-pill { background:var(--nero3); border:1px solid var(--bordo2); color:var(--testo2); padding:4px 12px; border-radius:20px; cursor:pointer; font-size:11px; font-family:var(--font-body); font-weight:700; margin-right:5px; transition:all .2s; }
+    .cat-pill.active { background:var(--giallo); border-color:var(--giallo); color:var(--nero); }
+    .cat-pill.oggi-pill { border-color:var(--rosso); color:var(--rosso); }
+    /* Admin match */
+    .admin-match { background:var(--nero3); border:1px solid var(--bordo); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+    .admin-match-header { display:flex; flex-direction:column; gap:6px; }
+    .admin-team-name { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
+    .admin-team-name.right { flex-direction:row-reverse; }
+    .score-input { width:44px; height:36px; text-align:center; font-size:18px; font-weight:800; border:2px solid var(--bordo2); border-radius:8px; background:var(--nero4); color:var(--testo); font-family:var(--font-body); }
+    .score-dash { color:var(--testo-xs); font-size:16px; font-weight:700; }
+    .match-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-left:auto; }
+    .btn-sm { padding:5px 10px; font-size:12px; }
+    .btn-p { background:linear-gradient(135deg, var(--rosso), var(--rosso-dark)); color:white; border:none; }
+    .btn-accent { background:rgba(245,168,0,0.15); border:1px solid rgba(245,168,0,0.3); color:var(--giallo); }
+    .btn-success { background:rgba(46,204,113,0.15); border:1px solid rgba(46,204,113,0.3); color:var(--verde); }
+    .scorers-section { padding:10px 0 0; border-top:1px solid var(--bordo); margin-top:8px; }
+    .scorer-row { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+    .scorer-row select, .scorer-row input { background:var(--nero4); border:1px solid var(--bordo2); color:var(--testo); border-radius:6px; padding:5px 8px; font-size:12px; font-family:var(--font-body); }
+    .scorer-row .min-input { width:52px; }
+    .add-scorer-btn { background:var(--nero4); border:1.5px dashed var(--bordo2); color:var(--testo-xs); border-radius:7px; padding:5px 14px; font-size:12px; cursor:pointer; font-family:var(--font-body); width:100%; margin-top:4px; }
+    /* Match result pubblico */
+    .match-result { padding:8px 0; border-bottom:1px solid var(--bordo); }
+    .match-result:last-child { border-bottom:none; }
+    .match-meta-time { font-size:11px; font-weight:700; color:var(--giallo); }
+    .match-meta-field { font-size:11px; color:var(--testo-xs); }
+    .match-meta-girone { font-size:11px; color:var(--bordo2); }
+    .match-meta-author { font-size:10px; color:var(--testo-xs); margin-left:auto; }
+    .match-team { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
+    .match-team.right { flex-direction:row-reverse; text-align:right; }
+    .match-score { font-family:var(--font-titolo); font-size:22px; color:var(--giallo); min-width:54px; text-align:center; letter-spacing:2px; }
+    .match-score.pending { color:var(--testo-xs); font-size:13px; font-family:var(--font-body); font-weight:700; }
+    .match-scorers { margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
+    .scorer-chip { font-size:11px; background:var(--nero4); border:1px solid var(--bordo); border-radius:10px; padding:2px 8px; color:var(--testo2); }
+    /* Logo/avatar squadra */
+    .team-logo { width:24px; height:24px; border-radius:50%; object-fit:contain; }
+    .team-logo-sm { width:20px; height:20px; border-radius:50%; object-fit:contain; }
+    .team-avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--rosso),var(--rosso-dark)); display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:900; color:white; text-transform:uppercase; flex-shrink:0; }
+    .team-avatar-sm { width:20px; height:20px; font-size:8px; border-radius:50%; background:linear-gradient(135deg,var(--rosso),var(--rosso-dark)); display:inline-flex; align-items:center; justify-content:center; font-weight:900; color:white; text-transform:uppercase; flex-shrink:0; }
+    /* Loghi admin */
+    .logo-team-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--bordo); }
+    .logo-upload-btn { position:relative; cursor:pointer; flex-shrink:0; }
+    .logo-upload-btn input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    .logo-plus { position:absolute; bottom:-2px; right:-2px; width:16px; height:16px; background:var(--rosso); border-radius:50%; display:flex; align-items:center; justify-content:center; }
+    /* Form admin */
+    .form-input { width:100%; background:var(--nero3); border:1px solid var(--bordo2); color:var(--testo); padding:9px 12px; border-radius:8px; font-size:13px; font-family:var(--font-body); outline:none; }
+    .form-input:focus { border-color:var(--giallo); }
+    .form-label { display:block; font-size:11px; color:var(--testo2); margin-bottom:4px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    /* Badge extra */
+    .badge-blue { background:rgba(26,79,160,.15); color:var(--blu-light); border:1px solid rgba(26,79,160,.3); }
+    /* Shadow vars */
+    --shadow: 0 1px 4px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+    --radius: 10px;
+    --bordo-lt: rgba(42,37,32,0.5);
+    --sfondo: var(--nero3);
+    --arancio: var(--giallo);
+    --arancio-bg: rgba(245,168,0,0.08);
+    --blu-bg: rgba(26,79,160,0.1);
+    --blu-lt: var(--blu-light);
+    --verde-bg: rgba(46,204,113,0.08);
+    --rosso-bg: rgba(212,43,43,0.08);
+    --testo-lt: var(--testo2);
+    --testo-2: var(--testo2);
+
   </style>
 </head>
 <body>
@@ -606,7 +695,7 @@
       </div>
     </div>
     <div class="header-right">
-      <button id="btn-admin-login" onclick="mostraLogin()">⚙️ Admin</button>
+      <button id="admin-btn" onclick="mostraLogin()" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.8);padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:var(--font-body);font-weight:700;">⚙️ Admin</button>
     </div>
   </div>
 
@@ -683,6 +772,29 @@
 <script src="db.js?v=20260530"></script>
 <script src="app.js?v=20260530"></script>
 <script src="import.js?v=20260530"></script>
+
+
+<!-- Modal Login Admin -->
+<div id="admin-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;">
+  <div style="background:var(--nero2);border:2px solid var(--giallo);border-radius:16px;padding:28px;width:90%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+    <div style="font-family:var(--font-titolo);font-size:28px;letter-spacing:2px;color:var(--giallo);margin-bottom:4px;">🦁 ADMIN</div>
+    <div style="font-size:12px;color:var(--testo-xs);margin-bottom:20px;">MC Lion Trophy 2026</div>
+    <div style="margin-bottom:12px;">
+      <label class="form-label">Username</label>
+      <input id="admin-user" class="form-input" placeholder="username" autocomplete="username">
+    </div>
+    <div style="margin-bottom:20px;">
+      <label class="form-label">Password</label>
+      <input id="admin-pw" class="form-input" type="password" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')checkPw()">
+    </div>
+    <div id="pw-error" style="color:var(--rosso);font-size:12px;margin-bottom:12px;min-height:16px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="checkPw()" style="flex:1;background:linear-gradient(135deg,var(--rosso),var(--rosso-dark));color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);">Accedi</button>
+      <button onclick="document.getElementById('admin-modal').style.display='none'" style="background:var(--nero3);border:1px solid var(--bordo2);color:var(--testo2);border-radius:10px;padding:12px 16px;cursor:pointer;font-family:var(--font-body);">✕</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
