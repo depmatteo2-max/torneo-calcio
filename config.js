@@ -5,7 +5,7 @@
 // ============================================================
 const CONFIG = {
   SUPABASE_URL     : 'https://hvakazxnvooffskvoyyl.supabase.co',          // ← inserisci la tua URL Supabase
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2YWthenhudm9vZmZza3ZveXlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0NDQ0NiwiZXhwIjoyMDg5NDIwNDQ2fQ.nvVxQFCO8Bs_8A1AaSTe4xnFe_6cBX2w65kt1kNSS3w',                             // ← inserisci la tua anon key
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2YWthenhudm9vZmZza3ZveXlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDQ0NDYsImV4cCI6MjA4OTQyMDQ0Nn0.LfEYuBmb-4f2TuuY1rUGn1SSebMxYN8TNWL4FrfBUZw',                             // ← inserisci la tua anon key
   CLIENTE          : 'mclion',                               // identificatore univoco nel DB
   NOME_SITO        : '🦁 MC Lion Trophy 2026',
   USERS: [
