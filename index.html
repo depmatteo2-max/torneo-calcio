@@ -3,681 +3,239 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>🦁 MC Lion Trophy 2026</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <title>MC Lion Trophy 2026</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* ══════════════════════════════════════════
-       MC LION TROPHY 2026 — Design System
-       Palette: Rosso #D42B2B, Giallo #F5A800,
-                Blu #1A4FA0, Bianco, Nero profondo
-    ══════════════════════════════════════════ */
+    /* ── IDENTICO A SPE ── */
     :root {
-      --rosso:     #D42B2B;
-      --rosso-dark:#A81E1E;
-      --giallo:    #F5A800;
-      --giallo-light:#FFD166;
-      --blu:       #1A4FA0;
-      --blu-dark:  #0f3070;
-      --blu-light: #2563c4;
-      --nero:      #ffffff;
-      --nero2:     #f8f8f8;
-      --nero3:     #f0f0f0;
-      --nero4:     #e8e8e8;
-      --grigio:    #999;
-      --testo:     #1a1a1a;
-      --testo2:    #555;
-      --testo-xs:  #888;
-      --bordo:     #e0e0e0;
-      --bordo2:    #d0d0d0;
-      --verde:     #16a34a;
-      --font-titolo: 'Bebas Neue', 'Impact', sans-serif;
-      --font-body:   'Nunito', 'Segoe UI', sans-serif;
-      /* Variabili compatibilità */
-      --shadow: 0 1px 4px rgba(0,0,0,0.3);
-      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-      --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
-      --radius: 10px;
-      --bordo-lt: rgba(42,37,32,0.5);
-      --sfondo: #f0f0f0;
-      --arancio: #F5A800;
-      --arancio-bg: rgba(245,168,0,0.08);
-      --blu-bg: rgba(26,79,160,0.1);
-      --blu-lt: #2563c4;
-      --verde-bg: rgba(22,163,74,0.08);
-      --rosso-bg: rgba(212,43,43,0.06);
-      --testo-lt: #b0a898;
-      --testo-2: #b0a898;
+      --primario:   #E85C00;
+      --primario-dk:#c44e00;
+      --blu:        #1a56db;
+      --blu-bg:     #eff6ff;
+      --blu-lt:     #3b82f6;
+      --verde:      #16a34a;
+      --verde-bg:   #f0fdf4;
+      --rosso:      #dc2626;
+      --rosso-bg:   #fef2f2;
+      --arancio:    #ea580c;
+      --arancio-bg: #fff7ed;
+      --giallo:     #d97706;
+      --sfondo:     #f8fafc;
+      --sfondo2:    #f1f5f9;
+      --testo:      #1e293b;
+      --testo-lt:   #475569;
+      --testo-2:    #64748b;
+      --testo-xs:   #94a3b8;
+      --bordo:      #e2e8f0;
+      --bordo-lt:   #f1f5f9;
+      --shadow-xs:  0 1px 2px rgba(0,0,0,.05);
+      --shadow:     0 1px 4px rgba(0,0,0,.08);
+      --shadow-md:  0 4px 12px rgba(0,0,0,.1);
+      --radius:     12px;
+      --radius-sm:  8px;
+      --font-display:'Segoe UI',Roboto,system-ui,sans-serif;
     }
-
     * { box-sizing:border-box; margin:0; padding:0; }
-    html { scroll-behavior:smooth; }
-    body {
-      font-family: var(--font-body);
-      background: #ffffff;
-      color: var(--testo);
-      min-height: 100vh;
-      overscroll-behavior: none;
-    }
+    html { -webkit-tap-highlight-color:transparent; }
+    body { font-family:var(--font-display); background:var(--sfondo); color:var(--testo); min-height:100vh; overscroll-behavior:none; }
 
+    /* ── LOADING ── */
+    #loading-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:14px; background:#fff; }
+    #loading-screen .load-logo { font-size:64px; animation:spin 2s linear infinite; }
+    @keyframes spin { 0%{transform:rotate(-5deg)} 50%{transform:rotate(5deg)} 100%{transform:rotate(-5deg)} }
+    #loading-screen .load-title { font-size:18px; font-weight:800; color:var(--primario); }
+    #loading-screen .load-sub { font-size:12px; color:var(--testo-xs); }
+    #loading-img { width:60px; height:60px; object-fit:contain; display:none; border-radius:50%; }
 
+    /* ── MAIN APP ── */
+    #main-app { display:none; flex-direction:column; min-height:100vh; }
 
-    /* ════════════════════════════════
-       LOADING SCREEN
-    ════════════════════════════════ */
-    #loading-screen {
-      position:fixed; inset:0; z-index:9999;
-      display:flex; flex-direction:column;
-      align-items:center; justify-content:center; gap:0;
-      background: linear-gradient(160deg, #ffffff 0%, #fff5f5 50%, #f0f4ff 100%);
-    }
-    #loading-screen .load-logo {
-      font-size:80px;
-      animation: lionBounce 1.2s ease-in-out infinite;
-      filter: drop-shadow(0 0 30px rgba(245,168,0,0.5));
-    }
-    #loading-screen .load-title {
-      font-family: var(--font-titolo);
-      font-size: 42px;
-      letter-spacing: 6px;
-      background: linear-gradient(90deg, var(--rosso), var(--giallo), var(--rosso));
-      background-size: 200%;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: shimmer 2s infinite linear;
-      margin-top: 12px;
-    }
-    #loading-screen .load-sub {
-      font-size: 13px;
-      color: #888;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin-top: 8px;
-    }
-    #loading-screen .load-bar {
-      width: 160px; height: 3px;
-      background: var(--bordo2);
-      border-radius: 2px;
-      margin-top: 28px;
-      overflow: hidden;
-    }
-    #loading-screen .load-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--rosso), var(--giallo));
-      border-radius: 2px;
-      animation: loadBar 1.5s ease-in-out infinite;
-    }
-    @keyframes lionBounce {
-      0%,100%{ transform:translateY(0) rotate(-3deg); }
-      50%{ transform:translateY(-12px) rotate(3deg); }
-    }
-    @keyframes shimmer {
-      0%{ background-position:0% } 100%{ background-position:200% }
-    }
-    @keyframes loadBar {
-      0%{ width:0%; margin-left:0 }
-      50%{ width:80%; margin-left:10% }
-      100%{ width:0%; margin-left:100% }
-    }
-    #loading-img { width:64px; height:64px; object-fit:contain; display:none; border-radius:10px; }
-
-    /* ════════════════════════════════
-       MAIN APP
-    ════════════════════════════════ */
-    #main-app { display:none; flex-direction:column; min-height:100vh; position:relative; z-index:1; }
-
-    /* ════════════════════════════════
-       HEADER
-    ════════════════════════════════ */
+    /* ── HEADER ── */
     .app-header {
-      background: linear-gradient(135deg, var(--rosso-dark) 0%, var(--rosso) 40%, #8B1010 100%);
-      border-bottom: 3px solid var(--giallo);
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky; top:0; z-index:100;
-      min-height: 56px;
-      box-shadow: 0 4px 20px rgba(212,43,43,0.4);
+      background:#fff; border-bottom:1px solid var(--bordo);
+      padding:0 14px; display:flex; align-items:center;
+      justify-content:space-between; position:sticky; top:0; z-index:100;
+      min-height:52px; box-shadow:var(--shadow-xs);
     }
     .header-left { display:flex; align-items:center; gap:10px; }
-    #header-logo {
-      width: 42px; height: 42px;
-      object-fit: contain;
-      border-radius: 8px;
-      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
-    }
-    .header-titles {}
-    #header-title {
-      font-family: var(--font-titolo);
-      font-size: 22px;
-      letter-spacing: 2px;
-      color: white;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-      line-height: 1;
-    }
-    #header-date {
-      font-size: 10px;
-      color: rgba(255,255,255,0.6);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      margin-top: 2px;
-    }
+    #header-logo { width:36px; height:36px; object-fit:contain; border-radius:8px; display:none; }
+    #header-title { font-size:15px; font-weight:800; color:var(--testo); }
+    #header-date { font-size:10px; color:var(--testo-xs); margin-top:1px; }
     .header-right { display:flex; align-items:center; gap:8px; }
-    #btn-admin-login {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.2);
-      color: rgba(255,255,255,0.8);
-      padding: 6px 14px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 12px;
-      font-family: var(--font-body);
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      transition: all .2s;
+    #admin-btn {
+      background:var(--sfondo); border:1.5px solid var(--bordo);
+      color:var(--testo-lt); padding:6px 12px; border-radius:8px;
+      cursor:pointer; font-size:12px; font-family:inherit; font-weight:600;
+      transition:all .2s;
     }
-    #btn-admin-login:hover { background:rgba(0,0,0,0.5); color:white; }
+    #admin-btn:hover { border-color:var(--primario); color:var(--primario); }
 
-    /* ════════════════════════════════
-       TORNEO BAR
-    ════════════════════════════════ */
-    #torneo-bar {
-      background: #f8f8f8;
-      border-bottom: 1px solid #e8e8e8;
-      padding: 6px 12px;
-      display: none;
-      overflow-x: auto;
-      white-space: nowrap;
-    }
-    .torneo-btn {
-      background: transparent;
-      border: 1px solid var(--bordo2);
-      color: var(--testo2);
-      padding: 4px 14px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 12px;
-      font-family: var(--font-body);
-      font-weight: 700;
-      margin-right: 6px;
-      transition: all .2s;
-    }
-    .torneo-btn.active {
-      background: var(--rosso);
-      border-color: var(--rosso);
-      color: white;
-    }
+    /* ── TORNEO BAR ── */
+    #torneo-bar { background:#fff; border-bottom:1px solid var(--bordo); padding:6px 12px; display:none; overflow-x:auto; white-space:nowrap; }
+    .torneo-btn { background:transparent; border:1px solid var(--bordo); color:var(--testo-lt); padding:4px 12px; border-radius:20px; cursor:pointer; font-size:12px; font-family:inherit; font-weight:600; margin-right:6px; transition:all .2s; }
+    .torneo-btn.active { background:var(--primario); border-color:var(--primario); color:white; }
 
-    /* ════════════════════════════════
-       CAT BAR — pill animata
-    ════════════════════════════════ */
-    #cat-bar {
-      background: #f8f8f8;
-      border-bottom: 2px solid #e8e8e8;
-      padding: 8px 12px;
-      overflow-x: auto;
-      white-space: nowrap;
-      display: none;
-    }
-    .cat-btn {
-      display: inline-block;
-      background: var(--nero3);
-      border: 1px solid var(--bordo2);
-      color: var(--testo2);
-      padding: 6px 16px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 12px;
-      font-family: var(--font-body);
-      font-weight: 700;
-      margin-right: 6px;
-      letter-spacing: 0.3px;
-      transition: all .25s;
-      white-space: nowrap;
-    }
-    .cat-btn.active {
-      background: linear-gradient(135deg, var(--giallo), #e09000);
-      border-color: var(--giallo);
-      color: var(--nero);
-      box-shadow: 0 2px 12px rgba(245,168,0,0.3);
-    }
+    /* ── CAT BAR ── */
+    #cat-bar { background:#fff; border-bottom:1px solid var(--bordo); padding:0 12px; overflow-x:auto; white-space:nowrap; display:none; min-height:44px; display:flex; align-items:center; }
+    .cat-pill { display:inline-block; background:transparent; border:none; color:var(--testo-xs); padding:8px 12px; cursor:pointer; font-size:12px; font-family:inherit; font-weight:600; border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap; }
+    .cat-pill.active { color:var(--primario); border-bottom-color:var(--primario); }
+    .cat-pill.oggi-pill { color:var(--arancio); }
 
-    /* ════════════════════════════════
-       GIORNATA BAR
-    ════════════════════════════════ */
-    #giornata-bar {
-      background: #f0f0f0;
-      border-bottom: 1px solid #e0e0e0;
-      padding: 5px 12px;
-      overflow-x: auto;
-      white-space: nowrap;
-      display: none;
-    }
-    .giornata-btn {
-      background: transparent;
-      border: 1px solid var(--bordo2);
-      color: #888;
-      padding: 3px 10px;
-      border-radius: 14px;
-      cursor: pointer;
-      font-size: 11px;
-      font-family: var(--font-body);
-      font-weight: 700;
-      margin-right: 5px;
-      transition: all .2s;
-    }
-    .giornata-btn.active {
-      background: var(--blu);
-      border-color: var(--blu-light);
-      color: white;
-    }
+    /* ── GIORNATA BAR ── */
+    #giornata-bar { background:var(--sfondo2); border-bottom:1px solid var(--bordo); padding:5px 12px; overflow-x:auto; white-space:nowrap; display:none; }
+    .giornata-btn { background:transparent; border:1px solid var(--bordo); color:var(--testo-xs); padding:3px 10px; border-radius:14px; cursor:pointer; font-size:11px; font-family:inherit; font-weight:600; margin-right:5px; transition:all .2s; }
+    .giornata-btn.active { background:var(--blu); border-color:var(--blu); color:white; }
 
-    /* ════════════════════════════════
-       MAIN CONTENT
-    ════════════════════════════════ */
+    /* ── MAIN CONTENT ── */
     #main-content { flex:1; overflow-y:auto; padding-bottom:80px; }
-    .section { display:none; padding:12px; }
-    .section.active { display:block; }
-
-    /* ════════════════════════════════
-       PUB NAV — bottom bar rosso/giallo
-    ════════════════════════════════ */
-    #pub-nav {
-      position: fixed; bottom:0; left:0; right:0;
-      background: linear-gradient(0deg, #ffffff 0%, #f8f8f8 100%);
-      border-top: 2px solid var(--rosso);
-      display: none;
-      padding: 8px 0 max(8px, env(safe-area-inset-bottom));
-      z-index: 200;
-      justify-content: space-around;
-    }
-    .nav-btn {
-      background: none; border: none;
-      color: var(--testo-xs);
-      display: flex; flex-direction: column;
-      align-items: center; gap: 3px;
-      padding: 4px 12px;
-      cursor: pointer;
-      font-size: 10px;
-      font-family: var(--font-body);
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      transition: color .2s;
-      min-width: 60px;
-    }
-    .nav-btn .nav-icon { font-size:22px; transition: transform .2s; }
-    .nav-btn.active { color: var(--giallo); }
-    .nav-btn.active .nav-icon { transform:scale(1.15) translateY(-2px); filter:drop-shadow(0 0 6px rgba(245,168,0,0.6)); }
-
-    /* ════════════════════════════════
-       ADMIN NAV
-    ════════════════════════════════ */
-    #admin-nav {
-      position: fixed; bottom:0; left:0; right:0;
-      background: var(--blu-dark);
-      border-top: 2px solid var(--giallo);
-      display: none;
-      padding: 6px 0 max(6px, env(safe-area-inset-bottom));
-      z-index: 200;
-      justify-content: space-around;
-      flex-wrap: wrap;
-    }
-    .admin-btn {
-      background: none; border: none;
-      color: rgba(255,255,255,0.5);
-      display: flex; flex-direction: column;
-      align-items: center; gap: 2px;
-      padding: 4px 8px;
-      cursor: pointer;
-      font-size: 9px;
-      font-family: var(--font-body);
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      transition: color .2s;
-    }
-    .admin-btn .nav-icon { font-size:20px; }
-    .admin-btn.active { color: var(--giallo); }
-
-    /* ════════════════════════════════
-       CARDS
-    ════════════════════════════════ */
-    .card {
-      background: #ffffff;
-      border: 1px solid #e8e8e8;
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 10px;
-      position: relative;
-      overflow: hidden;
-    }
-    .card::before {
-      content:'';
-      position:absolute; top:0; left:0; right:0; height:3px;
-      background: linear-gradient(90deg, var(--rosso), var(--giallo), var(--blu));
-      opacity: 0.6;
-    }
-    .card-title {
-      font-family: var(--font-titolo);
-      font-size: 18px;
-      letter-spacing: 1px;
-      color: var(--testo);
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .badge {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 2px 10px;
-      border-radius: 10px;
-      font-family: var(--font-body);
-    }
-    .badge-gray { background:var(--nero4); color:var(--testo2); border:1px solid var(--bordo2); }
-    .badge-green { background:rgba(46,204,113,.15); color:var(--verde); border:1px solid rgba(46,204,113,.3); }
-    .badge-orange { background:rgba(212,43,43,.15); color:var(--rosso); border:1px solid rgba(212,43,43,.3); }
-
-    /* ════════════════════════════════
-       STANDINGS TABLE
-    ════════════════════════════════ */
-    .standings-table { width:100%; border-collapse:collapse; font-size:13px; }
-    .standings-table th {
-      color: var(--testo-xs);
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 4px 6px;
-      text-align: center;
-      border-bottom: 1px solid var(--bordo);
-    }
-    .standings-table td {
-      padding: 7px 6px;
-      text-align: center;
-      border-bottom: 1px solid var(--bordo);
-    }
-    .standings-table tr:last-child td { border-bottom: none; }
-    .standings-table td:nth-child(3) { text-align:left; font-weight:700; }
-    .standings-table .qualifies { background: rgba(212,43,43,0.05); }
-    .standings-table .qualifies td:nth-child(3) { color: var(--giallo); }
-    .q-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--giallo); box-shadow:0 0 6px rgba(245,168,0,0.5); }
-    .nq-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--bordo2); }
-    .diff-pos { color:var(--verde); font-weight:700; }
-    .diff-neg { color:var(--rosso); font-weight:700; }
-    .pts-col { font-weight:900; font-size:15px; color:var(--giallo); }
-
-    /* ════════════════════════════════
-       LOGO SQUADRA
-    ════════════════════════════════ */
-    .sq-logo { width:24px; height:24px; border-radius:50%; object-fit:contain; background:var(--nero3); border:1px solid var(--bordo2); }
-    .sq-logo-sm { width:20px; height:20px; }
-    .sq-initial {
-      width:24px; height:24px; border-radius:50%;
-      background:linear-gradient(135deg, var(--rosso), var(--rosso-dark));
-      border:1px solid var(--bordo2);
-      display:inline-flex; align-items:center; justify-content:center;
-      font-size:10px; font-weight:900; color:white; text-transform:uppercase;
-    }
-    .sq-initial-sm { width:20px; height:20px; font-size:9px; }
-
-    /* ════════════════════════════════
-       MATCH CARDS
-    ════════════════════════════════ */
-    .match-card {
-      background: #f8f8f8;
-      border: 1px solid #e8e8e8;
-      border-radius: 12px;
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      transition: border-color .2s;
-    }
-    .match-card:hover { border-color: var(--bordo2); }
-    .match-header { font-size:10px; color:var(--testo-xs); margin-bottom:6px; display:flex; gap:8px; flex-wrap:wrap; letter-spacing:0.3px; }
-    .match-teams { display:flex; align-items:center; gap:8px; }
-    .match-team { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
-    .match-team.right { flex-direction:row-reverse; text-align:right; }
-    .match-score { font-family:var(--font-titolo); font-size:22px; font-weight:400; color:var(--giallo); min-width:54px; text-align:center; letter-spacing:2px; }
-    .match-score.pending { color:var(--testo-xs); font-size:13px; font-family:var(--font-body); font-weight:700; }
-    .inserito-da { font-size:10px; color:var(--testo-xs); margin-top:4px; }
-
-    /* ════════════════════════════════
-       TABELLONE / KNOCKOUT
-    ════════════════════════════════ */
-    .ko-round { margin-bottom:16px; }
-    .ko-round-title {
-      font-family: var(--font-titolo);
-      font-size: 16px;
-      letter-spacing: 1px;
-      color: var(--giallo);
-      margin-bottom: 8px;
-      padding: 6px 12px;
-      background: linear-gradient(90deg, rgba(212,43,43,0.15), transparent);
-      border-left: 3px solid var(--rosso);
-      border-radius: 0 6px 6px 0;
-    }
-    .ko-match {
-      background: #f8f8f8;
-      border: 1px solid #e8e8e8;
-      border-radius: 10px;
-      padding: 8px 12px;
-      margin-bottom: 6px;
-      display: flex; align-items:center; gap:10px;
-    }
-    .ko-team { flex:1; font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; }
-    .ko-team.right { flex-direction:row-reverse; text-align:right; }
-    .ko-score { font-family:var(--font-titolo); font-size:18px; color:var(--giallo); min-width:40px; text-align:center; letter-spacing:1px; }
-    .ko-info { font-size:10px; color:var(--testo-xs); text-align:center; min-width:50px; }
-
-    /* ════════════════════════════════
-       ADMIN SECTIONS
-    ════════════════════════════════ */
-    .admin-section { padding:12px; }
-    .form-group { margin-bottom:14px; }
-    .form-group label { display:block; font-size:12px; color:var(--testo2); margin-bottom:5px; font-weight:700; letter-spacing:0.3px; }
-    .form-group input, .form-group select, .form-group textarea {
-      width:100%;
-      background: #ffffff;
-      border: 1px solid #d0d0d0;
-      color: #1a1a1a;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-family: var(--font-body);
-      outline: none;
-      transition: border-color .2s;
-    }
-    .form-group input:focus, .form-group select:focus { border-color: var(--giallo); }
-    .btn { padding:10px 20px; border-radius:8px; border:none; cursor:pointer; font-size:14px; font-weight:700; font-family:var(--font-body); transition:all .2s; letter-spacing:0.3px; }
-    .btn-primary { background:linear-gradient(135deg, var(--rosso), var(--rosso-dark)); color:white; box-shadow:0 3px 12px rgba(212,43,43,0.3); }
-    .btn-primary:hover { transform:translateY(-1px); box-shadow:0 5px 16px rgba(212,43,43,0.4); }
-    .btn-secondary { background:var(--nero3); color:var(--testo); border:1px solid var(--bordo2); }
-    .btn-danger { background:#4a0f0f; color:#fca5a5; border:1px solid #7f1d1d; }
-
-    /* ════════════════════════════════
-       EMPTY STATE
-    ════════════════════════════════ */
-    .empty-state { text-align:center; padding:50px 20px; color:var(--testo-xs); font-size:14px; }
-    .empty-state .icon { font-size:56px; margin-bottom:14px; opacity:0.6; }
-
-    /* ════════════════════════════════
-       RIEPILOGO BANNER
-    ════════════════════════════════ */
-    .riepilogo-banner {
-      display:flex; align-items:center; justify-content:space-between;
-      background: linear-gradient(135deg, rgba(212,43,43,0.06), rgba(26,79,160,0.06));
-      border: 1px solid rgba(212,43,43,0.2);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 10px;
-      width:100%; cursor:pointer;
-      font-family: var(--font-body);
-      color: var(--testo);
-      gap: 10px;
-      transition: border-color .2s;
-    }
-    .riepilogo-banner:hover { border-color: var(--rosso); }
-    .riepilogo-banner-left { display:flex; align-items:center; gap:10px; }
-    .riepilogo-banner-icon { font-size:28px; }
-    .riepilogo-banner-title { font-family:var(--font-titolo); font-size:18px; letter-spacing:1px; }
-    .riepilogo-banner-sub { font-size:11px; color:var(--testo-xs); }
-    .riepilogo-banner-arrow { font-size:18px; color:var(--giallo); }
-
-    /* ════════════════════════════════
-       TOAST
-    ════════════════════════════════ */
-    #toast {
-      position:fixed; bottom:90px; left:50%;
-      transform: translateX(-50%) translateY(20px);
-      background: var(--nero2);
-      border: 1px solid var(--bordo2);
-      color: var(--testo);
-      padding: 10px 20px;
-      border-radius: 10px;
-      font-size: 13px; font-weight:700;
-      z-index: 9999;
-      opacity: 0;
-      transition: all .3s;
-      pointer-events: none;
-      white-space: nowrap;
-      max-width: 90vw;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    }
-    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
-
-    /* ════════════════════════════════
-       SCROLLBAR
-    ════════════════════════════════ */
-    ::-webkit-scrollbar { width:4px; height:4px; }
-    ::-webkit-scrollbar-track { background:transparent; }
-    ::-webkit-scrollbar-thumb { background:var(--bordo2); border-radius:2px; }
-    ::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
-  ::-webkit-scrollbar-thumb:hover { background:var(--rosso); }
-
-    /* ════════════════════════════════
-       SEZIONE SELEZIONE TORNEO
-    ════════════════════════════════ */
-    .sel-torneo-card {
-      background: linear-gradient(135deg, var(--nero2), var(--nero3));
-      border: 2px solid var(--bordo);
-      border-radius: 16px;
-      padding: 20px;
-      margin: 12px;
-      text-align: center;
-      cursor: pointer;
-      transition: all .25s;
-    }
-    .sel-torneo-card:hover { border-color: var(--rosso); transform:translateY(-2px); }
-    .sel-torneo-card .icon { font-size:40px; margin-bottom:8px; }
-    .sel-torneo-card .nome { font-family:var(--font-titolo); font-size:20px; letter-spacing:1px; color:var(--giallo); }
-    .sel-torneo-card .data { font-size:12px; color:var(--testo-xs); margin-top:4px; }
-    #sel-logo { width:80px; height:80px; object-fit:contain; border-radius:12px; margin:0 auto 12px; display:block; }
-
-    /* ── Classi compatibilità app.js ── */
     .sec { display:none; padding:12px; }
     .sec.active { display:block; }
-    .footer-credits { text-align:center; padding:20px; font-size:12px; color:var(--testo-xs); }
-    .footer-credits a { color:var(--giallo); text-decoration:none; }
+
+    /* ── PUB NAV ── */
+    #pub-nav { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--bordo); display:none; padding:6px 0 max(6px,env(safe-area-inset-bottom)); z-index:200; justify-content:space-around; box-shadow:0 -2px 8px rgba(0,0,0,.06); }
+    .nav-btn { background:none; border:none; color:var(--testo-xs); display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px 12px; cursor:pointer; font-size:10px; font-family:inherit; font-weight:600; transition:color .2s; min-width:60px; }
+    .nav-btn .nav-icon { font-size:22px; }
+    .nav-btn.active { color:var(--primario); }
+
+    /* ── ADMIN NAV ── */
+    #admin-nav { position:fixed; bottom:0; left:0; right:0; background:#0f172a; border-top:2px solid var(--primario); display:none; padding:6px 0 max(6px,env(safe-area-inset-bottom)); z-index:200; justify-content:space-around; flex-wrap:wrap; }
+    .admin-btn { background:none; border:none; color:#64748b; display:flex; flex-direction:column; align-items:center; gap:2px; padding:4px 8px; cursor:pointer; font-size:9px; font-family:inherit; font-weight:600; text-transform:uppercase; }
+    .admin-btn .nav-icon { font-size:20px; }
+    .admin-btn.active { color:var(--primario); }
+
+    /* ── CARDS ── */
+    .card { background:#fff; border:1px solid var(--bordo); border-radius:var(--radius); padding:14px; margin-bottom:10px; box-shadow:var(--shadow-xs); }
+    .card-title { font-size:14px; font-weight:700; color:var(--testo); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; }
+    .badge-gray { background:var(--sfondo2); color:var(--testo-lt); border:1px solid var(--bordo); }
+    .badge-green { background:var(--verde-bg); color:var(--verde); border:1px solid rgba(22,163,74,.2); }
+    .badge-orange { background:var(--arancio-bg); color:var(--arancio); border:1px solid rgba(234,88,12,.2); }
+    .badge-blue { background:var(--blu-bg); color:var(--blu); border:1px solid rgba(26,86,219,.2); }
+
+    /* ── STANDINGS TABLE ── */
+    .standings-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .standings-table th { color:var(--testo-xs); font-size:10px; font-weight:700; text-transform:uppercase; padding:4px 6px; text-align:center; border-bottom:1px solid var(--bordo); }
+    .standings-table td { padding:7px 6px; text-align:center; border-bottom:1px solid var(--bordo-lt); }
+    .standings-table tr:last-child td { border-bottom:none; }
+    .standings-table td:nth-child(3) { text-align:left; font-weight:600; }
+    .standings-table .qualifies { background:rgba(234,88,12,.04); }
+    .standings-table .qualifies td:nth-child(3) { color:var(--primario); }
+    .q-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--primario); }
+    .nq-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--bordo); }
+    .diff-pos { color:var(--verde); font-weight:700; }
+    .diff-neg { color:var(--rosso); font-weight:700; }
+    .pts-col { font-weight:800; font-size:15px; color:var(--primario); }
+
+    /* ── LOGO SQUADRA ── */
+    .team-logo { width:24px; height:24px; border-radius:50%; object-fit:contain; background:var(--sfondo2); border:1px solid var(--bordo); }
+    .team-logo-sm { width:20px; height:20px; border-radius:50%; object-fit:contain; }
+    .team-avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--primario),var(--primario-dk)); display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; color:white; text-transform:uppercase; flex-shrink:0; }
+    .team-avatar-sm { width:20px; height:20px; border-radius:50%; background:linear-gradient(135deg,var(--primario),var(--primario-dk)); display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:800; color:white; text-transform:uppercase; flex-shrink:0; }
+
+    /* ── MATCH RESULT ── */
+    .match-result { padding:8px 0; border-bottom:1px solid var(--bordo-lt); }
+    .match-result:last-child { border-bottom:none; }
+    .match-meta-time { font-size:11px; font-weight:700; color:var(--primario); }
+    .match-meta-field { font-size:11px; color:var(--testo-xs); }
+    .match-meta-girone { font-size:11px; color:var(--testo-xs); }
+    .match-meta-author { font-size:10px; color:var(--testo-xs); margin-left:auto; }
+    .match-team { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; flex:1; }
+    .match-team.right { flex-direction:row-reverse; text-align:right; }
+    .match-score { font-size:18px; font-weight:800; color:var(--testo); min-width:50px; text-align:center; }
+    .match-score.pending { color:var(--testo-xs); font-size:13px; font-weight:600; }
+    .match-scorers { margin-top:5px; display:flex; flex-wrap:wrap; gap:4px; }
+    .scorer-chip { font-size:11px; background:var(--sfondo2); border:1px solid var(--bordo); border-radius:10px; padding:2px 8px; color:var(--testo-lt); }
+
+    /* ── SECTION LABEL ── */
     .section-label { font-size:11px; font-weight:700; color:var(--testo-xs); text-transform:uppercase; letter-spacing:.08em; margin:14px 0 8px; display:flex; align-items:center; gap:8px; }
     .section-label::after { content:''; flex:1; height:1px; background:var(--bordo); }
-    .cat-pill { background:var(--nero3); border:1px solid var(--bordo2); color:var(--testo2); padding:4px 12px; border-radius:20px; cursor:pointer; font-size:11px; font-family:var(--font-body); font-weight:700; margin-right:5px; transition:all .2s; }
-    .cat-pill.active { background:var(--giallo); border-color:var(--giallo); color:var(--nero); }
-    .cat-pill.oggi-pill { border-color:var(--rosso); color:var(--rosso); }
-    /* Admin match */
-    .admin-match { background:#f8f8f8; border:1px solid var(--bordo); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+
+    /* ── ADMIN MATCH ── */
+    .admin-match { background:#fff; border:1px solid var(--bordo); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:8px; box-shadow:var(--shadow-xs); }
     .admin-match-header { display:flex; flex-direction:column; gap:6px; }
-    .admin-team-name { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
-    .admin-team-name.right { flex-direction:row-reverse; }
-    .score-input { width:44px; height:36px; text-align:center; font-size:18px; font-weight:800; border:2px solid #d0d0d0; border-radius:8px; background:#fff; color:#1a1a1a; font-family:var(--font-body); }
+    .admin-team-name { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; flex:1; }
+    .score-input { width:44px; height:36px; text-align:center; font-size:18px; font-weight:800; border:2px solid var(--bordo); border-radius:8px; background:var(--sfondo); color:var(--testo); font-family:inherit; }
+    .score-input:focus { border-color:var(--primario); outline:none; }
     .score-dash { color:var(--testo-xs); font-size:16px; font-weight:700; }
     .match-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-left:auto; }
+    .btn { padding:10px 20px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-size:14px; font-weight:600; font-family:inherit; transition:all .2s; }
+    .btn-p { background:var(--primario); color:white; }
+    .btn-p:hover { background:var(--primario-dk); }
     .btn-sm { padding:5px 10px; font-size:12px; }
-    .btn-p { background:linear-gradient(135deg, var(--rosso), var(--rosso-dark)); color:white; border:none; }
-    .btn-accent { background:rgba(245,168,0,0.15); border:1px solid rgba(245,168,0,0.3); color:var(--giallo); }
-    .btn-success { background:rgba(46,204,113,0.15); border:1px solid rgba(46,204,113,0.3); color:var(--verde); }
-    .scorers-section { padding:10px 0 0; border-top:1px solid var(--bordo); margin-top:8px; }
+    .btn-secondary { background:var(--sfondo2); color:var(--testo); border:1px solid var(--bordo); }
+    .btn-danger { background:#fef2f2; color:var(--rosso); border:1px solid rgba(220,38,38,.2); }
+    .btn-accent { background:var(--arancio-bg); color:var(--arancio); border:1px solid rgba(234,88,12,.2); }
+    .btn-success { background:var(--verde-bg); color:var(--verde); border:1px solid rgba(22,163,74,.2); }
+    .scorers-section { padding:10px 0 0; border-top:1px solid var(--bordo-lt); margin-top:8px; }
     .scorer-row { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
-    .scorer-row select, .scorer-row input { background:var(--nero4); border:1px solid var(--bordo2); color:var(--testo); border-radius:6px; padding:5px 8px; font-size:12px; font-family:var(--font-body); }
+    .scorer-row select,.scorer-row input { background:var(--sfondo); border:1px solid var(--bordo); color:var(--testo); border-radius:6px; padding:5px 8px; font-size:12px; font-family:inherit; }
     .scorer-row .min-input { width:52px; }
-    .add-scorer-btn { background:var(--nero4); border:1.5px dashed var(--bordo2); color:var(--testo-xs); border-radius:7px; padding:5px 14px; font-size:12px; cursor:pointer; font-family:var(--font-body); width:100%; margin-top:4px; }
-    /* Match result pubblico */
-    .match-result { padding:8px 0; border-bottom:1px solid var(--bordo); }
-    .match-result:last-child { border-bottom:none; }
-    .match-meta-time { font-size:11px; font-weight:700; color:var(--giallo); }
-    .match-meta-field { font-size:11px; color:var(--testo-xs); }
-    .match-meta-girone { font-size:11px; color:var(--bordo2); }
-    .match-meta-author { font-size:10px; color:var(--testo-xs); margin-left:auto; }
-    .match-team { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
-    .match-team.right { flex-direction:row-reverse; text-align:right; }
-    .match-score { font-family:var(--font-titolo); font-size:22px; color:var(--giallo); min-width:54px; text-align:center; letter-spacing:2px; }
-    .match-score.pending { color:var(--testo-xs); font-size:13px; font-family:var(--font-body); font-weight:700; }
-    .match-scorers { margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
-    .scorer-chip { font-size:11px; background:var(--nero4); border:1px solid var(--bordo); border-radius:10px; padding:2px 8px; color:var(--testo2); }
-    /* Logo/avatar squadra */
-    .team-logo { width:24px; height:24px; border-radius:50%; object-fit:contain; }
-    .team-logo-sm { width:20px; height:20px; border-radius:50%; object-fit:contain; }
-    .team-avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--rosso),var(--rosso-dark)); display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:900; color:white; text-transform:uppercase; flex-shrink:0; }
-    .team-avatar-sm { width:20px; height:20px; font-size:8px; border-radius:50%; background:linear-gradient(135deg,var(--rosso),var(--rosso-dark)); display:inline-flex; align-items:center; justify-content:center; font-weight:900; color:white; text-transform:uppercase; flex-shrink:0; }
-    /* Loghi admin */
-    .logo-team-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--bordo); }
+    .add-scorer-btn { background:var(--sfondo2); border:1.5px dashed var(--bordo); color:var(--testo-lt); border-radius:7px; padding:5px 14px; font-size:12px; cursor:pointer; font-family:inherit; width:100%; margin-top:4px; }
+
+    /* ── FORM ── */
+    .form-input { width:100%; background:#fff; border:1.5px solid var(--bordo); color:var(--testo); padding:9px 12px; border-radius:var(--radius-sm); font-size:13px; font-family:inherit; outline:none; transition:border-color .2s; }
+    .form-input:focus { border-color:var(--primario); }
+    .form-label { display:block; font-size:11px; color:var(--testo-lt); margin-bottom:4px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .form-group { margin-bottom:14px; }
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+    /* ── LOGO ADMIN ── */
+    .logo-team-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--bordo-lt); }
     .logo-upload-btn { position:relative; cursor:pointer; flex-shrink:0; }
     .logo-upload-btn input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
-    .logo-plus { position:absolute; bottom:-2px; right:-2px; width:16px; height:16px; background:var(--rosso); border-radius:50%; display:flex; align-items:center; justify-content:center; }
-    /* Form admin */
-    .form-input { width:100%; background:var(--nero3); border:1px solid var(--bordo2); color:var(--testo); padding:9px 12px; border-radius:8px; font-size:13px; font-family:var(--font-body); outline:none; }
-    .form-input:focus { border-color:var(--giallo); }
-    .form-label { display:block; font-size:11px; color:var(--testo2); margin-bottom:4px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
-    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    /* Badge extra */
-    .badge-blue { background:rgba(26,79,160,.15); color:var(--blu-light); border:1px solid rgba(26,79,160,.3); }
-    /* Shadow vars */
-    --shadow: 0 1px 4px rgba(0,0,0,0.3);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-    --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
-    --radius: 10px;
-    --bordo-lt: rgba(42,37,32,0.5);
-    --sfondo: var(--nero3);
-    --arancio: var(--giallo);
-    --arancio-bg: rgba(245,168,0,0.08);
-    --blu-bg: rgba(26,79,160,0.1);
-    --blu-lt: var(--blu-light);
-    --verde-bg: rgba(46,204,113,0.08);
-    --rosso-bg: rgba(212,43,43,0.08);
-    --testo-lt: var(--testo2);
-    --testo-2: var(--testo2);
+    .logo-plus { position:absolute; bottom:-2px; right:-2px; width:16px; height:16px; background:var(--primario); border-radius:50%; display:flex; align-items:center; justify-content:center; }
 
+    /* ── RIEPILOGO BANNER ── */
+    .riepilogo-banner { display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid var(--bordo); border-radius:var(--radius); padding:12px 16px; margin-bottom:10px; width:100%; cursor:pointer; font-family:inherit; color:var(--testo); gap:10px; box-shadow:var(--shadow-xs); transition:border-color .2s; }
+    .riepilogo-banner:hover { border-color:var(--primario); }
+    .riepilogo-banner-left { display:flex; align-items:center; gap:10px; }
+    .riepilogo-banner-icon { font-size:28px; }
+    .riepilogo-banner-title { font-size:14px; font-weight:700; }
+    .riepilogo-banner-sub { font-size:11px; color:var(--testo-xs); }
+    .riepilogo-banner-arrow { font-size:18px; color:var(--primario); }
+
+    /* ── EMPTY STATE ── */
+    .empty-state { text-align:center; padding:40px 20px; color:var(--testo-xs); font-size:14px; }
+    .empty-state .icon { font-size:48px; margin-bottom:12px; }
+
+    /* ── FOOTER ── */
+    .footer-credits { text-align:center; padding:20px; font-size:12px; color:var(--testo-xs); }
+    .footer-credits a { color:var(--primario); text-decoration:none; }
+
+    /* ── TOAST ── */
+    #toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px); background:#1e293b; color:white; padding:10px 20px; border-radius:10px; font-size:13px; font-weight:600; z-index:9999; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; max-width:90vw; }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--bordo); border-radius:2px; }
   </style>
 </head>
 <body>
 
-<!-- ══ LOADING SCREEN ══ -->
+<!-- Loading -->
 <div id="loading-screen">
   <img id="loading-img" src="" alt="">
   <div class="load-logo">🦁</div>
-  <div class="load-title">MC LION TROPHY</div>
-  <div class="load-sub">11° Trofeo Valle d'Aosta Calcio 2026</div>
-  <div class="load-bar"><div class="load-bar-fill"></div></div>
+  <div class="load-title">MC Lion Trophy 2026</div>
+  <div class="load-sub">⏳ Caricamento...</div>
 </div>
 
-<!-- ══ MAIN APP ══ -->
+<!-- Main app -->
 <div id="main-app">
 
   <!-- Header -->
   <div class="app-header">
     <div class="header-left">
-      <img id="header-logo" src="" alt="" style="display:none">
-      <div class="header-titles">
-        <div id="header-title">🦁 MC LION TROPHY</div>
+      <img id="header-logo" src="" alt="">
+      <div>
+        <div id="header-title">🦁 MC Lion Trophy</div>
         <div id="header-date">12-13-14 Giugno 2026 · Valle d'Aosta</div>
       </div>
     </div>
     <div class="header-right">
-      <button id="admin-btn" onclick="mostraLogin()" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.8);padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:var(--font-body);font-weight:700;">⚙️ Admin</button>
+      <button id="admin-btn" onclick="mostraLogin()">Admin</button>
     </div>
   </div>
 
@@ -692,20 +250,17 @@
 
   <!-- Main content -->
   <div id="main-content">
-    <!-- Sezioni pubbliche -->
-    <div id="sec-classifiche" class="section active"></div>
-    <div id="sec-risultati"   class="section"></div>
-    <div id="sec-tabellone"   class="section"></div>
-    <!-- Sezioni admin -->
-    <div id="sec-a-tornei"    class="section admin-section"></div>
-    <div id="sec-a-setup"     class="section admin-section"></div>
-    <div id="sec-a-risultati" class="section admin-section"></div>
-    <div id="sec-a-knockout"  class="section admin-section"></div>
-    <div id="sec-a-loghi"     class="section admin-section"></div>
-    <div id="sec-a-campi"     class="section admin-section"></div>
-    <div id="sec-a-crea"      class="section admin-section"></div>
-    <div id="sec-a-modifica"  class="section admin-section"></div>
-    <!-- Footer -->
+    <div id="sec-classifiche" class="sec active"></div>
+    <div id="sec-risultati"   class="sec"></div>
+    <div id="sec-tabellone"   class="sec"></div>
+    <div id="sec-a-tornei"    class="sec"></div>
+    <div id="sec-a-setup"     class="sec"></div>
+    <div id="sec-a-risultati" class="sec"></div>
+    <div id="sec-a-knockout"  class="sec"></div>
+    <div id="sec-a-loghi"     class="sec"></div>
+    <div id="sec-a-campi"     class="sec"></div>
+    <div id="sec-a-crea"      class="sec"></div>
+    <div id="sec-a-modifica"  class="sec"></div>
     <div id="app-footer"></div>
   </div>
 
@@ -749,34 +304,33 @@
 <!-- Toast -->
 <div id="toast"></div>
 
-<!-- Scripts — ORDINE OBBLIGATORIO -->
-<script src="config.js?v=20260530"></script>
-<script src="db.js?v=20260530"></script>
-<script src="app.js?v=20260530"></script>
-<script src="import.js?v=20260530"></script>
-
-
-<!-- Modal Login Admin -->
-<div id="admin-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;">
-  <div style="background:var(--nero2);border:2px solid var(--giallo);border-radius:16px;padding:28px;width:90%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
-    <div style="font-family:var(--font-titolo);font-size:28px;letter-spacing:2px;color:var(--giallo);margin-bottom:4px;">🦁 ADMIN</div>
+<!-- Modal Login -->
+<div id="admin-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:90%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,0.2);">
+    <div style="font-size:20px;font-weight:800;color:var(--testo);margin-bottom:4px;">🔐 Accesso Admin</div>
     <div style="font-size:12px;color:var(--testo-xs);margin-bottom:20px;">MC Lion Trophy 2026</div>
-    <div style="margin-bottom:12px;">
+    <div class="form-group">
       <label class="form-label">Username</label>
       <input id="admin-user" class="form-input" placeholder="username" autocomplete="username">
     </div>
-    <div style="margin-bottom:20px;">
+    <div class="form-group">
       <label class="form-label">Password</label>
-      <input id="admin-pw" class="form-input" type="password" placeholder="••••••••" autocomplete="current-password"
+      <input id="admin-pw" class="form-input" type="password" placeholder="••••••••"
         onkeydown="if(event.key==='Enter')checkPw()">
     </div>
     <div id="pw-error" style="color:var(--rosso);font-size:12px;margin-bottom:12px;min-height:16px;"></div>
     <div style="display:flex;gap:10px;">
-      <button onclick="checkPw()" style="flex:1;background:linear-gradient(135deg,var(--rosso),var(--rosso-dark));color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);">Accedi</button>
-      <button onclick="document.getElementById('admin-modal').style.display='none'" style="background:var(--nero3);border:1px solid var(--bordo2);color:var(--testo2);border-radius:10px;padding:12px 16px;cursor:pointer;font-family:var(--font-body);">✕</button>
+      <button onclick="checkPw()" class="btn btn-p" style="flex:1;">Accedi</button>
+      <button onclick="document.getElementById('admin-modal').style.display='none'" class="btn btn-secondary">✕</button>
     </div>
   </div>
 </div>
+
+<!-- Scripts -->
+<script src="config.js?v=20260531"></script>
+<script src="db.js?v=20260531"></script>
+<script src="app.js?v=20260531"></script>
+<script src="import.js?v=20260531"></script>
 
 </body>
 </html>
