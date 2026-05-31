@@ -21,17 +21,17 @@
       --blu:       #1A4FA0;
       --blu-dark:  #0f3070;
       --blu-light: #2563c4;
-      --nero:      #0D0D0D;
-      --nero2:     #161616;
-      --nero3:     #1e1e1e;
-      --nero4:     #282828;
-      --grigio:    #333;
-      --testo:     #F5F0E8;
-      --testo2:    #b0a898;
-      --testo-xs:  #6b6257;
-      --bordo:     #2a2520;
-      --bordo2:    #3a332b;
-      --verde:     #2ecc71;
+      --nero:      #ffffff;
+      --nero2:     #f8f8f8;
+      --nero3:     #f0f0f0;
+      --nero4:     #e8e8e8;
+      --grigio:    #999;
+      --testo:     #1a1a1a;
+      --testo2:    #555;
+      --testo-xs:  #888;
+      --bordo:     #e0e0e0;
+      --bordo2:    #d0d0d0;
+      --verde:     #16a34a;
       --font-titolo: 'Bebas Neue', 'Impact', sans-serif;
       --font-body:   'Nunito', 'Segoe UI', sans-serif;
       /* Variabili compatibilità */
@@ -40,13 +40,13 @@
       --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
       --radius: 10px;
       --bordo-lt: rgba(42,37,32,0.5);
-      --sfondo: #1e1e1e;
+      --sfondo: #f0f0f0;
       --arancio: #F5A800;
       --arancio-bg: rgba(245,168,0,0.08);
       --blu-bg: rgba(26,79,160,0.1);
       --blu-lt: #2563c4;
-      --verde-bg: rgba(46,204,113,0.08);
-      --rosso-bg: rgba(212,43,43,0.08);
+      --verde-bg: rgba(22,163,74,0.08);
+      --rosso-bg: rgba(212,43,43,0.06);
       --testo-lt: #b0a898;
       --testo-2: #b0a898;
     }
@@ -55,32 +55,13 @@
     html { scroll-behavior:smooth; }
     body {
       font-family: var(--font-body);
-      background: var(--nero);
+      background: #ffffff;
       color: var(--testo);
       min-height: 100vh;
       overscroll-behavior: none;
     }
 
-    /* ── TEXTURE DI SFONDO ── */
-    body::before {
-      content:'';
-      position:fixed; inset:0; z-index:0; pointer-events:none;
-      background-image:
-        repeating-linear-gradient(
-          45deg,
-          transparent,
-          transparent 40px,
-          rgba(212,43,43,0.018) 40px,
-          rgba(212,43,43,0.018) 41px
-        ),
-        repeating-linear-gradient(
-          -45deg,
-          transparent,
-          transparent 40px,
-          rgba(245,168,0,0.012) 40px,
-          rgba(245,168,0,0.012) 41px
-        );
-    }
+
 
     /* ════════════════════════════════
        LOADING SCREEN
@@ -89,7 +70,7 @@
       position:fixed; inset:0; z-index:9999;
       display:flex; flex-direction:column;
       align-items:center; justify-content:center; gap:0;
-      background: linear-gradient(160deg, #0D0D0D 0%, #1A0A0A 50%, #0D1020 100%);
+      background: linear-gradient(160deg, #ffffff 0%, #fff5f5 50%, #f0f4ff 100%);
     }
     #loading-screen .load-logo {
       font-size:80px;
@@ -109,7 +90,7 @@
     }
     #loading-screen .load-sub {
       font-size: 13px;
-      color: var(--testo-xs);
+      color: #888;
       letter-spacing: 2px;
       text-transform: uppercase;
       margin-top: 8px;
@@ -203,8 +184,8 @@
        TORNEO BAR
     ════════════════════════════════ */
     #torneo-bar {
-      background: var(--nero2);
-      border-bottom: 1px solid var(--bordo);
+      background: #f8f8f8;
+      border-bottom: 1px solid #e8e8e8;
       padding: 6px 12px;
       display: none;
       overflow-x: auto;
@@ -233,8 +214,8 @@
        CAT BAR — pill animata
     ════════════════════════════════ */
     #cat-bar {
-      background: var(--nero2);
-      border-bottom: 2px solid var(--bordo);
+      background: #f8f8f8;
+      border-bottom: 2px solid #e8e8e8;
       padding: 8px 12px;
       overflow-x: auto;
       white-space: nowrap;
@@ -267,8 +248,8 @@
        GIORNATA BAR
     ════════════════════════════════ */
     #giornata-bar {
-      background: var(--nero3);
-      border-bottom: 1px solid var(--bordo);
+      background: #f0f0f0;
+      border-bottom: 1px solid #e0e0e0;
       padding: 5px 12px;
       overflow-x: auto;
       white-space: nowrap;
@@ -277,7 +258,7 @@
     .giornata-btn {
       background: transparent;
       border: 1px solid var(--bordo2);
-      color: var(--testo-xs);
+      color: #888;
       padding: 3px 10px;
       border-radius: 14px;
       cursor: pointer;
@@ -305,7 +286,7 @@
     ════════════════════════════════ */
     #pub-nav {
       position: fixed; bottom:0; left:0; right:0;
-      background: linear-gradient(0deg, var(--nero) 0%, var(--nero2) 100%);
+      background: linear-gradient(0deg, #ffffff 0%, #f8f8f8 100%);
       border-top: 2px solid var(--rosso);
       display: none;
       padding: 8px 0 max(8px, env(safe-area-inset-bottom));
@@ -365,8 +346,8 @@
        CARDS
     ════════════════════════════════ */
     .card {
-      background: var(--nero2);
-      border: 1px solid var(--bordo);
+      background: #ffffff;
+      border: 1px solid #e8e8e8;
       border-radius: 14px;
       padding: 14px;
       margin-bottom: 10px;
@@ -423,7 +404,7 @@
     }
     .standings-table tr:last-child td { border-bottom: none; }
     .standings-table td:nth-child(3) { text-align:left; font-weight:700; }
-    .standings-table .qualifies { background: rgba(212,43,43,0.07); }
+    .standings-table .qualifies { background: rgba(212,43,43,0.05); }
     .standings-table .qualifies td:nth-child(3) { color: var(--giallo); }
     .q-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--giallo); box-shadow:0 0 6px rgba(245,168,0,0.5); }
     .nq-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--bordo2); }
@@ -449,8 +430,8 @@
        MATCH CARDS
     ════════════════════════════════ */
     .match-card {
-      background: var(--nero3);
-      border: 1px solid var(--bordo);
+      background: #f8f8f8;
+      border: 1px solid #e8e8e8;
       border-radius: 12px;
       padding: 10px 12px;
       margin-bottom: 8px;
@@ -481,8 +462,8 @@
       border-radius: 0 6px 6px 0;
     }
     .ko-match {
-      background: var(--nero3);
-      border: 1px solid var(--bordo);
+      background: #f8f8f8;
+      border: 1px solid #e8e8e8;
       border-radius: 10px;
       padding: 8px 12px;
       margin-bottom: 6px;
@@ -501,9 +482,9 @@
     .form-group label { display:block; font-size:12px; color:var(--testo2); margin-bottom:5px; font-weight:700; letter-spacing:0.3px; }
     .form-group input, .form-group select, .form-group textarea {
       width:100%;
-      background: var(--nero3);
-      border: 1px solid var(--bordo2);
-      color: var(--testo);
+      background: #ffffff;
+      border: 1px solid #d0d0d0;
+      color: #1a1a1a;
       padding: 10px 12px;
       border-radius: 8px;
       font-size: 14px;
@@ -529,8 +510,8 @@
     ════════════════════════════════ */
     .riepilogo-banner {
       display:flex; align-items:center; justify-content:space-between;
-      background: linear-gradient(135deg, rgba(212,43,43,0.12), rgba(26,79,160,0.12));
-      border: 1px solid rgba(212,43,43,0.3);
+      background: linear-gradient(135deg, rgba(212,43,43,0.06), rgba(26,79,160,0.06));
+      border: 1px solid rgba(212,43,43,0.2);
       border-radius: 12px;
       padding: 12px 16px;
       margin-bottom: 10px;
@@ -575,7 +556,8 @@
     ::-webkit-scrollbar { width:4px; height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:var(--bordo2); border-radius:2px; }
-    ::-webkit-scrollbar-thumb:hover { background:var(--rosso); }
+    ::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--rosso); }
 
     /* ════════════════════════════════
        SEZIONE SELEZIONE TORNEO
@@ -607,11 +589,11 @@
     .cat-pill.active { background:var(--giallo); border-color:var(--giallo); color:var(--nero); }
     .cat-pill.oggi-pill { border-color:var(--rosso); color:var(--rosso); }
     /* Admin match */
-    .admin-match { background:var(--nero3); border:1px solid var(--bordo); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+    .admin-match { background:#f8f8f8; border:1px solid var(--bordo); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
     .admin-match-header { display:flex; flex-direction:column; gap:6px; }
     .admin-team-name { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; flex:1; }
     .admin-team-name.right { flex-direction:row-reverse; }
-    .score-input { width:44px; height:36px; text-align:center; font-size:18px; font-weight:800; border:2px solid var(--bordo2); border-radius:8px; background:var(--nero4); color:var(--testo); font-family:var(--font-body); }
+    .score-input { width:44px; height:36px; text-align:center; font-size:18px; font-weight:800; border:2px solid #d0d0d0; border-radius:8px; background:#fff; color:#1a1a1a; font-family:var(--font-body); }
     .score-dash { color:var(--testo-xs); font-size:16px; font-weight:700; }
     .match-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-left:auto; }
     .btn-sm { padding:5px 10px; font-size:12px; }
