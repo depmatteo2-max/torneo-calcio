@@ -1791,11 +1791,11 @@ function checkPw() {
 }
 
 function enterAdmin(user) {
-  STATE.isAdmin=true; STATE.userRole=user.ruolo; STATE.userName=user.nome;
+  STATE.isAdmin=true; STATE.userRole=user.role||user.ruolo; STATE.userName=user.nome||user.username;
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
-  document.getElementById('admin-btn').textContent='Esci (' + user.nome + ')';
-  if (user.ruolo==='arbitro') {
+  if(document.getElementById('admin-btn'))document.getElementById('admin-btn').textContent='Esci ('+(user.nome||user.username)+')';
+  if (user.role==='scorer'||user.ruolo==='arbitro') {
     _mostraNavArbitro(); STATE.currentSection='a-risultati';
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
     document.getElementById('sec-a-risultati').classList.add('active');
@@ -1835,7 +1835,7 @@ function exitAdmin() {
   document.getElementById('admin-nav').querySelectorAll('.nav-btn').forEach(b=>b.style.display='');
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
-  document.getElementById('admin-btn').textContent='Admin';
+  if(document.getElementById('admin-btn'))document.getElementById('admin-btn').textContent='Admin';
   const simBtn = document.getElementById('sim-toggle-btn'); if (simBtn) simBtn.remove();
   const simPanel = document.getElementById('sim-panel'); if (simPanel) simPanel.remove();
   _simUnlocked = false;
@@ -3996,4 +3996,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
