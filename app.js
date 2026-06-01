@@ -899,13 +899,14 @@ async function renderClassifiche() {
 
     html += '<div class="card" style="margin-bottom:8px;">';
     html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
-    html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
+    html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GF</th><th>GS</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
     cl.forEach(function(row,idx){
       var q=idx<(cat&&cat.qualificate||1);
       var diff=row.gf-row.gs;
       html += '<tr class="'+(q?'qualifies':'')+'"><td><span class="'+(q?'q-dot':'nq-dot')+'"></span></td>';
       html += '<td>'+logoHTML(row.sq,'sm')+'</td><td>'+row.sq.nome+'</td>';
       html += '<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
+      html += '<td>'+row.gf+'</td><td>'+row.gs+'</td>';
       html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'>'+(diff>0?'+':'')+diff+'</td>';
       html += '<td class="pts-col">'+row.pts+'</td></tr>';
     });
@@ -925,7 +926,7 @@ async function renderClassifiche() {
       rows+='<td class="'+(dr>0?'diff-pos':dr<0?'diff-neg':'')+'">'+( dr>0?'+':'')+dr+'</td>';
       rows+='<td class="pts-col">'+row.pts+'</td></tr>';
     });
-    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+colore+';"><div class="card-title" style="color:'+colore+';">'+titolo+'<span class="badge badge-gray">'+lista.length+' squadre</span></div><table class="standings-table"><thead><tr><th>#</th><th colspan="2">Squadra</th><th>G.ne</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+colore+';"><div class="card-title" style="color:'+colore+';">'+titolo+'<span class="badge badge-gray">'+lista.length+' squadre</span></div><table class="standings-table"><thead><tr><th>#</th><th colspan="2">Squadra</th><th>G.ne</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GF</th><th>GS</th><th>GD</th><th>Pt</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   };
 
   var buildPos = function(pos, chiavi) {
