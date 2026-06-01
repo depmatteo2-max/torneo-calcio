@@ -3979,6 +3979,28 @@ async function _aggiornaResolver(categoriaId) {
       return sq ? sq.nome : nome;
     };
 
+    // ── SCRIVI NEL DB: aggiorna home_id/away_id per partite con placeholder ──
+    // Questo risolve gli accoppiamenti dei gironi 1-10 e Champions/Europa
+    let risolti = 0;
+    for (const p of (tuttePartite||[])) {
+      // Salta partite già risolte
+      if (p.home_id && p.away_id && !isPlaceh(p.home?.nome) && !isPlaceh(p.away?.nome)) continue;
+      // Risolvi placeholder
+      const hSq = p.home_id && !isPlaceh(p.home?.nome) ? {id:p.home_id} : risolviSq(p.home?.nome);
+      const aSq = p.away_id && !isPlaceh(p.away?.nome) ? {id:p.away_id} : risolviSq(p.away?.nome);
+      const upd = {};
+      if (hSq?.id && hSq.id !== p.home_id) upd.home_id = hSq.id;
+      if (aSq?.id && aSq.id !== p.away_id) upd.away_id = aSq.id;
+      if (Object.keys(upd).length) {
+        await db.from('partite').update(upd).eq('id', p.id);
+        risolti++;
+      }
+    }
+    if (risolti > 0) {
+      _mostraNotificaTriangolari();
+      if (typeof _cacheClear === 'function') _cacheClear();
+    }
+
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
 
