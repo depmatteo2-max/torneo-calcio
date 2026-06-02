@@ -1,9 +1,10 @@
 // ============================================================
-//  import_garda_patch.js — PATCH GARDA v6
-//  Include funzioni lettura Excel + risoluzione accoppiamenti
+//  import_garda_patch.js — PATCH GARDA v7
+//  Sovrascrive _parseExcelRiga + include tutte le funzioni
+//  di lettura Excel + risoluzione accoppiamenti
 // ============================================================
 
-// ── FUNZIONI LETTURA EXCEL (mancanti nel sistema Garda) ──────
+// ── FUNZIONI LETTURA EXCEL ───────────────────────────────────
 
 function trovaRigaHeader(rows, keywords) {
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
@@ -38,8 +39,7 @@ function leggiCategorie(wb) {
     .map(r => {
       const codice = String(r[iCat>=0?iCat:0]||'').trim();
       return {
-        codice,
-        nome: codice,
+        codice, nome: codice,
         qualificate: parseInt(String(r[iQual>=0?iQual:1]||'')) || 1,
         formato: String(r[iForm>=0?iForm:2]||'').trim() || 'gironi'
       };
@@ -81,21 +81,16 @@ function leggiPartiteFase1(wb) {
   if (iHome < 0) iHome = 2;
   if (iAway < 0) iAway = 3;
   return rows.slice(hi+1)
-    .filter(r => {
-      const cat  = String(r[iCat>=0?iCat:0]||'').trim();
-      const home = String(r[iHome]||'').trim();
-      const away = String(r[iAway]||'').trim();
-      return cat && home && away;
-    })
+    .filter(r => String(r[iCat>=0?iCat:0]||'').trim() && String(r[iHome]||'').trim() && String(r[iAway]||'').trim())
     .map(r => ({
       categoria: String(r[iCat>=0?iCat:0]||'').trim(),
       girone:    String(r[iGir>=0?iGir:1]||'').trim(),
       home:      String(r[iHome]||'').trim(),
       away:      String(r[iAway]||'').trim(),
-      orario:    String(r[iOra>=0?iOra:-1] !== undefined ? r[iOra]  : ''||'').trim(),
-      giorno:    String(r[iGior>=0?iGior:-1] !== undefined ? r[iGior] : ''||'').trim(),
-      campo:     String(r[iCampo>=0?iCampo:-1] !== undefined ? r[iCampo]: ''||'').trim(),
-      giornata:  String(r[iGiorn>=0?iGiorn:-1] !== undefined ? r[iGiorn]: ''||'').trim(),
+      orario:    iOra>=0   ? String(r[iOra]  ||'').trim() : '',
+      giorno:    iGior>=0  ? String(r[iGior] ||'').trim() : '',
+      campo:     iCampo>=0 ? String(r[iCampo]||'').trim() : '',
+      giornata:  iGiorn>=0 ? String(r[iGiorn]||'').trim() : '',
     }));
 }
 
@@ -108,8 +103,8 @@ function _getRoundMeta(round) {
   }
   const mFin = r.match(/FINALE\s+(\d+)[°º]?\s*[-–]\s*(\d+)[°º]?\s*POSTO/);
   if (mFin) {
-    const p1 = parseInt(mFin[1]);
-    return { order: 20+p1-1, consolazione: p1>2, emoji: p1===1?'🥇':p1===3?'🥉':'🏅', desc: 'Finale '+p1+'°-'+parseInt(mFin[2])+'° posto' };
+    const p1 = parseInt(mFin[1]), p2 = parseInt(mFin[2]);
+    return { order: 20+p1-1, consolazione: p1>2, emoji: p1===1?'🥇':p1===3?'🥉':'🏅', desc: 'Finale '+p1+'°-'+p2+'° posto' };
   }
   return null;
 }
@@ -150,6 +145,67 @@ function leggiPartiteFase2(wb) {
     });
 }
 
+// ── SOVRASCRIVE _parseExcelRiga ──────────────────────────────
+// Necessario perché l'originale chiama leggiCategorie() che non era definita
+
+let _fileRighe = {};
+
+async function _parseExcelRiga(file, idx) {
+  const preview = document.getElementById('cat-preview-' + idx);
+  const btnDiv  = document.getElementById('cat-btn-' + idx);
+  if (preview) { preview.style.display='block'; preview.innerHTML='<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
+
+  try {
+    if (typeof XLSX === 'undefined') {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type:'array' });
+
+    const dati = {
+      categorie: leggiCategorie(wb),
+      gironi:    leggiGironi(wb),
+      partite:   leggiPartiteFase1(wb),
+      fase2:     leggiPartiteFase2(wb)
+    };
+
+    _fileRighe[idx] = dati;
+
+    const nomeCatInput = document.getElementById('cat-nome-' + idx);
+    if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
+      nomeCatInput.value = dati.categorie[0].nome;
+    }
+
+    if (preview) {
+      preview.innerHTML = `
+        <div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;">
+          <div style="font-weight:700;color:var(--verde);margin-bottom:6px;">✅ File letto correttamente</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${dati.gironi.length} gironi</span>
+            <span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${dati.partite.length} partite</span>
+            ${dati.fase2.length ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${dati.fase2.length} finali</span>` : ''}
+          </div>
+        </div>`;
+    }
+
+    if (btnDiv) {
+      btnDiv.style.display = 'block';
+      const nome = nomeCatInput?.value || 'categoria';
+      const btn  = btnDiv.querySelector('button');
+      if (btn) btn.textContent = '✓ Importa "' + nome + '"';
+    }
+
+  } catch(e) {
+    if (preview) preview.innerHTML = '<div style="color:var(--rosso);font-size:12px;">❌ Errore: ' + e.message + '</div>';
+    console.error('[Garda patch] _parseExcelRiga:', e);
+  }
+}
+
 // ── RISOLUZIONE ACCOPPIAMENTI ────────────────────────────────
 
 window.risolviManuale = async function() {
@@ -188,10 +244,10 @@ window.risolviManuale = async function() {
     const rank=(pos)=>Object.values(cls).map(cl=>cl[pos]).filter(Boolean).sort(srt);
     const P=rank(0), S=rank(1), T=rank(2), Q=rank(3);
 
-    console.log('[Garda] Prime:  ',P.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
-    console.log('[Garda] Seconde:',S.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
-    console.log('[Garda] Terze:  ',T.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
-    console.log('[Garda] Quarte: ',Q.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('[Garda] Prime:  ', P.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('[Garda] Seconde:', S.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('[Garda] Terze:  ', T.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('[Garda] Quarte: ', Q.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
 
     const map = {
       'migliore i':           P[0]?.sq?.id,
@@ -232,7 +288,7 @@ window.risolviManuale = async function() {
       if (typeof renderTabellone==='function') await renderTabellone();
     } else {
       const nr=(koList||[]).filter(ko=>ko.note_home||ko.note_away);
-      console.warn('[Garda] Note non risolte:', nr.map(ko=>`"${ko.note_home}" vs "${ko.note_away}"`));
+      console.warn('[Garda] Note non risolte:', nr.map(ko=>`"${ko.note_home}" vs "${ko.note_away}" home_id=${ko.home_id}`));
       toast('ℹ️ '+nG+' gironi calcolati — vedi console F12');
     }
   } catch(e) { console.error('[Garda]',e); toast('❌ '+e.message); }
@@ -244,4 +300,4 @@ window.verificaEGeneraTriangolari = async function(categoriaId) {
   if (categoriaId===STATE.activeCat) try { await window.risolviManuale(); } catch(e) {}
 };
 
-console.log('✅ Garda patch v6 caricata — leggiCategorie/Gironi/Partite incluse');
+console.log('✅ Garda patch v7 — _parseExcelRiga + leggiCategorie inclusi');
