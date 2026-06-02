@@ -1,207 +1,161 @@
 // ============================================================
-//  import_garda_patch.js — PATCH per sistema Garda
-//  Legge classifiche direttamente dal DB e risolve:
-//  Migliore I/II/III, Peggior I/II, Seconda Migliore I/II/III
+//  import_garda_patch.js — PATCH GARDA v5
+//  3 gironi da 4 squadre → 12 squadre totali
+//  Logica placeholder ESATTA dal calendario PDF:
+//
+//  Prime (ordinate per punti): P1=migliore, P2=seconda, P3=peggiore
+//  Seconde (ordinate per punti): S1=migliore, S2=seconda, S3=peggiore
+//  Terze (ordinate per punti): T1=migliore, T2=seconda, T3=peggiore
+//  Quarte (ordinate per punti): Q1=migliore, Q2=seconda, Q3=peggiore
+//
+//  Mappa placeholder → posizione:
+//  "Migliore I"         → P1 (1ª tra le prime)
+//  "Migliore II"        → P2 (2ª tra le prime)
+//  "Migliore III"       → P3 (3ª tra le prime = Peggior I)
+//  "Migliore IV"        → S1 (migliore seconda, con 3 gironi la IV classificata globale)
+//  "Seconda Migliore I" → S1 (migliore seconda)
+//  "Seconda Migliore II"→ S2 (2ª seconda)
+//  "Seconda Migliore III"→ S3 (3ª seconda = Peggior II seconde)
+//  "Seconda Migliore IV"→ T1 (migliore terza)
+//  "Peggior I"          → P3 (peggiore prima)
+//  "Peggior II"         → P2 (penultima prima)
+//  "Peggior III"        → T3 (peggiore terza)
+//  "Peggior Quarta"     → Q3 (peggiore quarta)
 // ============================================================
-
-// Override risolviManuale — legge dal DB direttamente
-const _risolviManuale_orig = window.risolviManuale;
 
 window.risolviManuale = async function() {
   if (!STATE.activeCat) return;
-  toast('⏳ Calcolo classifiche e risoluzione...');
+  toast('⏳ Calcolo classifiche...');
 
   try {
-    // 1. Carica tutti i gironi della categoria
-    const { data: gironiDB } = await db.from('gironi')
-      .select('id,nome')
+    // ── Carica gironi ─────────────────────────────────────────
+    const { data: gironiDB } = await db
+      .from('gironi').select('id,nome')
       .eq('categoria_id', STATE.activeCat);
     if (!gironiDB?.length) { toast('Nessun girone trovato'); return; }
 
-    // 2. Per ogni girone calcola la classifica leggendo le partite giocate
-    const classifiche = {}; // { 'Girone A': [{sq, pts, gf, gs, ...}], ... }
+    // ── Calcola classifica di ogni girone ─────────────────────
+    const cls = {}; // { 'Girone A': [row0, row1, row2, row3] }
 
     for (const g of gironiDB) {
-      // Prendi le partite giocate
-      const { data: partite } = await db.from('partite')
-        .select('id,home_id,away_id,gol_home,gol_away,giocata')
+      const { data: pp } = await db.from('partite')
+        .select('home_id,away_id,gol_home,gol_away,giocata')
         .eq('girone_id', g.id);
-
-      const giocate = (partite || []).filter(p => p.giocata && p.home_id && p.away_id);
+      const giocate = (pp||[]).filter(p => p.giocata && p.home_id && p.away_id);
       if (!giocate.length) continue;
 
-      // Raccoglie ID squadre dalle partite giocate
-      const sqIds = new Set();
-      giocate.forEach(p => { sqIds.add(p.home_id); sqIds.add(p.away_id); });
-
-      // Carica dati squadre
-      const { data: sqList } = await db.from('squadre')
-        .select('id,nome,logo')
-        .in('id', [...sqIds]);
+      const sqIds = [...new Set(giocate.flatMap(p => [p.home_id, p.away_id]))];
+      const { data: sqList } = await db.from('squadre').select('id,nome,logo').in('id', sqIds);
       if (!sqList?.length) continue;
 
-      const sqMap = {};
-      sqList.forEach(s => sqMap[s.id] = s);
-
-      // Calcola classifica manualmente
-      const stats = {};
-      sqList.forEach(s => {
-        stats[s.id] = { sq: s, g: 0, v: 0, p: 0, s: 0, gf: 0, gs: 0, pts: 0 };
-      });
-
+      const st = {};
+      sqList.forEach(s => st[s.id] = { sq:s, g:0, v:0, p:0, s:0, gf:0, gs:0, pts:0 });
       for (const p of giocate) {
-        const h = stats[p.home_id];
-        const a = stats[p.away_id];
-        if (!h || !a) continue;
-        h.g++; a.g++;
-        h.gf += p.gol_home; h.gs += p.gol_away;
-        a.gf += p.gol_away; a.gs += p.gol_home;
-        if (p.gol_home > p.gol_away) { h.v++; h.pts += 3; a.s++; }
-        else if (p.gol_home < p.gol_away) { a.v++; a.pts += 3; h.s++; }
-        else { h.p++; h.pts++; a.p++; a.pts++; }
+        const h=st[p.home_id], a=st[p.away_id]; if(!h||!a) continue;
+        h.g++; a.g++; h.gf+=p.gol_home; h.gs+=p.gol_away; a.gf+=p.gol_away; a.gs+=p.gol_home;
+        if(p.gol_home>p.gol_away){h.v++;h.pts+=3;a.s++;}
+        else if(p.gol_home<p.gol_away){a.v++;a.pts+=3;h.s++;}
+        else{h.p++;h.pts++;a.p++;a.pts++;}
       }
-
-      // Ordina per punti → diff reti → gol fatti
-      const lista = Object.values(stats).sort((a, b) => {
-        if (b.pts !== a.pts) return b.pts - a.pts;
-        const dA = a.gf - a.gs, dB = b.gf - b.gs;
-        if (dB !== dA) return dB - dA;
-        return b.gf - a.gf;
-      });
-
-      classifiche[g.nome] = lista;
-      console.log(`[Garda] ${g.nome}: ${lista.map(r => r.sq.nome + '(' + r.pts + 'pt)').join(', ')}`);
+      const srt = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
+      cls[g.nome] = Object.values(st).sort(srt);
     }
 
-    const nGironi = Object.keys(classifiche).length;
-    if (nGironi === 0) {
-      toast('⏳ Inserisci prima i risultati dei gironi A, B, C');
-      return;
+    const nG = Object.keys(cls).length;
+    if (!nG) { toast('⏳ Inserisci prima i risultati dei gironi A, B, C'); return; }
+
+    // ── Ranking globali per posizione ─────────────────────────
+    const srt = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
+    const rank = (pos) => Object.values(cls).map(cl=>cl[pos]).filter(Boolean).sort(srt);
+
+    const P = rank(0); // prime classificate   [P1, P2, P3]
+    const S = rank(1); // seconde classificate [S1, S2, S3]
+    const T = rank(2); // terze classificate   [T1, T2, T3]
+    const Q = rank(3); // quarte classificate  [Q1, Q2, Q3]
+
+    // Log per debug
+    console.log('[Garda] CLASSIFICHE ('+nG+' gironi):');
+    console.log('  Prime:  ', P.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('  Seconde:', S.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('  Terze:  ', T.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+    console.log('  Quarte: ', Q.map(r=>r.sq.nome+'('+r.pts+'pt)').join(' | '));
+
+    // ── Mappa placeholder → ID squadra ───────────────────────
+    const map = {
+      // Prime
+      'migliore i':             P[0]?.sq?.id,
+      'migliore ii':            P[1]?.sq?.id,
+      'migliore iii':           P[2]?.sq?.id,
+      'migliore iv':            S[0]?.sq?.id,  // 4ª globale = miglior seconda
+      // Seconde
+      'seconda migliore i':     S[0]?.sq?.id,
+      'seconda migliore ii':    S[1]?.sq?.id,
+      'seconda migliore iii':   S[2]?.sq?.id,
+      'seconda migliore iv':    T[0]?.sq?.id,  // miglior terza
+      // Peggiori prime (ordine inverso)
+      'peggior i':              P[P.length-1]?.sq?.id,
+      'peggior ii':             P[P.length-2]?.sq?.id,
+      'peggior iii':            T[T.length-1]?.sq?.id,  // peggiore terza
+      'peggior quarta':         Q[Q.length-1]?.sq?.id,
+      'peggior quarte':         Q[Q.length-1]?.sq?.id,
+    };
+
+    console.log('[Garda] MAPPA ACCOPPIAMENTI:');
+    for (const [k,v] of Object.entries(map)) {
+      if (v) {
+        const sq = [...P,...S,...T,...Q].find(r=>r.sq.id===v);
+        console.log('  '+k+' → '+(sq?.sq?.nome||v));
+      }
     }
 
-    // 3. Calcola ranking globali
-    const sortFn = (a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      const dA = a.gf - a.gs, dB = b.gf - b.gs;
-      if (dB !== dA) return dB - dA;
-      return b.gf - a.gf;
-    };
-
-    const prime   = Object.values(classifiche).filter(cl => cl[0]).map(cl => cl[0]).sort(sortFn);
-    const seconde = Object.values(classifiche).filter(cl => cl[1]).map(cl => cl[1]).sort(sortFn);
-    const terze   = Object.values(classifiche).filter(cl => cl[2]).map(cl => cl[2]).sort(sortFn);
-    const quarte  = Object.values(classifiche).filter(cl => cl[3]).map(cl => cl[3]).sort(sortFn);
-
-    console.log('[Garda] Prime:', prime.map(r => r.sq.nome + '(' + r.pts + 'pt)').join(', '));
-    console.log('[Garda] Seconde:', seconde.map(r => r.sq.nome + '(' + r.pts + 'pt)').join(', '));
-    console.log('[Garda] Terze:', terze.map(r => r.sq.nome + '(' + r.pts + 'pt)').join(', '));
-    console.log('[Garda] Quarte:', quarte.map(r => r.sq.nome + '(' + r.pts + 'pt)').join(', '));
-
-    // 4. Funzione di risoluzione placeholder
-    const risolvi = (placeholder) => {
-      if (!placeholder) return null;
-      const s = placeholder.trim();
-      const ROMANI = { I:0, II:1, III:2, IV:3, V:4 };
-      const toIdx = (str) => ROMANI[str.toUpperCase()] ?? -1;
-
-      // "Migliore I/II/III" = prime classificate ordinate
-      let m = s.match(/^Migliore\s+(I{1,3}|IV|V)$/i);
-      if (m) {
-        const idx = toIdx(m[1]);
-        // Con 3 gironi: Migliore IV = migliore seconda
-        if (m[1].toUpperCase() === 'IV') return seconde[0]?.sq?.id || null;
-        return prime[idx]?.sq?.id || null;
-      }
-
-      // "Seconda Migliore I/II/III/IV" = seconde classificate ordinate
-      m = s.match(/^Seconda\s+Migliore\s+(I{1,3}|IV|V)$/i);
-      if (m) {
-        const idx = toIdx(m[1]);
-        if (m[1].toUpperCase() === 'IV') return terze[0]?.sq?.id || null;
-        return seconde[idx]?.sq?.id || null;
-      }
-
-      // "Peggior I/II/III" = peggiori tra le prime (ordine inverso)
-      m = s.match(/^Peggior[e]?\s+(I{1,3}|IV|V)$/i);
-      if (m) {
-        const idx = toIdx(m[1]);
-        const invIdx = prime.length - 1 - idx;
-        return prime[Math.max(0, invIdx)]?.sq?.id || null;
-      }
-
-      // "Peggior Quarta"
-      if (/^Peggior[e]?\s+Quart[ae]?$/i.test(s)) {
-        return quarte[quarte.length - 1]?.sq?.id || null;
-      }
-
-      // "Peggior Terza"
-      if (/^Peggior[e]?\s+Terz[ae]?$/i.test(s)) {
-        return terze[terze.length - 1]?.sq?.id || null;
-      }
-
-      // Placeholder originali Garda: "N° Girone X", "Vincente SEMIFINALE XX" ecc.
-      if (typeof _resolvePlaceholder === 'function') {
-        const miglioriSecondi = seconde.map(r => ({ sq: r.sq, stat: r }));
-        return _resolvePlaceholder(placeholder, classifiche, miglioriSecondi, {});
-      }
-
-      return null;
-    };
-
-    // 5. Aggiorna knockout
+    // ── Aggiorna knockout ─────────────────────────────────────
     const { data: koList } = await db.from('knockout')
       .select('id,note_home,note_away,home_id,away_id')
       .eq('categoria_id', STATE.activeCat);
 
     let risolti = 0;
-    for (const ko of (koList || [])) {
+    for (const ko of (koList||[])) {
       const upd = {};
+      const nh = (ko.note_home||'').trim().toLowerCase();
+      const na = (ko.note_away||'').trim().toLowerCase();
 
-      if (ko.note_home && !ko.home_id) {
-        const sqId = risolvi(ko.note_home);
-        if (sqId) { upd.home_id = sqId; console.log(`[Garda] ${ko.note_home} → ${sqId}`); }
-      }
-      if (ko.note_away && !ko.away_id) {
-        const sqId = risolvi(ko.note_away);
-        if (sqId) { upd.away_id = sqId; console.log(`[Garda] ${ko.note_away} → ${sqId}`); }
-      }
+      if (nh && map[nh] && map[nh] !== ko.home_id) upd.home_id = map[nh];
+      if (na && map[na] && map[na] !== ko.away_id) upd.away_id = map[na];
 
       if (Object.keys(upd).length) {
         await db.from('knockout').update(upd).eq('id', ko.id);
         risolti++;
+        console.log(`[Garda] ✓ "${ko.note_home}" vs "${ko.note_away}" risolto`);
       }
     }
 
+    // ── Feedback ──────────────────────────────────────────────
     if (risolti > 0) {
       toast(`✅ ${risolti} accoppiamenti risolti!`);
-      if (typeof _mostraNotificaTriangolari === 'function') _mostraNotificaTriangolari();
-      if (typeof renderAdminKnockout === 'function') await renderAdminKnockout();
-      if (typeof renderTabellone === 'function') await renderTabellone();
+      if (typeof _mostraNotificaTriangolari==='function') _mostraNotificaTriangolari();
+      if (typeof renderAdminKnockout==='function') await renderAdminKnockout();
+      if (typeof renderTabellone==='function') await renderTabellone();
     } else {
-      // Mostra debug info
-      const pendenti = (koList || []).filter(ko =>
-        (ko.note_home && !ko.home_id) || (ko.note_away && !ko.away_id)
-      );
-      console.log('[Garda] Pendenti non risolti:', pendenti.map(ko =>
-        `"${ko.note_home}" vs "${ko.note_away}"`
-      ));
-      toast(`ℹ️ ${nGironi} gironi calcolati, ${pendenti.length} accoppiamenti ancora in attesa`);
+      // Debug: mostra note non risolte
+      const nr = (koList||[]).filter(ko=>ko.note_home||ko.note_away);
+      console.warn('[Garda] Note non risolte:');
+      nr.forEach(ko => console.warn('  home="'+ko.note_home+'" away="'+ko.note_away+'" home_id='+ko.home_id+' away_id='+ko.away_id));
+      toast('ℹ️ '+nG+' gironi calcolati. Apri console F12 per dettagli.');
     }
 
   } catch(e) {
-    console.error('[Garda patch] Errore:', e);
-    toast('❌ Errore: ' + e.message);
+    console.error('[Garda patch]', e);
+    toast('❌ '+e.message);
   }
 };
 
-// Estende anche verificaEGeneraTriangolari per auto-risolvere dopo ogni risultato
+// Auto-risolvi dopo ogni salvataggio risultato
 const _verificaOrig = window.verificaEGeneraTriangolari;
 window.verificaEGeneraTriangolari = async function(categoriaId) {
-  if (typeof _verificaOrig === 'function') await _verificaOrig(categoriaId);
-  // Dopo la verifica originale, prova a risolvere i placeholder Garda
-  if (categoriaId === STATE.activeCat) {
+  if (typeof _verificaOrig==='function') await _verificaOrig(categoriaId);
+  if (categoriaId===STATE.activeCat) {
     try { await window.risolviManuale(); } catch(e) {}
   }
 };
 
-console.log('✅ Garda patch v3 caricata — legge classifiche dal DB');
+console.log('✅ Garda patch v5 caricata');
