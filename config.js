@@ -12,5 +12,11 @@ const CONFIG = {
     { username: 'admin',    password: 'mclion2026',  role: 'admin'  },
     { username: 'arbitro1', password: 'arbitro2026', role: 'scorer' },
     { username: 'arbitro2', password: 'scorer2026',  role: 'scorer' },
-  ]
+ ]
 };
+ 
+// Logo del torneo — punta al file caricato su GitHub
+function getLogo() {
+  return 'logo.png';
+}
+ 
