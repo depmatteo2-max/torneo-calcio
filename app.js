@@ -862,9 +862,12 @@ async function renderClassifiche() {
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
-  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s); };
+  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s)||/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(s); };
 
-  // Costruisce statsPerSquadra da gironi normali
+  // Usa classifiche già calcolate da _aggiornaResolver se disponibili
+  var clGCache = window._clGlobale || {};
+  var clSpCache = window._clSpecGlobale || {};
+
   var statsPerSquadra = {};
   var classificheGironi = {};
   var html = '';
@@ -873,20 +876,25 @@ async function renderClassifiche() {
     var g = gironi[gi];
     if (isClassif(g)) continue;
 
-    // Squadre valide
-    var sqMap = {};
-    for (var pi=0; pi<g.partite.length; pi++) {
-      var p = g.partite[pi];
-      if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
-      if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
-    }
-    var sq = (g.squadre||[]).filter(function(s){return s&&s.id&&!isPlaceh(s.nome);});
-    if (sq.length < 2) sq = Object.values(sqMap);
-    if (sq.length < 2) continue;
-
-    var cl = calcGironeClassifica({squadre:sq, partite:g.partite});
-    if (!cl.length) continue;
     var key = g.nome.toUpperCase().trim();
+
+    // Usa classifica dalla cache se disponibile
+    var cl = clGCache[key];
+
+    if (!cl || !cl.length) {
+      // Fallback: calcola dalle partite
+      var sqMap = {};
+      for (var pi=0; pi<g.partite.length; pi++) {
+        var p = g.partite[pi];
+        if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
+        if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
+      }
+      var sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      cl = calcGironeClassifica({squadre:sq, partite:g.partite});
+    }
+
+    if (!cl || !cl.length) continue;
     classificheGironi[key] = cl;
 
     cl.forEach(function(row,idx){
@@ -3981,22 +3989,50 @@ async function _aggiornaResolver(categoriaId) {
     };
 
     // ── SCRIVI NEL DB: aggiorna home_id/away_id per partite con placeholder ──
-    // Questo risolve gli accoppiamenti dei gironi 1-10 e Champions/Europa
     let risolti = 0;
+    // Mappa squadraId → sqReale per aggiornare i nomi placeholder nel DB
+    const sqNomiDaAggiornare = {}; // {placeholder_id: squadra_reale}
+
     for (const p of (tuttePartite||[])) {
-      // Salta partite già risolte
-      if (p.home_id && p.away_id && !isPlaceh(p.home?.nome) && !isPlaceh(p.away?.nome)) continue;
-      // Risolvi placeholder
-      const hSq = p.home_id && !isPlaceh(p.home?.nome) ? {id:p.home_id} : risolviSq(p.home?.nome);
-      const aSq = p.away_id && !isPlaceh(p.away?.nome) ? {id:p.away_id} : risolviSq(p.away?.nome);
+      const hIsPlaceh = p.home?.nome && isPlaceh(p.home.nome);
+      const aIsPlaceh = p.away?.nome && isPlaceh(p.away.nome);
+      if (!hIsPlaceh && !aIsPlaceh) continue;
+
+      const hSq = hIsPlaceh ? risolviSq(p.home.nome) : null;
+      const aSq = aIsPlaceh ? risolviSq(p.away.nome) : null;
+
       const upd = {};
-      if (hSq?.id && hSq.id !== p.home_id) upd.home_id = hSq.id;
-      if (aSq?.id && aSq.id !== p.away_id) upd.away_id = aSq.id;
+      if (hSq?.id && hSq.id !== p.home_id) { upd.home_id = hSq.id; }
+      if (aSq?.id && aSq.id !== p.away_id) { upd.away_id = aSq.id; }
+
+      // Traccia anche i nomi da aggiornare nelle squadre
+      if (hIsPlaceh && hSq?.id && p.home_id) sqNomiDaAggiornare[p.home_id] = hSq;
+      if (aIsPlaceh && aSq?.id && p.away_id) sqNomiDaAggiornare[p.away_id] = aSq;
+
       if (Object.keys(upd).length) {
         await db.from('partite').update(upd).eq('id', p.id);
         risolti++;
       }
     }
+
+    // Aggiorna girone_squadre: sostituisce placeholder con squadre reali
+    const { data: gironiSquadre } = await db.from('girone_squadre')
+      .select('id,girone_id,squadra_id,squadre(id,nome)')
+      .in('girone_id', gironiIds);
+
+    for (const gs of (gironiSquadre||[])) {
+      if (!gs.squadre?.nome || !isPlaceh(gs.squadre.nome)) continue;
+      const sqReale = risolviSq(gs.squadre.nome);
+      if (sqReale?.id && sqReale.id !== gs.squadra_id) {
+        // Evita duplicati nel girone
+        const giaPresente = (gironiSquadre||[]).some(x => x.girone_id===gs.girone_id && x.squadra_id===sqReale.id && x.id!==gs.id);
+        if (!giaPresente) {
+          await db.from('girone_squadre').update({squadra_id: sqReale.id}).eq('id', gs.id);
+          risolti++;
+        }
+      }
+    }
+
     if (risolti > 0) {
       _mostraNotificaTriangolari();
       if (typeof _cacheClear === 'function') _cacheClear();
@@ -4004,4 +4040,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
