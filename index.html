@@ -431,6 +431,8 @@ body.tv-active #main-app{visibility:hidden;}
 
 
 
+
+
 <script>
 // ============================================================
 //  TV.JS — MC LION TROPHY 2026
@@ -857,7 +859,121 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 }
 .tv-empty { color:rgba(255,255,255,.2);font-size:18px;text-align:center;margin-top:40px; }
 body.tv-active #main-app { visibility:hidden; }
-</style>`);
+</style>`);async function _renderTV(){
+  if(!TV_MODE) return;
+  const cat=STATE.categorie[TV_CI];
+  if(!cat) return;
+  if(!TV_GIRONI.length) TV_GIRONI=await getGironiWithData(cat.id);
+
+  const body=document.getElementById('tvo-body');
+  const label=document.getElementById('tvo-label');
+  if(!body) return;
+
+  // Prende 4 gironi dalla posizione corrente
+  const slice=TV_GIRONI.slice(TV_GI, TV_GI+TV_PER_PAG);
+  const totPag=Math.ceil(TV_GIRONI.length/TV_PER_PAG);
+  const pagCorrente=Math.floor(TV_GI/TV_PER_PAG)+1;
+  const sez=TV_SI===0?'📊 Classifica':'⚽ Risultati';
+  if(label) label.textContent=`${sez} — ${cat.nome} — Pag ${pagCorrente}/${totPag}`;
+
+  body.style.opacity='0';
+  let html='';
+
+  if(TV_SI===0){
+    // CLASSIFICA: griglia 2x2 con 4 gironi
+    html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;height:100%;">';
+    for(const g of slice){
+      const giocate=g.partite.filter(p=>p.giocata).length;
+      const sqMap={};
+      g.partite.forEach(p=>{
+        if(p.home?.id&&!_tvIsPlaceholder(p.home.nome)) sqMap[p.home.id]=p.home;
+        if(p.away?.id&&!_tvIsPlaceholder(p.away.nome)) sqMap[p.away.id]=p.away;
+      });
+      const sq=Object.values(sqMap);
+      html+=`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px;overflow:hidden;">`;
+      html+=`<div style="font-size:14px;font-weight:900;color:#F5A800;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">${g.nome}<span style="font-size:11px;background:rgba(245,168,0,0.12);padding:2px 8px;border-radius:20px;">${giocate}/${g.partite.length}</span></div>`;
+      if(sq.length<2||giocate===0){
+        html+=`<div style="color:rgba(255,255,255,0.2);font-size:14px;padding:10px 0;">⏳ Nessun risultato</div>`;
+      } else {
+        const cl=calcGironeClassifica({squadre:sq,partite:g.partite});
+        html+=`<table style="width:100%;border-collapse:collapse;font-size:15px;">
+          <thead><tr>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">#</th>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:left;border-bottom:1px solid rgba(255,255,255,.06);">SQUADRA</th>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">G</th>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">V</th>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">P</th>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">S</th>
+            <th style="color:#4ade80;font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">GF</th>
+            <th style="color:#f87171;font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">GS</th>
+            <th style="color:rgba(255,255,255,.3);font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">GD</th>
+            <th style="color:#F5A800;font-size:10px;padding:3px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06);">PT</th>
+          </tr></thead><tbody>`;
+        cl.forEach((row,i)=>{
+          const q=i<(cat.qualificate||1);
+          const d=row.gf-row.gs;
+          html+=`<tr style="background:${q?'rgba(212,43,43,0.08)':'transparent'}">
+            <td style="padding:6px 4px;text-align:center;font-weight:900;color:${q?'#F5A800':'rgba(255,255,255,0.25)'};">${i+1}</td>
+            <td style="padding:6px 4px;text-align:left;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                ${logoHTML(row.sq,'sm')}
+                <span style="font-size:15px;font-weight:${q?700:400};color:${q?'white':'rgba(255,255,255,0.75)'};">${row.sq.nome}</span>
+              </div>
+            </td>
+            <td style="padding:6px 4px;text-align:center;color:rgba(255,255,255,0.7);">${row.g}</td>
+            <td style="padding:6px 4px;text-align:center;color:${row.v>0?'#4ade80':'rgba(255,255,255,0.5)'};font-weight:${row.v>0?700:400}">${row.v}</td>
+            <td style="padding:6px 4px;text-align:center;color:rgba(255,255,255,0.7);">${row.p}</td>
+            <td style="padding:6px 4px;text-align:center;color:${row.s>0?'#f87171':'rgba(255,255,255,0.5)'};">${row.s}</td>
+            <td style="padding:6px 4px;text-align:center;color:#4ade80;font-weight:600;">${row.gf}</td>
+            <td style="padding:6px 4px;text-align:center;color:#f87171;font-weight:600;">${row.gs}</td>
+            <td style="padding:6px 4px;text-align:center;color:${d>0?'#4ade80':d<0?'#f87171':'#888'};font-weight:600;">${d>0?'+':''}${d}</td>
+            <td style="padding:6px 4px;text-align:center;font-size:20px;font-weight:900;color:#F5A800;">${row.pts}</td>
+          </tr>`;
+        });
+        html+=`</tbody></table>`;
+      }
+      html+=`</div>`;
+    }
+    html+='</div>';
+
+  } else {
+    // RISULTATI: 4 gironi in griglia 2x2
+    html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;height:100%;">';
+    for(const g of slice){
+      html+=`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px;overflow:hidden;">`;
+      html+=`<div style="font-size:14px;font-weight:900;color:#F5A800;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">${g.nome}</div>`;
+      const giocate=g.partite.filter(p=>p.giocata);
+      const daFare=g.partite.filter(p=>!p.giocata);
+      if(giocate.length){
+        giocate.forEach(p=>{
+          const w1=p.gol_home>p.gol_away,w2=p.gol_away>p.gol_home;
+          html+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <div style="flex:1;font-size:14px;font-weight:${w1?700:400};color:${w1?'#D42B2B':'rgba(255,255,255,0.8)'};display:flex;align-items:center;gap:5px;">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
+            <div style="font-size:18px;font-weight:900;color:white;min-width:60px;text-align:center;background:rgba(212,43,43,0.2);border-radius:6px;padding:2px 8px;">${p.gol_home} — ${p.gol_away}</div>
+            <div style="flex:1;font-size:14px;font-weight:${w2?700:400};color:${w2?'#D42B2B':'rgba(255,255,255,0.8)'};display:flex;align-items:center;gap:5px;flex-direction:row-reverse;">${logoHTML(p.away,'sm')} ${p.away?.nome||'?'}</div>
+          </div>`;
+        });
+      }
+      if(daFare.length){
+        daFare.slice(0,3).forEach(p=>{
+          html+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);">
+            <div style="flex:1;font-size:13px;color:rgba(255,255,255,0.5);display:flex;align-items:center;gap:5px;">${logoHTML(p.home,'sm')} ${p.home?.nome||'?'}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.3);min-width:60px;text-align:center;">${p.orario||'vs'}</div>
+            <div style="flex:1;font-size:13px;color:rgba(255,255,255,0.5);display:flex;align-items:center;gap:5px;flex-direction:row-reverse;">${logoHTML(p.away,'sm')} ${p.away?.nome||'?'}</div>
+          </div>`;
+        });
+      }
+      if(!giocate.length&&!daFare.length) html+=`<div style="color:rgba(255,255,255,0.2);font-size:13px;padding:10px 0;">⏳ Nessuna partita</div>`;
+      html+=`</div>`;
+    }
+    html+='</div>';
+  }
+
+  body.innerHTML=html;
+  setTimeout(()=>{ body.style.transition='opacity 0.4s'; body.style.opacity='1'; },30);
+}
+
+
 
 </script>
 </body>
