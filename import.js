@@ -148,7 +148,7 @@ function leggiPartiteFase2(wb) {
 // ── SOVRASCRIVE _parseExcelRiga ──────────────────────────────
 // Necessario perché l'originale chiama leggiCategorie() che non era definita
 
-let _fileRighe = {};
+window._fileRigheGarda = window._fileRigheGarda || {};
 
 async function _parseExcelRiga(file, idx) {
   const preview = document.getElementById('cat-preview-' + idx);
@@ -174,7 +174,7 @@ async function _parseExcelRiga(file, idx) {
       fase2:     leggiPartiteFase2(wb)
     };
 
-    _fileRighe[idx] = dati;
+    window._fileRigheGarda[idx] = dati;
 
     const nomeCatInput = document.getElementById('cat-nome-' + idx);
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) {
@@ -299,5 +299,135 @@ window.verificaEGeneraTriangolari = async function(categoriaId) {
   if (typeof _verificaOrig==='function') await _verificaOrig(categoriaId);
   if (categoriaId===STATE.activeCat) try { await window.risolviManuale(); } catch(e) {}
 };
+
+
+// ── _importaRiga sovrascritta per usare _fileRigheGarda ──────
+async function _importaRiga(idx) {
+  const dati = window._fileRigheGarda[idx];
+  const nomeInput = document.getElementById('cat-nome-' + idx);
+  const nomeScritto = nomeInput?.value?.trim();
+  const btn = document.querySelector('#cat-btn-' + idx + ' button');
+  if (!dati) { toast('Carica prima un file Excel'); return; }
+  if (nomeScritto && dati.categorie.length) {
+    dati.categorie[0].nome = nomeScritto;
+    dati.categorie[0].codice = nomeScritto;
+    const vecchioNome = dati.gironi[0]?.categoria;
+    if (vecchioNome) {
+      dati.gironi.forEach(g => { if(g.categoria===vecchioNome) g.categoria=nomeScritto; });
+      dati.partite.forEach(p => { if(p.categoria===vecchioNome) p.categoria=nomeScritto; });
+      dati.fase2.forEach(p => { if(p.categoria===vecchioNome) p.categoria=nomeScritto; });
+    }
+  }
+  if (btn) { btn.disabled=true; btn.textContent='⏳ Importazione...'; }
+  try {
+    const tornei = await db.from('tornei').select('id,nome')
+      .eq('cliente', CONFIG.CLIENTE||'spe').eq('attivo',true)
+      .order('created_at',{ascending:false});
+    if (!tornei.data?.length) throw new Error('Nessun torneo attivo');
+    const torneoId = STATE.activeTorneo || tornei.data[0].id;
+    window._importDati = dati;
+    await eseguiImportazioneConTorneo(torneoId, dati, btn);
+    const riga = document.getElementById('cat-riga-' + idx);
+    if (riga) {
+      riga.style.background='var(--verde-bg)'; riga.style.borderColor='rgba(22,163,74,0.3)';
+      const preview = document.getElementById('cat-preview-' + idx);
+      if (preview) preview.innerHTML='<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>';
+      if (btn) { btn.disabled=true; btn.textContent='✅ Importata'; btn.style.background='var(--verde)'; }
+    }
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    renderCatBar();
+  } catch(e) {
+    if (btn) { btn.disabled=false; btn.textContent='✓ Importa "'+(nomeScritto||'categoria')+'"'; }
+    toast('❌ Errore: '+e.message); console.error(e);
+  }
+}
+
+// ── eseguiImportazioneConTorneo (se non definita nell'app) ───
+if (typeof eseguiImportazioneConTorneo === 'undefined') {
+  window.eseguiImportazioneConTorneo = async function(torneoId, dati, btn) {
+    const { data: sqEsistenti } = await db.from('squadre').select('id,nome').eq('torneo_id', torneoId);
+    const squadreMap = {};
+    (sqEsistenti||[]).forEach(sq => { squadreMap[torneoId+'||'+sq.nome] = sq.id; });
+    const { data: catEsistenti } = await db.from('categorie').select('nome').eq('torneo_id', torneoId);
+    const nomiCatEsistenti = new Set((catEsistenti||[]).map(c=>c.nome));
+    let ordineBase = catEsistenti?.length || 0;
+
+    for (let ci=0; ci<dati.categorie.length; ci++) {
+      const cat = dati.categorie[ci];
+      if (nomiCatEsistenti.has(cat.nome)) { toast('⚠️ Categoria "'+cat.nome+'" già presente — saltata'); continue; }
+      const { data: catR, error: cErr } = await db.from('categorie').insert({
+        torneo_id: torneoId, nome: cat.nome,
+        qualificate: cat.qualificate||1, formato: cat.formato||'gironi',
+        ordine: ordineBase+ci
+      }).select('id').single();
+      if (cErr) throw new Error('Errore cat '+cat.nome+': '+cErr.message);
+      const catId = catR.id;
+      const gironiCat = dati.gironi.filter(g => g.categoria===cat.codice||g.categoria===cat.nome);
+      const gironiMap = {};
+
+      for (const girone of gironiCat) {
+        const { data: girR, error: gErr } = await db.from('gironi').insert({
+          categoria_id: catId, nome: girone.nome
+        }).select('id').single();
+        if (gErr) throw new Error('Errore girone '+girone.nome+': '+gErr.message);
+        const girId = girR.id;
+        gironiMap[girone.nome] = girId;
+
+        for (let si=0; si<girone.squadre.length; si++) {
+          const nomeSq = girone.squadre[si];
+          if (!nomeSq) continue;
+          const key = torneoId+'||'+nomeSq;
+          if (!squadreMap[key]) {
+            const { data: sqR, error: sqErr } = await db.from('squadre').insert({
+              torneo_id: torneoId, nome: nomeSq
+            }).select('id').single();
+            if (sqErr) throw new Error('Errore squadra '+nomeSq+': '+sqErr.message);
+            squadreMap[key] = sqR.id;
+          }
+          await db.from('girone_squadre').insert({ girone_id: girId, squadra_id: squadreMap[key], posizione: si });
+        }
+
+        const pGir = dati.partite.filter(p => (p.categoria===cat.codice||p.categoria===cat.nome) && p.girone===girone.nome);
+        for (const p of pGir) {
+          const hId = squadreMap[torneoId+'||'+p.home] || null;
+          const aId = squadreMap[torneoId+'||'+p.away] || null;
+          await db.from('partite').insert({
+            girone_id: girId, home_id: hId, away_id: aId,
+            note_home: hId?null:p.home, note_away: aId?null:p.away,
+            orario: p.orario||null, giorno: p.giorno||null,
+            campo: p.campo||null, giornata: p.giornata||null, giocata: false
+          });
+        }
+      }
+
+      // Fase finale (knockout)
+      const fase2Cat = dati.fase2.filter(p => p.categoria===cat.codice||p.categoria===cat.nome);
+      for (let mi=0; mi<fase2Cat.length; mi++) {
+        const p = fase2Cat[mi];
+        const hId = squadreMap[torneoId+'||'+p.sq1raw] || null;
+        const aId = squadreMap[torneoId+'||'+p.sq2raw] || null;
+        await db.from('knockout').insert({
+          categoria_id: catId, round_name: p.roundLabel,
+          round_order: p.roundOrder, match_order: p.matchOrder,
+          home_id: hId, away_id: aId,
+          note_home: p.sq1raw, note_away: p.sq2raw,
+          giocata: false, is_consolazione: p.consolazione,
+          orario: p.orario||null, campo: p.campo||null
+        });
+      }
+    }
+
+    window._importDati = null;
+    if (typeof STATE!=='undefined' && typeof dbGetCategorie==='function') {
+      STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+      STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
+      if (typeof renderCatBar==='function') renderCatBar();
+    }
+    document.getElementById('import-preview').innerHTML = `
+      <div style="margin-top:16px;padding:16px 20px;background:#d5f5e3;border-radius:8px;border:1px solid #27ae60;">
+        <div style="font-size:16px;font-weight:700;color:#1e8449;">✅ Categorie aggiunte!</div>
+      </div>`;
+  };
+}
 
 console.log('✅ Garda patch v7 — _parseExcelRiga + leggiCategorie inclusi');
