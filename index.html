@@ -305,7 +305,8 @@ body.tv-active #main-app{visibility:hidden;}
 <!-- Loading -->
 <div id="loading-screen">
   <img id="loading-img" src="" alt="">
-  <div class="load-logo">🦁</div>
+  <img src="logo.png" style="width:220px;max-width:80vw;object-fit:contain;margin-bottom:10px;" onerror="this.style.display='none';document.getElementById('load-emoji').style.display='block'">
+  <div id="load-emoji" style="font-size:64px;display:none;animation:bounce 1.2s ease-in-out infinite;">🦁</div>
   <div class="load-title">MC LION TROPHY 2026</div>
   <div class="load-sub">11° Trofeo Valle d'Aosta Calcio</div>
   <div class="load-bar"><div class="load-bar-fill"></div></div>
@@ -317,7 +318,7 @@ body.tv-active #main-app{visibility:hidden;}
   <!-- Header rosso MC Lion -->
   <div class="app-header">
     <div class="header-left">
-      <img id="header-logo" src="" alt="">
+      <img id="header-logo" src="logo.png" alt="MC Lion Trophy" style="display:block;" onerror="this.style.display='none'">
       <div>
         <div id="header-title">🦁 MC Lion Trophy</div>
         <div id="header-date">12-13-14 Giugno 2026 · Valle d'Aosta</div>
