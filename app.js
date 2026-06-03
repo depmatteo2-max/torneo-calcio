@@ -875,7 +875,6 @@ async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
-  if (typeof _cacheInvalid === 'function') _cacheInvalid('gwd_');
   await _aggiornaResolver(STATE.activeCat);
   var gironi = await getGironiWithData(STATE.activeCat);
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
@@ -1724,7 +1723,11 @@ async function saveRisultato(partita_id, girone_id) {
     if (result) {
       toast('✓ Salvato!'); await renderAdminRisultati();
       const {data:gironeRow}=await db.from('gironi').select('categoria_id').eq('id',girone_id).single();
-      if (gironeRow?.categoria_id) await verificaEGeneraTriangolari(gironeRow.categoria_id);
+      if (gironeRow?.categoria_id) {
+        // Invalida cache resolver dopo un risultato
+        if (typeof _resolverCache !== 'undefined') delete _resolverCache[gironeRow.categoria_id];
+        await verificaEGeneraTriangolari(gironeRow.categoria_id);
+      }
     } else { toast('Errore nel salvataggio'); }
   } catch(e) { console.error(e); toast('Errore: '+(e.message||'sconosciuto')); }
 }
@@ -3718,7 +3721,7 @@ async function modRinominaSquadra() {
 // ============================================================
 //  SIMULAZIONE & RESET RISULTATI
 // ============================================================
-const _SIM_PWD = '19880204';
+const _SIM_PWD = (typeof CONFIG !== 'undefined' && CONFIG.SIM_PWD) ? CONFIG.SIM_PWD : '19880204';
 let _simUnlocked = false;
 
 function toggleSimulazione() {
@@ -3926,7 +3929,19 @@ function _resolveNomePH(nome) {
   return nome;
 }
 
+// Cache per evitare chiamate ripetute in < 30s
+const _resolverCache = {};
+window._CACHE_TTL_OVERRIDE = 60000; // 60s cache
+
 async function _aggiornaResolver(categoriaId) {
+  if (!categoriaId) return;
+  const now = Date.now();
+  const lastRun = _resolverCache[categoriaId] || 0;
+  if (now - lastRun < 30000) {
+    console.log('[Resolver] Skip — eseguito', Math.round((now-lastRun)/1000), 's fa');
+    return;
+  }
+  _resolverCache[categoriaId] = now;
   try {
     // SOLUZIONE SEMPLICE: legge tutte le partite con join squadre direttamente dal DB
     const { data: gironiDB } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
