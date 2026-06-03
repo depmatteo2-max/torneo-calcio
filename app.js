@@ -406,14 +406,33 @@ function renderCatBar() {
   const bar = document.getElementById('cat-bar');
   if (!STATE.categorie.length) { bar.innerHTML = ''; bar.style.display='none'; return; }
   bar.style.display = '';
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const multiCat = STATE.categorie.length > 1;
+  // Solo admin vede il selettore pill orizzontale
+  // Utente pubblico: mostra nome categoria + tasto Cambia
   let catHtml = '';
-  if (STATE.categorie.length > 1) {
-    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--bordo);margin-bottom:2px;">' +
+  if (cat && multiCat && !STATE.isAdmin) {
+    catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
+      <span style="font-size:13px;font-weight:800;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${cat.nome}
+      </span>
+      <button onclick="cambiaCategoria()"
+        style="flex-shrink:0;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
+               padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);
+               cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
+        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-2)'">
+        ⇄ Cambia
+      </button>
+    </div>`;
+  } else if (STATE.isAdmin && multiCat) {
+    // Admin: pillole orizzontali scorrevoli
+    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
       STATE.categorie.map(c =>
         `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})">${c.nome}</button>`
       ).join('') + '</div>';
   }
-  bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;"></div>';
+  bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
   _renderGiornataBar();
 }
 
@@ -4074,7 +4093,7 @@ async function _aggiornaResolver(categoriaId) {
     // Aggiorna girone_squadre: sostituisce placeholder con squadre reali
     const { data: gironiSquadre } = await db.from('girone_squadre')
       .select('id,girone_id,squadra_id,squadre(id,nome)')
-      .in('girone_id', gironiIds);
+      .in('girone_id', gironiDB.map(g=>g.id));
 
     for (const gs of (gironiSquadre||[])) {
       if (!gs.squadre?.nome || !isPlaceh(gs.squadre.nome)) continue;
