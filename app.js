@@ -1436,31 +1436,76 @@ async function deleteCat(id) {
 // ============================================================
 async function renderAdminLoghi() {
   const el=document.getElementById('sec-a-loghi');
-  const squadre=await dbGetSquadreFull(STATE.activeTorneo);
+  const tutteSquadre=await dbGetSquadreFull(STATE.activeTorneo);
+  // Filtra placeholder (MIGLIOR SECONDA, DECIMA MIGLIOR TERZA ecc.)
+  const squadre = tutteSquadre.filter(sq => !_isPlaceholder(sq.nome));
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
-  let html='<div class="section-label">Loghi squadre</div><div class="card">';
-  html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
-  html+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <label style="display:inline-flex;align-items:center;gap:8px;background:var(--blu,#1a56db);color:white;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;border:2px solid var(--blu,#1a56db);transition:all .15s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-      📁 Carica loghi da cartella
-      <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
-    </label>
-    <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">📦 Comprimi loghi grandi</button>
+
+  const conLogo = squadre.filter(s=>s.logo).length;
+  const senzaLogo = squadre.filter(s=>!s.logo).length;
+
+  let html=`
+  <div class="section-label">Loghi squadre</div>
+  <div class="card" style="margin-bottom:10px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <label class="btn btn-p" style="cursor:pointer;gap:6px;">
+        📁 Carica da cartella
+        <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
+      </label>
+      <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">📦 Comprimi</button>
+      <span style="font-size:12px;color:var(--text-3);margin-left:auto;">
+        ✅ ${conLogo} · ⬜ ${senzaLogo}
+      </span>
+    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;line-height:1.5;">
+      💡 Rinomina i file con il nome della squadra (es. <em>gran-combin.png</em>) e caricali tutti insieme
+    </div>
+    <div id="loghi-auto-log" style="display:none;background:var(--bg);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;max-height:180px;overflow-y:auto;font-family:monospace;line-height:1.6;"></div>
   </div>
-  <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;">💡 <strong>Suggerimento:</strong> rinomina i file con il nome della squadra (es. <em>rhodense.png</em>) e selezionali tutti insieme</div>
-  <div id="loghi-auto-log" style="display:none;background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;max-height:200px;overflow-y:auto;font-family:monospace;"></div>`;
-  for (const sq of squadre) {
-    html+=`<div class="logo-team-row">
-      <div class="logo-upload-btn">${logoHTML(sq,'md')}
-        <div class="logo-plus"><svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 1v6M1 4h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input type="file" accept="image/*" onchange="uploadLogo(event,${sq.id})">
-      </div>
-      <div style="flex:1;"><div style="font-size:14px;font-weight:600;">${sq.nome}</div>
-        <div style="font-size:12px;color:#aaa;">${sq.logo?'✅ Logo caricato':'Nessun logo'}</div></div>
-      ${sq.logo?`<button class="btn btn-danger btn-sm" onclick="removeLogo(${sq.id})">Rimuovi</button>`:''}
-    </div>`;
+
+  <div class="section-label">Con logo (${conLogo})</div>
+  <div class="card" style="padding:8px 14px;margin-bottom:10px;">`;
+
+  // Prima le squadre CON logo
+  for (const sq of squadre.filter(s=>s.logo)) {
+    html += _logoRow(sq);
   }
-  html+='</div>'; el.innerHTML=html;
+  if (!squadre.filter(s=>s.logo).length) html += '<div style="color:var(--text-4);font-size:13px;padding:8px 0;">Nessun logo caricato ancora</div>';
+  html += '</div>';
+
+  html += `<div class="section-label">Senza logo (${senzaLogo})</div><div class="card" style="padding:8px 14px;">`;
+  for (const sq of squadre.filter(s=>!s.logo)) {
+    html += _logoRow(sq);
+  }
+  if (!squadre.filter(s=>!s.logo).length) html += '<div style="color:var(--green);font-size:13px;padding:8px 0;">✅ Tutte le squadre hanno il logo!</div>';
+  html += '</div>';
+
+  el.innerHTML=html;
+}
+
+function _logoRow(sq) {
+  const ini = sq.nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  return `<div class="logo-team-row">
+    <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
+      ${sq.logo
+        ? `<img src="${sq.logo}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);" alt="${sq.nome}">`
+        : `<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--gold));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:white;border:2px solid var(--border);">${ini}</div>`
+      }
+      <label style="position:absolute;inset:0;border-radius:50%;cursor:pointer;background:rgba(0,0,0,0) ;transition:background .2s;"
+        onmouseover="this.style.background='rgba(0,0,0,0.35)'"
+        onmouseout="this.style.background='rgba(0,0,0,0)'">
+        <input type="file" accept="image/*" style="display:none;" onchange="uploadLogo(event,${sq.id})">
+      </label>
+      <div style="position:absolute;bottom:0;right:0;width:16px;height:16px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;pointer-events:none;">
+        <svg width="7" height="7" viewBox="0 0 8 8"><path d="M4 1v6M1 4h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sq.nome}</div>
+      <div style="font-size:11px;color:${sq.logo?'var(--green)':'var(--text-4)'};">${sq.logo?'✅ Logo caricato':'Tocca per caricare'}</div>
+    </div>
+    ${sq.logo?`<button class="btn btn-danger btn-sm" onclick="removeLogo(${sq.id})">Rimuovi</button>`:''}
+  </div>`;
 }
 
 async function caricaLoghiDaCartella(event) {
@@ -4051,4 +4096,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
