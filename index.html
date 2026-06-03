@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#B81C1C">
   <title>🦁 MC Lion Trophy 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       /* Colori MC Lion */
@@ -681,82 +680,51 @@
 </head>
 <body>
 
-<!-- Loading -->
 <div id="loading-screen">
   <div class="load-logo-wrap">
     <img id="loading-img" src="logo.png" alt="MC Lion Trophy"
       onerror="this.style.display='none';document.getElementById('load-emoji').style.display='block'">
-    <div id="load-emoji" style="display:none;">🦁</div>
+    <div id="load-emoji" style="display:none;font-size:80px;">🦁</div>
   </div>
   <div class="load-title">MC Lion Trophy</div>
   <div class="load-sub">11° Trofeo · Valle d'Aosta 2026</div>
   <div class="load-bar"><div class="load-bar-fill"></div></div>
 </div>
 
-<!-- Main app -->
-<div id="main-app">
-
-  <!-- Header -->
+<div id="main-app" style="display:none;">
   <header class="app-header">
     <div class="header-left">
-      <img id="header-logo" src="logo.png" alt="MC Lion Trophy"
-        onerror="this.style.display='none'">
+      <img id="header-logo" src="logo.png" alt="" onerror="this.style.display='none'">
       <div class="header-text">
         <div id="header-title">🦁 MC Lion Trophy</div>
-        <div id="header-date">12-13-14 Giugno 2026 · Valle d'Aosta</div>
+        <div id="header-date"></div>
       </div>
     </div>
     <div class="header-right">
-      <span id="live-badge" style="display:none;" class="badge-live">
-        <span class="dot-live"></span> LIVE
-      </span>
+      <span id="live-badge" style="display:none;" class="badge-live"><span class="dot-live"></span> LIVE</span>
       <button id="tv-btn" onclick="toggleTVMode()">📺 TV</button>
       <button id="admin-btn" onclick="mostraLogin()">Admin</button>
     </div>
   </header>
 
-  <!-- Nav pubblica -->
-  <nav id="pub-nav">
-    <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)">
-      <span class="nav-icon">📊</span>Classifiche
-    </button>
-    <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)">
-      <span class="nav-icon">⚽</span>Risultati
-    </button>
-    <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)">
-      <span class="nav-icon">🏆</span>Tabellone
-    </button>
+  <nav id="pub-nav" style="display:flex;">
+    <button class="nav-btn active" data-section="classifiche" onclick="showSection('classifiche',this)"><span class="nav-icon">📊</span>Classifiche</button>
+    <button class="nav-btn" data-section="risultati" onclick="showSection('risultati',this)"><span class="nav-icon">⚽</span>Risultati</button>
+    <button class="nav-btn" data-section="tabellone" onclick="showSection('tabellone',this)"><span class="nav-icon">🏆</span>Tabellone</button>
   </nav>
 
-  <!-- Nav admin -->
-  <nav id="admin-nav">
-    <button class="admin-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)">
-      <span class="nav-icon">⚽</span> Risultati
-    </button>
-    <button class="admin-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)">
-      <span class="nav-icon">🏆</span> Tabellone
-    </button>
-    <button class="admin-btn" data-section="a-setup" onclick="showSection('a-setup',this)">
-      <span class="nav-icon">📥</span> Import
-    </button>
-    <button class="admin-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)">
-      <span class="nav-icon">🖼️</span> Loghi
-    </button>
-    <button class="admin-btn" data-section="a-tornei" onclick="showSection('a-tornei',this)">
-      <span class="nav-icon">🗂️</span> Tornei
-    </button>
-    <button class="admin-btn nav-exit" onclick="logout()">
-      <span class="nav-icon">🚪</span> Esci
-    </button>
+  <nav id="admin-nav" style="display:none;">
+    <button class="admin-btn" data-section="a-risultati" onclick="showSection('a-risultati',this)"><span class="nav-icon">⚽</span> Risultati</button>
+    <button class="admin-btn" data-section="a-knockout" onclick="showSection('a-knockout',this)"><span class="nav-icon">🏆</span> Tabellone</button>
+    <button class="admin-btn" data-section="a-setup" onclick="showSection('a-setup',this)"><span class="nav-icon">📥</span> Import</button>
+    <button class="admin-btn" data-section="a-loghi" onclick="showSection('a-loghi',this)"><span class="nav-icon">🖼️</span> Loghi</button>
+    <button class="admin-btn" data-section="a-tornei" onclick="showSection('a-tornei',this)"><span class="nav-icon">🗂️</span> Tornei</button>
+    <button class="admin-btn nav-exit" onclick="logout()"><span class="nav-icon">🚪</span> Esci</button>
   </nav>
 
-  <!-- Torneo bar -->
-  <div id="torneo-bar"></div>
+  <div id="torneo-bar" style="display:none;"></div>
+  <div id="cat-bar" style="display:none;"></div>
 
-  <!-- Cat bar -->
-  <div id="cat-bar"></div>
-
-  <!-- Sezioni -->
   <div id="main-content">
     <div id="sec-classifiche" class="sec active"></div>
     <div id="sec-risultati" class="sec"></div>
@@ -767,8 +735,7 @@
     <div id="sec-a-risultati" class="sec"></div>
     <div id="sec-a-knockout" class="sec"></div>
   </div>
-
-</div><!-- /main-app -->
+</div>
 
 <div id="admin-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;padding:28px;width:90%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,0.2);border-top:4px solid var(--primario);">
@@ -796,17 +763,34 @@
 </div>
 
 <!-- Scripts — ORDINE OBBLIGATORIO -->
+
+
+
+
+
+
+
+</body>
+</html>
+
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- TV Mode -->
+
+
+</body>
+</html>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js?v=20260603"></script>
 <script src="db.js?v=20260603"></script>
 <script src="app.js?v=20260603"></script>
 <script src="import.js?v=20260603"></script>
-
-
-
-
-
-
 <script>
+
 // ============================================================
 //  TV.JS — MC LION TROPHY 2026
 //  Modalità TV: scorre categorie/classifiche/risultati
@@ -1348,16 +1332,7 @@ body.tv-active #main-app { visibility:hidden; }
 
 
 
+
 </script>
-</body>
-</html>
-
-
-<!-- Toast -->
-<div id="toast"></div>
-
-<!-- TV Mode -->
-
-
 </body>
 </html>
