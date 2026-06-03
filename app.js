@@ -915,7 +915,7 @@ async function renderClassifiche() {
       html += '<td>'+logoHTML(row.sq,'sm')+'</td><td>'+row.sq.nome+'</td>';
       html += '<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
       html += '<td>'+row.gf+'</td><td>'+row.gs+'</td>';
-      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'>'+(diff>0?'+':'')+diff+'</td>';
+      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'">'+( diff>0?'+':'')+diff+'</td>';
       html += '<td class="pts-col">'+row.pts+'</td></tr>';
     });
     html += '</tbody></table></div>';
@@ -931,6 +931,7 @@ async function renderClassifiche() {
       rows+='<td>'+logoHTML(row.sq,'sm')+'</td><td style="font-weight:600;">'+row.sq.nome+'</td>';
       rows+='<td style="font-size:11px;color:var(--testo-xs);">'+(row.girone||'')+'</td>';
       rows+='<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
+      rows+='<td>'+(row.gf||0)+'</td><td>'+(row.gs||0)+'</td>';
       rows+='<td class="'+(dr>0?'diff-pos':dr<0?'diff-neg':'')+'">'+( dr>0?'+':'')+dr+'</td>';
       rows+='<td class="pts-col">'+row.pts+'</td></tr>';
     });
