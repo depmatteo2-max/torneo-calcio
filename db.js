@@ -54,6 +54,11 @@ async function _precaricaDatiStatici() {
           _cacheSet('ko_' + catId, ko);
         });
       }
+      // Popola cache loghi da dati statici
+      if (d.logos) {
+        window._staticLogos = d.logos;
+        window._logoCache = d.logos;
+      }
       console.log('[DB] Dati statici caricati da data.json');
     } catch(e) {
       console.log('[DB] data.json non trovato, uso Supabase');
