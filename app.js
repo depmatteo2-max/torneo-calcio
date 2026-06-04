@@ -19,28 +19,46 @@ let STATE = {
 
 async function init() {
   window._appStartTime = Date.now();
+  window._CACHE_TTL_OVERRIDE = 120000; // 2 minuti cache
+
+  // Mostra subito l'app nascondendo il loading
   initDB();
+
+  // Applica config subito (logo, titolo)
   if (typeof CONFIG !== 'undefined') {
     if (CONFIG.NOME_SITO) { document.title = CONFIG.NOME_SITO; var ht=document.getElementById('header-title'); if(ht)ht.textContent=CONFIG.NOME_SITO; }
     if (typeof getLogo === 'function') { var logo=getLogo(); if(logo){['header-logo','loading-img'].forEach(function(id){var el=document.getElementById(id);if(el)el.src=logo;});} }
   }
-  if (typeof _CACHE_TTL !== 'undefined') window._CACHE_TTL_OVERRIDE = 30000;
+
   try {
+    // Carica solo tornei (leggero)
     STATE.tornei = await dbGetTornei();
     const savedId = _loadSavedTorneo();
     const attivi = STATE.tornei.filter(t => t.attivo);
     if (savedId && attivi.find(t => t.id === savedId)) STATE.activeTorneo = savedId;
     else if (attivi.length) STATE.activeTorneo = attivi[0].id;
     else if (STATE.tornei.length) STATE.activeTorneo = STATE.tornei[0].id;
-    subscribeRealtime(() => { if (!STATE.isAdmin) renderCurrentSection(); });
+
+    // Nascondi loading SUBITO dopo aver trovato il torneo
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+
+    // Carica dati e renderizza
+    await loadTorneo();
+    tryAutoLogin();
+
+    // Realtime in background — non blocca l'avvio
+    setTimeout(() => {
+      try { subscribeRealtime(() => { if (!STATE.isAdmin) renderCurrentSection(); }); } catch(e) {}
+    }, 2000);
+
+    return; // evita il codice sotto
   } catch (e) { console.error(e); }
 
-  document.getElementById('loading-screen').style.display = 'none';
-  document.getElementById('main-app').style.display = 'block';
-
-  const attivi = STATE.tornei.filter(t => t.attivo);
-  if (!attivi.length) { await loadTorneo(); tryAutoLogin(); return; }
-  if (attivi.length > 1 && !STATE.activeTorneo) { mostraSelezioneTeorneo(); tryAutoLogin(); return; }
+  // loadTorneo e tryAutoLogin già chiamati sopra nel try
+  const attivi2 = STATE.tornei.filter(t => t.attivo);
+  if (!attivi2.length) { await loadTorneo(); tryAutoLogin(); return; }
+  if (attivi2.length > 1 && !STATE.activeTorneo) { mostraSelezioneTeorneo(); tryAutoLogin(); return; }
   await loadTorneo();
   tryAutoLogin();
 }
@@ -946,7 +964,7 @@ function _riepilogoBanner(section) {
 async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
+  if (!el.innerHTML.trim()) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳</div>';
   await _aggiornaResolver(STATE.activeCat);
   var gironi = await getGironiWithData(STATE.activeCat);
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
@@ -1525,16 +1543,26 @@ async function deleteCat(id) {
 //  ADMIN: LOGHI
 // ============================================================
 async function renderAdminLoghi() {
-  const el=document.getElementById('sec-a-loghi');
-  const tutteSquadre=await dbGetSquadreFull(STATE.activeTorneo);
-  // Filtra placeholder (MIGLIOR SECONDA, DECIMA MIGLIOR TERZA ecc.)
+  const el = document.getElementById('sec-a-loghi');
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
+
+  // Carica SOLO id e nome (niente logo) per velocità
+  const { data: tutteSquadre } = await db.from('squadre')
+    .select('id,nome,logo')
+    .eq('torneo_id', STATE.activeTorneo)
+    .order('nome');
+
+  if (!tutteSquadre?.length) {
+    el.innerHTML = '<div class="empty-state">Aggiungi prima le squadre.</div>';
+    return;
+  }
+
+  // Filtra placeholder
   const squadre = tutteSquadre.filter(sq => !_isPlaceholder(sq.nome));
-  if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
+  const conLogo = squadre.filter(s => s.logo).length;
+  const senzaLogo = squadre.filter(s => !s.logo).length;
 
-  const conLogo = squadre.filter(s=>s.logo).length;
-  const senzaLogo = squadre.filter(s=>!s.logo).length;
-
-  let html=`
+  let html = `
   <div class="section-label">Loghi squadre</div>
   <div class="card" style="margin-bottom:10px;">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
@@ -1543,45 +1571,42 @@ async function renderAdminLoghi() {
         <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
       </label>
       <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">📦 Comprimi</button>
-      <span style="font-size:12px;color:var(--text-3);margin-left:auto;">
-        ✅ ${conLogo} · ⬜ ${senzaLogo}
-      </span>
-    </div>
-    <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;line-height:1.5;">
-      💡 Rinomina i file con il nome della squadra (es. <em>gran-combin.png</em>) e caricali tutti insieme
+      <span style="font-size:12px;color:var(--text-3);margin-left:auto;">✅ ${conLogo} · ⬜ ${senzaLogo}</span>
     </div>
     <div id="loghi-auto-log" style="display:none;background:var(--bg);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;max-height:180px;overflow-y:auto;font-family:monospace;line-height:1.6;"></div>
-  </div>
+  </div>`;
 
-  <div class="section-label">Con logo (${conLogo})</div>
-  <div class="card" style="padding:8px 14px;margin-bottom:10px;">`;
+  // Prima mostra SENZA logo (più importante da caricare)
+  const senza = squadre.filter(s => !s.logo);
+  const con = squadre.filter(s => s.logo);
 
-  // Prima le squadre CON logo
-  for (const sq of squadre.filter(s=>s.logo)) {
-    html += _logoRow(sq);
+  if (senza.length) {
+    html += `<div class="section-label">Senza logo (${senza.length})</div><div class="card" style="padding:8px 14px;margin-bottom:10px;">`;
+    senza.forEach(sq => { html += _logoRow(sq); });
+    html += '</div>';
   }
-  if (!squadre.filter(s=>s.logo).length) html += '<div style="color:var(--text-4);font-size:13px;padding:8px 0;">Nessun logo caricato ancora</div>';
-  html += '</div>';
 
-  html += `<div class="section-label">Senza logo (${senzaLogo})</div><div class="card" style="padding:8px 14px;">`;
-  for (const sq of squadre.filter(s=>!s.logo)) {
-    html += _logoRow(sq);
+  if (con.length) {
+    html += `<div class="section-label">Con logo (${con.length})</div><div class="card" style="padding:8px 14px;">`;
+    con.forEach(sq => { html += _logoRow(sq); });
+    html += '</div>';
   }
-  if (!squadre.filter(s=>!s.logo).length) html += '<div style="color:var(--green);font-size:13px;padding:8px 0;">✅ Tutte le squadre hanno il logo!</div>';
-  html += '</div>';
 
-  el.innerHTML=html;
+  el.innerHTML = html;
 }
 
 function _logoRow(sq) {
   const ini = sq.nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  // Per logo base64 grandi usa loading="lazy" per non bloccare il render
+  const imgSrc = sq.logo || '';
+  const logoEl = imgSrc
+    ? `<img src="${imgSrc}" loading="lazy" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);" alt="${sq.nome}">`
+    : `<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--gold));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:white;border:2px solid var(--border);">${ini}</div>`;
+
   return `<div class="logo-team-row">
     <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
-      ${sq.logo
-        ? `<img src="${sq.logo}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);" alt="${sq.nome}">`
-        : `<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--gold));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:white;border:2px solid var(--border);">${ini}</div>`
-      }
-      <label style="position:absolute;inset:0;border-radius:50%;cursor:pointer;background:rgba(0,0,0,0) ;transition:background .2s;"
+      ${logoEl}
+      <label style="position:absolute;inset:0;border-radius:50%;cursor:pointer;background:rgba(0,0,0,0);transition:background .2s;"
         onmouseover="this.style.background='rgba(0,0,0,0.35)'"
         onmouseout="this.style.background='rgba(0,0,0,0)'">
         <input type="file" accept="image/*" style="display:none;" onchange="uploadLogo(event,${sq.id})">
