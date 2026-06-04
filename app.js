@@ -201,7 +201,7 @@ function mostraSelezioneCat() {
           <span style="font-size:12px;font-weight:800;color:var(--testo);">Tabellone</span>
         </button>
       </div>
-      <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
         Seleziona categoria
         <span style="flex:1;height:1px;background:var(--bordo);"></span>
       </div>
@@ -215,12 +215,12 @@ function mostraSelezioneCat() {
               ${icons[i%icons.length]}
             </div>
             <span style="font-size:16px;font-weight:800;color:var(--testo);flex:1;">${c.nome}</span>
-            <span style="font-size:18px;color:var(--testo-xs);">›</span>
+            <span style="font-size:18px;color:var(--text-3);">›</span>
           </button>`).join('')}
       </div>
       ${catFiltrate.length > 1 ? `
       <button onclick="mostraTutteLCategorie()"
-        style="width:100%;margin-top:12px;padding:12px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:10px;font-size:13px;font-weight:600;color:var(--testo-lt);cursor:pointer;font-family:inherit;transition:all .15s;"
+        style="width:100%;margin-top:12px;padding:12px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:10px;font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer;font-family:inherit;transition:all .15s;"
         onmouseover="this.style.background='var(--blu-bg)';this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
         onmouseout="this.style.background='var(--sfondo)';this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
         📊 Vedi tutte le categorie insieme
@@ -278,17 +278,17 @@ function renderTorneoBar() {
       onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">🏠</button>
     ${cat ? `
       <div style="flex:1;min-width:0;">
-        <div style="font-size:9px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;letter-spacing:.07em;line-height:1;margin-bottom:1px;">Categoria</div>
+        <div style="font-size:9px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.07em;line-height:1;margin-bottom:1px;">Categoria</div>
         <div style="font-size:16px;font-weight:900;color:var(--testo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">${cat.nome}</div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0;">
         <button onclick="mostraLinkCondivisibile()"
-          style="width:34px;height:34px;border-radius:8px;font-size:14px;background:var(--sfondo);border:1.5px solid var(--bordo);color:var(--testo-lt);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;"
+          style="width:34px;height:34px;border-radius:8px;font-size:14px;background:var(--sfondo);border:1.5px solid var(--bordo);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;"
           title="Copia link"
           onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.background='var(--sfondo)'">🔗</button>
         ${multiCat ? `<button onclick="cambiaCategoria()"
-          style="height:34px;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;background:var(--sfondo);border:1.5px solid var(--bordo);color:var(--testo-lt);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap;transition:all .15s;"
+          style="height:34px;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;background:var(--sfondo);border:1.5px solid var(--bordo);color:var(--text-2);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap;transition:all .15s;"
           onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)';this.style.background='var(--blu-bg)'"
           onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)';this.style.background='var(--sfondo)'">
           ⇄ Cambia</button>` : ''}
@@ -404,8 +404,35 @@ function _renderFooter() {
 
 function renderCatBar() {
   const bar = document.getElementById('cat-bar');
-  if (!STATE.categorie.length) { bar.innerHTML = ''; return; }
-  bar.innerHTML = `<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;"></div>`;
+  if (!STATE.categorie.length) { bar.innerHTML = ''; bar.style.display='none'; return; }
+  bar.style.display = '';
+  const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
+  const multiCat = STATE.categorie.length > 1;
+  // Solo admin vede il selettore pill orizzontale
+  // Utente pubblico: mostra nome categoria + tasto Cambia
+  let catHtml = '';
+  if (cat && multiCat && !STATE.isAdmin) {
+    catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
+      <span style="font-size:13px;font-weight:800;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${cat.nome}
+      </span>
+      <button onclick="cambiaCategoria()"
+        style="flex-shrink:0;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
+               padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);
+               cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
+        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-2)'">
+        ⇄ Cambia
+      </button>
+    </div>`;
+  } else if (STATE.isAdmin && multiCat) {
+    // Admin: pillole orizzontali scorrevoli
+    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
+      STATE.categorie.map(c =>
+        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})">${c.nome}</button>`
+      ).join('') + '</div>';
+  }
+  bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
   _renderGiornataBar();
 }
 
@@ -848,15 +875,17 @@ async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
-  if (typeof _cacheInvalid === 'function') _cacheInvalid('gwd_');
   await _aggiornaResolver(STATE.activeCat);
   var gironi = await getGironiWithData(STATE.activeCat);
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
-  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s); };
+  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s)||/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(s); };
 
-  // Costruisce statsPerSquadra da gironi normali
+  // Usa classifiche già calcolate da _aggiornaResolver se disponibili
+  var clGCache = window._clGlobale || {};
+  var clSpCache = window._clSpecGlobale || {};
+
   var statsPerSquadra = {};
   var classificheGironi = {};
   var html = '';
@@ -865,20 +894,25 @@ async function renderClassifiche() {
     var g = gironi[gi];
     if (isClassif(g)) continue;
 
-    // Squadre valide
-    var sqMap = {};
-    for (var pi=0; pi<g.partite.length; pi++) {
-      var p = g.partite[pi];
-      if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
-      if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
-    }
-    var sq = (g.squadre||[]).filter(function(s){return s&&s.id&&!isPlaceh(s.nome);});
-    if (sq.length < 2) sq = Object.values(sqMap);
-    if (sq.length < 2) continue;
-
-    var cl = calcGironeClassifica({squadre:sq, partite:g.partite});
-    if (!cl.length) continue;
     var key = g.nome.toUpperCase().trim();
+
+    // Usa classifica dalla cache se disponibile
+    var cl = clGCache[key];
+
+    if (!cl || !cl.length) {
+      // Fallback: calcola dalle partite
+      var sqMap = {};
+      for (var pi=0; pi<g.partite.length; pi++) {
+        var p = g.partite[pi];
+        if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
+        if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
+      }
+      var sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      cl = calcGironeClassifica({squadre:sq, partite:g.partite});
+    }
+
+    if (!cl || !cl.length) continue;
     classificheGironi[key] = cl;
 
     cl.forEach(function(row,idx){
@@ -891,14 +925,15 @@ async function renderClassifiche() {
 
     html += '<div class="card" style="margin-bottom:8px;">';
     html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
-    html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
+    html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GF</th><th>GS</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
     cl.forEach(function(row,idx){
       var q=idx<(cat&&cat.qualificate||1);
       var diff=row.gf-row.gs;
       html += '<tr class="'+(q?'qualifies':'')+'"><td><span class="'+(q?'q-dot':'nq-dot')+'"></span></td>';
       html += '<td>'+logoHTML(row.sq,'sm')+'</td><td>'+row.sq.nome+'</td>';
       html += '<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
-      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'>'+(diff>0?'+':'')+diff+'</td>';
+      html += '<td>'+row.gf+'</td><td>'+row.gs+'</td>';
+      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'">'+( diff>0?'+':'')+diff+'</td>';
       html += '<td class="pts-col">'+row.pts+'</td></tr>';
     });
     html += '</tbody></table></div>';
@@ -912,12 +947,13 @@ async function renderClassifiche() {
       var dr=row.gf-row.gs;
       rows+='<tr class="'+(idx===0?'qualifies':'')+'"><td style="text-align:center;font-weight:800;color:'+colore+';">'+(idx+1)+'</td>';
       rows+='<td>'+logoHTML(row.sq,'sm')+'</td><td style="font-weight:600;">'+row.sq.nome+'</td>';
-      rows+='<td style="font-size:11px;color:var(--testo-xs);">'+(row.girone||'')+'</td>';
+      rows+='<td style="font-size:11px;color:var(--text-3);">'+(row.girone||'')+'</td>';
       rows+='<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
+      rows+='<td>'+(row.gf||0)+'</td><td>'+(row.gs||0)+'</td>';
       rows+='<td class="'+(dr>0?'diff-pos':dr<0?'diff-neg':'')+'">'+( dr>0?'+':'')+dr+'</td>';
       rows+='<td class="pts-col">'+row.pts+'</td></tr>';
     });
-    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+colore+';"><div class="card-title" style="color:'+colore+';">'+titolo+'<span class="badge badge-gray">'+lista.length+' squadre</span></div><table class="standings-table"><thead><tr><th>#</th><th colspan="2">Squadra</th><th>G.ne</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+colore+';"><div class="card-title" style="color:'+colore+';">'+titolo+'<span class="badge badge-gray">'+lista.length+' squadre</span></div><table class="standings-table"><thead><tr><th>#</th><th colspan="2">Squadra</th><th>G.ne</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GF</th><th>GS</th><th>GD</th><th>Pt</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   };
 
   var buildPos = function(pos, chiavi) {
@@ -960,22 +996,30 @@ async function renderClassifiche() {
       return {sq:r.sq,pts:r.pts,g:r.g,v:r.v,p:r.p,s:r.s,gf:r.gf,gs:r.gs,girone:gn};
     });
   };
-  var sec=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE']);
-  var ter=fmtG(clSp['CLASSIFICA MIGLIORI TERZE']);
-  var qua=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE']);
-  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde (A-L)','#d97706');
-  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze (A-L)','#78716c');
-  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte (A-L)','#6366f1');
+  // ── Classifiche Migliori da Gironi A-L ──
+  var sec=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE']||[]);
+  var ter=fmtG(clSp['CLASSIFICA MIGLIORI TERZE']||[]);
+  var qua=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE']||[]);
+  if(sec.length||ter.length||qua.length) {
+    html+='<div class="section-label">🏅 Classifiche Migliori — Gironi A-L</div>';
+    if(sec.length) html+=mkSpeciale(sec,'🥈 Migliori Seconde (A-L)','#D42B2B');
+    if(ter.length) html+=mkSpeciale(ter,'🥉 Migliori Terze (A-L)','#1A4FA0');
+    if(qua.length) html+=mkSpeciale(qua,'4️⃣ Migliori Quarte (A-L)','#6366f1');
+  }
 
-  var s123=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 123']);
-  var t123=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 123']);
-  if(s123.length) html+=mkSpeciale(s123,'🥈 Migliori Seconde Gironi 1-2-3','#0891b2');
-  if(t123.length) html+=mkSpeciale(t123,'🥉 Migliori Terze Gironi 1-2-3','#0891b2');
-
-  var s456=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 456']);
-  var t456=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 456']);
-  if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
-  if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
+  // ── Classifiche Migliori da Gironi 1-3, 4-6, 7-9 ──
+  [['123','1-2-3','#D42B2B'],['456','4-5-6','#1A4FA0'],['789','7-8-9','#059669']].forEach(function(x){
+    var g=x[0],label=x[1],col=x[2];
+    var s=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE '+g]||clSp['CLASSIFICA MIGLIORI SECONDE '+g.split('').join('-')]||[]);
+    var t=fmtG(clSp['CLASSIFICA MIGLIORI TERZE '+g]||clSp['CLASSIFICA MIGLIORI TERZE '+g.split('').join('-')]||[]);
+    var q=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE '+g]||clSp['CLASSIFICA MIGLIORI QUARTE '+g.split('').join('-')]||[]);
+    if(s.length||t.length||q.length) {
+      html+='<div class="section-label">🏅 Classifiche Migliori — Gironi '+label+'</div>';
+      if(s.length) html+=mkSpeciale(s,'🥈 Migliori Seconde Gironi '+label,col);
+      if(t.length) html+=mkSpeciale(t,'🥉 Migliori Terze Gironi '+label,col);
+      if(q.length) html+=mkSpeciale(q,'4️⃣ Migliori Quarte Gironi '+label,col);
+    }
+  });
 
   el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
 };
@@ -990,7 +1034,7 @@ async function renderClassifiche() {
 async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
   await _aggiornaResolver(STATE.activeCat);
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
@@ -1028,7 +1072,7 @@ async function renderRisultati() {
     const giornate = STATE._giornateDisponibili || [];
     if (giornate.length > 1) {
       html += `<div style="background:white;border:1px solid var(--bordo);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;box-shadow:var(--shadow);">
-        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">📅 Filtra per giornata</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">📅 Filtra per giornata</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${giornate.map(g => { const oggi = _trovaGiornataOggi(giornate); const isOggi = g === oggi;
             return `<button onclick="selectGiornata('${g}')" style="padding:5px 12px;border-radius:20px;border:1.5px solid ${isOggi?'var(--arancio)':'var(--bordo)'};background:${isOggi?'var(--arancio-bg)':'white'};color:${isOggi?'var(--arancio)':'var(--testo-lt)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">${isOggi?'🔴 ':''}${_labelGiornata(g)}</button>`;
@@ -1079,7 +1123,7 @@ async function renderRisultati() {
   };
 
   if (giocate.length) {
-    html += `<div class="section-label">✅ Risultati <span style="color:var(--verde);font-weight:800;">(${giocate.length})</span></div>`;
+    html += `<div class="section-label">✅ Risultati <span style="color:var(--green);font-weight:800;">(${giocate.length})</span></div>`;
     if (!filtroAttivo) {
       const perGiorno = {}; giocate.forEach(p => { const g = p.giorno || '—'; if (!perGiorno[g]) perGiorno[g] = []; perGiorno[g].push(p); });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
@@ -1092,7 +1136,7 @@ async function renderRisultati() {
   }
 
   if (daFare.length) {
-    html += `<div class="section-label">🕐 Programma <span style="color:var(--testo-xs);font-weight:600;">(${daFare.length})</span></div>`;
+    html += `<div class="section-label">🕐 Programma <span style="color:var(--text-3);font-weight:600;">(${daFare.length})</span></div>`;
     if (!filtroAttivo) {
       const perGiorno = {}; daFare.forEach(p => { const g = p.giorno || '—'; if (!perGiorno[g]) perGiorno[g] = []; perGiorno[g].push(p); });
       for (const [giorno, partite] of Object.entries(perGiorno)) {
@@ -1128,7 +1172,7 @@ async function renderTabellone() {
         const hm=m.home_id?sqMap[m.home_id]:null; const am=m.away_id?sqMap[m.away_id]:null;
         const hmNome=hm?hm.nome:(m.note_home||'In attesa...'); const amNome=am?am.nome:(m.note_away||'In attesa...');
         const isPending=!hm||!am;
-        const orario=m.orario||m.campo?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#bbb;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`:'';
+        const orario=m.orario||m.campo?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:var(--text-3);">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#bbb;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`:'';
         h+=`<div class="match-result" style="border-bottom:1px solid #f0f0f0;padding-bottom:10px;margin-bottom:8px;">${orario}<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="match-team"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${isPending?'':logoHTML(hm,'sm')}${hmNome}</span></div><div class="match-score ${!m.giocata?'pending':''}">${m.giocata?m.gol_home+' — '+m.gol_away:'vs'}</div><div class="match-team right"><span style="${isPending?'color:#bbb;font-style:italic;':''}">${amNome}${isPending?'':logoHTML(am,'sm')}</span></div></div></div>`;
       }
       h+=`</div>`;
@@ -1239,7 +1283,7 @@ async function renderAdminSetup() {
   }
   html+=`<div class="section-label">Aggiungi categorie da Excel</div>
   <div class="card">
-    <div style="font-size:13px;color:var(--testo-lt);margin-bottom:14px;">Per ogni categoria: scrivi il nome e carica il file Excel.</div>
+    <div style="font-size:13px;color:var(--text-2);margin-bottom:14px;">Per ogni categoria: scrivi il nome e carica il file Excel.</div>
     <div id="cat-import-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
     <button onclick="aggiungiRigaCategoria()" style="width:100%;padding:10px;border:1.5px dashed var(--bordo);border-radius:9px;background:var(--sfondo);color:var(--blu);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">+ Aggiungi categoria</button>
     <div id="import-preview" style="margin-top:14px;"></div>
@@ -1282,10 +1326,10 @@ function aggiungiRigaCategoria() {
   div.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;">
       <input id="cat-nome-${idx}" class="form-input" placeholder="Nome categoria (es. Esordienti 2013)" style="flex:1;font-size:13px;" oninput="_aggiornaNomeRiga(${idx})">
-      <button onclick="_rimuoviRiga(${idx})" style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
+      <button onclick="_rimuoviRiga(${idx})" style="background:var(--red-bg);border:1px solid rgba(220,38,38,0.2);color:var(--red);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
     </div>
     <div id="cat-file-area-${idx}">
-      <label style="display:flex;align-items:center;gap:8px;background:white;border:1.5px solid var(--bordo);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--testo-lt);transition:all .15s;" onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'" onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
+      <label style="display:flex;align-items:center;gap:8px;background:white;border:1.5px solid var(--bordo);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--text-2);transition:all .15s;" onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'" onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--testo-lt)'">
         <span>📂</span>
         <span id="cat-file-label-${idx}">Seleziona file Excel...</span>
         <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="_fileSelezionato(event, ${idx})">
@@ -1293,7 +1337,7 @@ function aggiungiRigaCategoria() {
     </div>
     <div id="cat-preview-${idx}" style="display:none;"></div>
     <div id="cat-btn-${idx}" style="display:none;">
-      <button onclick="_importaRiga(${idx})" style="width:100%;background:var(--blu);color:white;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">✓ Importa "categoria"</button>
+      <button onclick="_importaRiga(${idx})" class="btn btn-p" style="width:100%;padding:11px;font-size:13px;">✓ Importa "categoria"</button>
     </div>`;
   list.appendChild(div);
 }
@@ -1322,7 +1366,7 @@ function _safeCall(fn, ...args) {
 
 async function _parseExcelRiga(file, idx) {
   const preview = document.getElementById(`cat-preview-${idx}`); const btnDiv = document.getElementById(`cat-btn-${idx}`);
-  if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--testo-xs);">⏳ Lettura file...</div>'; }
+  if (preview) { preview.style.display = 'block'; preview.innerHTML = '<div style="font-size:12px;color:var(--text-3);">⏳ Lettura file...</div>'; }
   try {
     if (typeof XLSX === 'undefined') {
       await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
@@ -1338,7 +1382,7 @@ async function _parseExcelRiga(file, idx) {
     const nomeCatInput = document.getElementById(`cat-nome-${idx}`);
     if (nomeCatInput && !nomeCatInput.value.trim() && dati.categorie.length) nomeCatInput.value = dati.categorie[0].nome;
     if (preview) {
-      preview.innerHTML = `<div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;"><div style="font-weight:700;color:var(--verde);margin-bottom:6px;">✅ File letto correttamente</div><div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${dati.gironi.length} gironi</span><span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${dati.partite.length} partite</span>${dati.fase2.length ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${dati.fase2.length} finali</span>` : ''}</div></div>`;
+      preview.innerHTML = `<div style="background:var(--verde-bg);border:1px solid rgba(22,163,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;"><div style="font-weight:700;color:var(--green);margin-bottom:6px;">✅ File letto correttamente</div><div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏟 ${dati.gironi.length} gironi</span><span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">⚽ ${dati.partite.length} partite</span>${dati.fase2.length ? `<span style="background:white;padding:2px 8px;border-radius:20px;color:var(--testo-2);">🏆 ${dati.fase2.length} finali</span>` : ''}</div></div>`;
     }
     if (btnDiv) {
       btnDiv.style.display = 'block';
@@ -1347,7 +1391,7 @@ async function _parseExcelRiga(file, idx) {
       if (btn) btn.textContent = `✓ Importa "${nome}"`;
     }
   } catch(e) {
-    if (preview) preview.innerHTML = '<div style="color:var(--rosso);font-size:12px;">❌ Errore: ' + e.message + '</div>';
+    if (preview) preview.innerHTML = '<div style="color:var(--red);font-size:12px;">❌ Errore: ' + e.message + '</div>';
   }
 }
 
@@ -1377,7 +1421,7 @@ async function _importaRiga(idx) {
     if (riga) {
       riga.style.background = 'var(--verde-bg)'; riga.style.borderColor = 'rgba(22,163,74,0.3)';
       const preview = document.getElementById(`cat-preview-${idx}`);
-      if (preview) preview.innerHTML = `<div style="color:var(--verde);font-weight:700;font-size:13px;">✅ Importata!</div>`;
+      if (preview) preview.innerHTML = `<div style="color:var(--green);font-weight:700;font-size:13px;">✅ Importata!</div>`;
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
@@ -1410,31 +1454,76 @@ async function deleteCat(id) {
 // ============================================================
 async function renderAdminLoghi() {
   const el=document.getElementById('sec-a-loghi');
-  const squadre=await dbGetSquadreFull(STATE.activeTorneo);
+  const tutteSquadre=await dbGetSquadreFull(STATE.activeTorneo);
+  // Filtra placeholder (MIGLIOR SECONDA, DECIMA MIGLIOR TERZA ecc.)
+  const squadre = tutteSquadre.filter(sq => !_isPlaceholder(sq.nome));
   if (!squadre.length) { el.innerHTML='<div class="empty-state">Aggiungi prima le squadre.</div>'; return; }
-  let html='<div class="section-label">Loghi squadre</div><div class="card">';
-  html+=`<div style="font-size:13px;color:#666;margin-bottom:14px;">Clicca sul logo per caricare/cambiare l'immagine.</div>`;
-  html+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <label style="display:inline-flex;align-items:center;gap:8px;background:var(--blu,#1a56db);color:white;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;border:2px solid var(--blu,#1a56db);transition:all .15s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-      📁 Carica loghi da cartella
-      <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
-    </label>
-    <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">📦 Comprimi loghi grandi</button>
+
+  const conLogo = squadre.filter(s=>s.logo).length;
+  const senzaLogo = squadre.filter(s=>!s.logo).length;
+
+  let html=`
+  <div class="section-label">Loghi squadre</div>
+  <div class="card" style="margin-bottom:10px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <label class="btn btn-p" style="cursor:pointer;gap:6px;">
+        📁 Carica da cartella
+        <input type="file" accept="image/*" multiple style="display:none;" onchange="caricaLoghiDaCartella(event)">
+      </label>
+      <button class="btn" onclick="comprimiloghiEsistenti()" id="btn-comprimi-loghi">📦 Comprimi</button>
+      <span style="font-size:12px;color:var(--text-3);margin-left:auto;">
+        ✅ ${conLogo} · ⬜ ${senzaLogo}
+      </span>
+    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-bottom:12px;line-height:1.5;">
+      💡 Rinomina i file con il nome della squadra (es. <em>gran-combin.png</em>) e caricali tutti insieme
+    </div>
+    <div id="loghi-auto-log" style="display:none;background:var(--bg);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;max-height:180px;overflow-y:auto;font-family:monospace;line-height:1.6;"></div>
   </div>
-  <div style="font-size:11px;color:#888;margin-bottom:12px;">💡 <strong>Suggerimento:</strong> rinomina i file con il nome della squadra (es. <em>rhodense.png</em>) e selezionali tutti insieme</div>
-  <div id="loghi-auto-log" style="display:none;background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;max-height:200px;overflow-y:auto;font-family:monospace;"></div>`;
-  for (const sq of squadre) {
-    html+=`<div class="logo-team-row">
-      <div class="logo-upload-btn">${logoHTML(sq,'md')}
-        <div class="logo-plus"><svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 1v6M1 4h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <input type="file" accept="image/*" onchange="uploadLogo(event,${sq.id})">
-      </div>
-      <div style="flex:1;"><div style="font-size:14px;font-weight:600;">${sq.nome}</div>
-        <div style="font-size:12px;color:#aaa;">${sq.logo?'✅ Logo caricato':'Nessun logo'}</div></div>
-      ${sq.logo?`<button class="btn btn-danger btn-sm" onclick="removeLogo(${sq.id})">Rimuovi</button>`:''}
-    </div>`;
+
+  <div class="section-label">Con logo (${conLogo})</div>
+  <div class="card" style="padding:8px 14px;margin-bottom:10px;">`;
+
+  // Prima le squadre CON logo
+  for (const sq of squadre.filter(s=>s.logo)) {
+    html += _logoRow(sq);
   }
-  html+='</div>'; el.innerHTML=html;
+  if (!squadre.filter(s=>s.logo).length) html += '<div style="color:var(--text-4);font-size:13px;padding:8px 0;">Nessun logo caricato ancora</div>';
+  html += '</div>';
+
+  html += `<div class="section-label">Senza logo (${senzaLogo})</div><div class="card" style="padding:8px 14px;">`;
+  for (const sq of squadre.filter(s=>!s.logo)) {
+    html += _logoRow(sq);
+  }
+  if (!squadre.filter(s=>!s.logo).length) html += '<div style="color:var(--green);font-size:13px;padding:8px 0;">✅ Tutte le squadre hanno il logo!</div>';
+  html += '</div>';
+
+  el.innerHTML=html;
+}
+
+function _logoRow(sq) {
+  const ini = sq.nome.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  return `<div class="logo-team-row">
+    <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
+      ${sq.logo
+        ? `<img src="${sq.logo}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);" alt="${sq.nome}">`
+        : `<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--gold));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:white;border:2px solid var(--border);">${ini}</div>`
+      }
+      <label style="position:absolute;inset:0;border-radius:50%;cursor:pointer;background:rgba(0,0,0,0) ;transition:background .2s;"
+        onmouseover="this.style.background='rgba(0,0,0,0.35)'"
+        onmouseout="this.style.background='rgba(0,0,0,0)'">
+        <input type="file" accept="image/*" style="display:none;" onchange="uploadLogo(event,${sq.id})">
+      </label>
+      <div style="position:absolute;bottom:0;right:0;width:16px;height:16px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;pointer-events:none;">
+        <svg width="7" height="7" viewBox="0 0 8 8"><path d="M4 1v6M1 4h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sq.nome}</div>
+      <div style="font-size:11px;color:${sq.logo?'var(--green)':'var(--text-4)'};">${sq.logo?'✅ Logo caricato':'Tocca per caricare'}</div>
+    </div>
+    ${sq.logo?`<button class="btn btn-danger btn-sm" onclick="removeLogo(${sq.id})">Rimuovi</button>`:''}
+  </div>`;
 }
 
 async function caricaLoghiDaCartella(event) {
@@ -1558,7 +1647,7 @@ let openScorers={};
 async function renderAdminRisultati() {
   const el=document.getElementById('sec-a-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
-  el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
   const gironi=await getGironiWithData(STATE.activeCat);
   const campiGiornate = await dbGetCampiGiornate(STATE.activeTorneo);
   const campiMap = {}; campiGiornate.forEach(c => campiMap[c.giorno] = c);
@@ -1566,7 +1655,17 @@ async function renderAdminRisultati() {
   let tuttePartite = [];
   for (const g of gironi) { for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id }); }
   if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
-  tuttePartite.sort((a,b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
+  tuttePartite.sort((a,b) => {
+    const mesiOrd = {'venerdì':0,'venerdi':0,'sabato':1,'domenica':2,'lunedì':3,'martedì':4,'mercoledì':5,'giovedì':6};
+    const gA = a.giorno||'', gB = b.giorno||'';
+    if (gA !== gB) {
+      const kA = Object.keys(mesiOrd).find(k => gA.toLowerCase().includes(k)) ?? 'z';
+      const kB = Object.keys(mesiOrd).find(k => gB.toLowerCase().includes(k)) ?? 'z';
+      const dA = mesiOrd[kA] ?? 99, dB = mesiOrd[kB] ?? 99;
+      if (dA !== dB) return dA - dB;
+    }
+    return _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario);
+  });
   let html='';
   for (const p of tuttePartite) {
     const key='p'+p.id; const open=!!openScorers[key];
@@ -1576,14 +1675,14 @@ async function renderAdminRisultati() {
       else if(p.gol_home<p.gol_away)badge=`<span class="badge badge-green">${p.away?.nome} vince</span>`;
       else badge=`<span class="badge badge-blue">Pareggio</span>`;
     }
-    const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${p.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${p.orario}</span>`:''}${p.campo?`<span style="font-size:11px;color:#888;">📍 ${p.campo}</span>`:''}
+    const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${p.orario?`<span class="match-meta-time">🕐 ${p.orario}</span>`:''}${p.campo?`<span style="font-size:11px;color:var(--text-3);">📍 ${p.campo}</span>`:''}
       <span style="font-size:11px;color:#bbb;">${p._girone}</span>${p.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${p.inserito_da}</span>`:''}</div>`;
     const _pgIdx = tuttePartite.indexOf(p);
     const _prevGiorno = _pgIdx > 0 ? tuttePartite[_pgIdx-1].giorno : null;
     if (p.giorno && p.giorno !== _prevGiorno) {
       const _campoG = campiMap[p.giorno] || {};
       const _keyG = (p.giorno).replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'_');
-      html += `<div style="background:var(--blu);color:white;border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      html += `<div style="background:var(--red);color:white;border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="flex:1;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:700;">📅 ${p.giorno}</span>${_campoG.nome_campo||_campoG.indirizzo ? `<span style="font-size:12px;color:rgba(255,255,255,0.85);">📍 <strong>${_campoG.nome_campo||''}</strong>${_campoG.nome_campo&&_campoG.indirizzo?' — ':''}${_campoG.indirizzo||''}</span>` : ''}</div></div>
         <button onclick="mostraEditCampoGiornata('${p.giorno}')" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap;">✏️ ${_campoG.nome_campo ? 'Modifica' : 'Aggiungi'} luogo</button>
         <div id="edit-campo-${_keyG}" style="display:none;width:100%;margin-top:8px;"></div>
@@ -1624,7 +1723,11 @@ async function saveRisultato(partita_id, girone_id) {
     if (result) {
       toast('✓ Salvato!'); await renderAdminRisultati();
       const {data:gironeRow}=await db.from('gironi').select('categoria_id').eq('id',girone_id).single();
-      if (gironeRow?.categoria_id) await verificaEGeneraTriangolari(gironeRow.categoria_id);
+      if (gironeRow?.categoria_id) {
+        // Invalida cache resolver dopo un risultato
+        if (typeof _resolverCache !== 'undefined') delete _resolverCache[gironeRow.categoria_id];
+        await verificaEGeneraTriangolari(gironeRow.categoria_id);
+      }
     } else { toast('Errore nel salvataggio'); }
   } catch(e) { console.error(e); toast('Errore: '+(e.message||'sconosciuto')); }
 }
@@ -1684,7 +1787,7 @@ async function renderAdminKnockout() {
         else if(m.gol_home<m.gol_away)badge=`<span class="badge badge-green">${am?.nome} vince</span>`;
         else badge=`<span class="badge badge-blue">Pareggio</span>`;
       }
-      const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`;
+      const orInfo=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:var(--text-3);">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#888;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`;
       html+=`<div class="admin-match"><div class="admin-match-header">${orInfo}
         <div style="display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;">
           <div class="admin-team-name">${logoHTML(hm,'sm')}<span>${hmNome}</span></div>
@@ -1770,11 +1873,11 @@ function checkPw() {
 }
 
 function enterAdmin(user) {
-  STATE.isAdmin=true; STATE.userRole=user.ruolo; STATE.userName=user.nome;
+  STATE.isAdmin=true; STATE.userRole=user.role||user.ruolo; STATE.userName=user.nome||user.username;
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
-  document.getElementById('admin-btn').textContent='Esci (' + user.nome + ')';
-  if (user.ruolo==='arbitro') {
+  if(document.getElementById('admin-btn'))document.getElementById('admin-btn').textContent='Esci ('+(user.nome||user.username)+')';
+  if (user.role==='scorer'||user.ruolo==='arbitro') {
     _mostraNavArbitro(); STATE.currentSection='a-risultati';
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
     document.getElementById('sec-a-risultati').classList.add('active');
@@ -1814,7 +1917,7 @@ function exitAdmin() {
   document.getElementById('admin-nav').querySelectorAll('.nav-btn').forEach(b=>b.style.display='');
   document.getElementById('pub-nav').style.display='flex';
   document.getElementById('admin-nav').style.display='none';
-  document.getElementById('admin-btn').textContent='Admin';
+  if(document.getElementById('admin-btn'))document.getElementById('admin-btn').textContent='Admin';
   const simBtn = document.getElementById('sim-toggle-btn'); if (simBtn) simBtn.remove();
   const simPanel = document.getElementById('sim-panel'); if (simPanel) simPanel.remove();
   _simUnlocked = false;
@@ -1846,6 +1949,8 @@ function loadScript(src) {
   return new Promise((resolve,reject)=>{ const s=document.createElement('script'); s.src=src; s.onload=resolve; s.onerror=reject; document.head.appendChild(s); });
 }
 
+function mostraLogin(){toggleAdmin();}
+function logout(){exitAdmin();}
 window.addEventListener('DOMContentLoaded', init);
 
 // ============================================================
@@ -1881,7 +1986,7 @@ async function renderAdminCreaTorneo() {
   el.innerHTML = `<div style="max-width:800px;margin:0 auto;padding-bottom:60px;">
     <div style="display:flex;align-items:center;margin-bottom:16px;">
       <div style="font-size:20px;font-weight:800;">🆕 Crea Torneo</div>
-      <button onclick="ctReset()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--testo-lt);">🗑 Ricomincia</button>
+      <button onclick="ctReset()" style="margin-left:auto;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--text-2);">🗑 Ricomincia</button>
     </div>
     ${_ctProgressBar()}
     ${html}
@@ -1918,7 +2023,7 @@ function _ctHtmlStep1() {
     <div style="border:1.5px solid var(--bordo);border-radius:10px;padding:12px;margin-bottom:10px;background:${i%2?'var(--sfondo)':'white'};">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <span style="background:var(--blu);color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;">📅 Giorno ${i+1}</span>
-        ${t.giorni.length>1?`<button onclick="ctRimuoviGiorno(${i})" style="margin-left:auto;background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
+        ${t.giorni.length>1?`<button onclick="ctRimuoviGiorno(${i})" style="margin-left:auto;background:var(--red-bg);border:1px solid rgba(220,38,38,0.2);color:var(--red);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;">
         <div class="form-group"><label class="form-label">Data</label>
@@ -2017,7 +2122,7 @@ function _ctHtmlStep2() {
         ${cat._fatto?'✏️ Modifica':'▶ Configura'}
       </button>
       ${CT.categorie.length>1?`<button onclick="CT.categorie.splice(${ci},1);renderAdminCreaTorneo()"
-        style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:8px;padding:8px 10px;cursor:pointer;">✕</button>`:''}
+        style="background:var(--red-bg);border:1px solid rgba(220,38,38,0.2);color:var(--red);border-radius:8px;padding:8px 10px;cursor:pointer;">✕</button>`:''}
     </div>`).join('');
 
   const tutteOk = CT.categorie.length && CT.categorie.every(c=>c._fatto);
@@ -2037,7 +2142,7 @@ function _ctHtmlStep2() {
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
       <button onclick="CT.step=1;renderAdminCreaTorneo()" class="btn btn-secondary">‹ Indietro</button>
       ${tutteOk?`<button onclick="CT.step=4;renderAdminCreaTorneo()" class="btn btn-p" style="padding:12px 32px;font-size:15px;">Avanti → Riepilogo ›</button>`
-        :`<div style="font-size:12px;color:var(--testo-xs);padding:12px;">Configura tutte le categorie per continuare</div>`}
+        :`<div style="font-size:12px;color:var(--text-3);padding:12px;">Configura tutte le categorie per continuare</div>`}
     </div>`;
 }
 
@@ -2160,13 +2265,13 @@ function _ctFaseGironi(cat, ci) {
         <div style="font-size:11px;font-weight:700;color:var(--blu);text-transform:uppercase;margin-bottom:8px;">🏆 Gironi Finali — configura nella sezione Accoppiamenti</div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <div>
-            <label style="font-size:11px;color:var(--testo-lt);">Quante si qualificano per girone?</label>
+            <label style="font-size:11px;color:var(--text-2);">Quante si qualificano per girone?</label>
             <div style="display:flex;gap:4px;margin-top:4px;">
               ${[1,2,3,4].map(n=>`<button onclick="CT.categorie[${ci}].gironi[${gi}].qualificate=${n};renderAdminCreaTorneo()"
                 style="width:28px;height:28px;border-radius:50%;border:2px solid ${(g.qualificate||2)===n?'var(--blu)':'var(--bordo)'};background:${(g.qualificate||2)===n?'var(--blu)':'white'};color:${(g.qualificate||2)===n?'white':'var(--testo-lt)'};cursor:pointer;font-size:13px;font-weight:800;font-family:inherit;">${n}</button>`).join('')}
             </div>
           </div>
-          <div style="font-size:11px;color:var(--testo-lt);">
+          <div style="font-size:11px;color:var(--text-2);">
             Il ${g.qualificate||2}° si qualifica • il ${(g.qualificate||2)+1}° in poi gioca le finali consolazione
           </div>
         </div>
@@ -2179,18 +2284,18 @@ function _ctFaseGironi(cat, ci) {
         <input value="${g.nome}" placeholder="Nome girone (es. Girone Q)"
           style="flex:1;min-width:120px;border:1.5px solid var(--blu);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:800;font-family:inherit;background:var(--blu-bg);color:var(--blu);"
           onchange="CT.categorie[${ci}].gironi[${gi}].nome=this.value">
-        <span style="font-size:11px;color:var(--testo-xs);">Gioca il:</span>
+        <span style="font-size:11px;color:var(--text-3);">Gioca il:</span>
         <select style="border:1px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;"
           onchange="CT.categorie[${ci}].gironi[${gi}].giorno=parseInt(this.value)">
           ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${(g.giorno||0)===di?'selected':''}>${giornoLabel(di)}</option>`).join('')}
         </select>
         ${cat.gironi.length>1?`<button onclick="CT.categorie[${ci}].gironi.splice(${gi},1);renderAdminCreaTorneo()"
-          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
+          style="background:var(--red-bg);border:1px solid rgba(220,38,38,0.2);color:var(--red);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>`:''}
       </div>
 
       <!-- Tipo girone -->
       <div style="padding:8px 12px;background:white;border-bottom:1px solid var(--bordo-lt);">
-        <div style="font-size:11px;font-weight:700;color:var(--testo-xs);text-transform:uppercase;margin-bottom:6px;">Tipo</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:6px;">Tipo</div>
         <div style="display:flex;flex-direction:column;gap:4px;">
           ${Object.entries(tipoLabel).map(([k,v])=>`
             <button onclick="CT.categorie[${ci}].gironi[${gi}].tipo='${k}';renderAdminCreaTorneo()"
@@ -2204,10 +2309,10 @@ function _ctFaseGironi(cat, ci) {
 
       <!-- Squadre -->
       <div style="padding:10px 12px;">
-        <div style="font-size:11px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre</div>
+        <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre</div>
         ${g.squadre.map((sq,si)=>`
           <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bordo-lt);">
-            <span style="font-size:12px;color:var(--testo-xs);width:20px;text-align:right;">${si+1}.</span>
+            <span style="font-size:12px;color:var(--text-3);width:20px;text-align:right;">${si+1}.</span>
             <input value="${sq.nome}" style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:13px;font-weight:600;font-family:inherit;"
               onchange="CT.categorie[${ci}].gironi[${gi}].squadre[${si}].nome=this.value">
             <select style="border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;"
@@ -2217,7 +2322,7 @@ function _ctFaseGironi(cat, ci) {
               <option value="dopo" ${sq.prio==='dopo'?'selected':''}>⬇ Dopo</option>
             </select>
             <button onclick="CT.categorie[${ci}].gironi[${gi}].squadre.splice(${si},1);renderAdminCreaTorneo()"
-              style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:14px;">✕</button>
+              style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;">✕</button>
           </div>`).join('')}
         <div style="display:flex;gap:6px;margin-top:8px;">
           <input id="sq-in-${ci}-${gi}" class="form-input" style="flex:1;font-size:13px;" placeholder="Nome squadra..."
@@ -2227,7 +2332,7 @@ function _ctFaseGironi(cat, ci) {
         <textarea id="bulk-${ci}-${gi}" class="form-input" rows="3" style="font-size:12px;resize:vertical;margin-top:6px;"
           placeholder="Incolla lista (una per riga):&#10;RHODENSE&#10;CHISOLA&#10;BORGORATTI"></textarea>
         <button onclick="ctBulkAggiungi(${ci},${gi})"
-          style="margin-top:4px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--testo-lt);cursor:pointer;">📋 Aggiungi lista</button>
+          style="margin-top:4px;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;">📋 Aggiungi lista</button>
       </div>
     </div>`;
   }).join('');
@@ -2244,32 +2349,32 @@ function _ctFaseGironi(cat, ci) {
   const oraCatHTML = `
     <div class="card" style="margin-bottom:12px;">
       <div class="card-title">⏰ Orari e Campi per questa Categoria</div>
-      <div style="font-size:12px;color:var(--testo-lt);margin-bottom:10px;">Personalizza orari e campi per questa categoria — sovrascrivono i valori globali del giorno.</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:10px;">Personalizza orari e campi per questa categoria — sovrascrivono i valori globali del giorno.</div>
       ${CT.torneo.giorni.map((g,di)=>`
         <div style="border:1px solid var(--bordo);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${di%2===0?'white':'var(--sfondo)'};">
           <div style="font-size:12px;font-weight:700;color:var(--blu);margin-bottom:8px;">📅 ${g.data?_ctFmtData(g.data):'Giorno '+(di+1)}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:8px;">
-            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Inizio</label>
+            <div><label style="font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;">Inizio</label>
               <input type="time" value="${cat.oraPerGiorno[di]?.oraInizio||'09:00'}"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].oraInizio=this.value"></div>
-            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Pausa pranzo</label>
+            <div><label style="font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;">Pausa pranzo</label>
               <input type="time" value="${cat.oraPerGiorno[di]?.pausaIni||'12:30'}"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausaIni=this.value"></div>
-            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Ripresa</label>
+            <div><label style="font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;">Ripresa</label>
               <input type="time" value="${cat.oraPerGiorno[di]?.pausaFine||'14:00'}"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausaFine=this.value"></div>
-            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">N° Campi</label>
+            <div><label style="font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;">N° Campi</label>
               <input type="number" value="${cat.oraPerGiorno[di]?.campi||2}" min="1" max="10"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].campi=parseInt(this.value)||1"></div>
-            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Durata (min)</label>
+            <div><label style="font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;">Durata (min)</label>
               <input type="number" value="${cat.oraPerGiorno[di]?.durata||CT.torneo.durata||20}" min="5" max="90"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].durata=parseInt(this.value)||20"></div>
-            <div><label style="font-size:10px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;">Pausa (min)</label>
+            <div><label style="font-size:10px;color:var(--text-3);font-weight:700;text-transform:uppercase;">Pausa (min)</label>
               <input type="number" value="${cat.oraPerGiorno[di]?.pausa||CT.torneo.pausa||5}" min="0" max="30"
                 style="width:100%;border:1px solid var(--bordo);border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit;"
                 onchange="CT.categorie[${ci}].oraPerGiorno[${di}].pausa=parseInt(this.value)||5"></div>
@@ -2285,7 +2390,7 @@ function _ctFaseGironi(cat, ci) {
         <button onclick="CT.categorie[${ci}].gironi.push({nome:'Girone '+'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[CT.categorie[${ci}].gironi.length]||'',giorno:0,squadre:[],tipo:'solo',qualificate:2,numFinali:2});renderAdminCreaTorneo()"
           style="margin-left:auto;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">+ Girone</button>
       </div>
-      ${cat.gironi.length===0?`<div style="text-align:center;padding:20px;color:var(--testo-xs);">Clicca <strong>+ Girone</strong> per iniziare</div>`:gironiHTML}
+      ${cat.gironi.length===0?`<div style="text-align:center;padding:20px;color:var(--text-3);">Clicca <strong>+ Girone</strong> per iniziare</div>`:gironiHTML}
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:12px;">
       <button onclick="_ctVaiCalendario(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;">Avanti → Calendario ›</button>
@@ -2438,12 +2543,12 @@ function _ctRenderCalendarioUI(cat, ci, chiave, faseAvanti, faseIndietro) {
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;white-space:nowrap;">
         <div style="display:flex;flex-direction:column;gap:1px;">
           <button onclick="_ctSpostaPartita(${ci},'${chiave}',${i},-1)"
-            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===0?'disabled':''}>▲</button>
+            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--text-2);" ${i===0?'disabled':''}>▲</button>
           <button onclick="_ctSpostaPartita(${ci},'${chiave}',${i},1)"
-            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===lista.length-1?'disabled':''}>▼</button>
+            style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--text-2);" ${i===lista.length-1?'disabled':''}>▼</button>
         </div>
       </td>
-      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--testo-xs);font-weight:700;">${i+1}</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--text-3);font-weight:700;">${i+1}</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);">
         <input value="${p.ora}" style="width:56px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
           onchange="CT.categorie[${ci}]['${chiave}'][${i}].ora=this.value">
@@ -2455,7 +2560,7 @@ function _ctRenderCalendarioUI(cat, ci, chiave, faseAvanti, faseIndietro) {
       </td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:${isFin?'var(--arancio,#ea580c)':'var(--blu)'};font-weight:700;white-space:nowrap;">${p.gironeNome}</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
-      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
+      <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--text-3);font-size:11px;">vs</td>
       <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
     </tr>`).join('');
 
@@ -2531,7 +2636,7 @@ function _ctFaseAccoppiamenti(cat, ci) {
           <tr style="background:var(--sfondo);">
             <th style="padding:8px 10px;border:1px solid var(--bordo);text-align:left;">Posto</th>
             ${gironi.map(g=>`<th style="padding:8px 10px;border:1px solid var(--bordo);text-align:center;color:var(--blu);font-weight:800;">${g.nome}</th>`).join('')}
-            <th style="padding:8px 10px;border:1px solid var(--bordo);text-align:center;font-size:11px;color:var(--testo-xs);">Giorno</th>
+            <th style="padding:8px 10px;border:1px solid var(--bordo);text-align:center;font-size:11px;color:var(--text-3);">Giorno</th>
           </tr>
         </thead>
         <tbody>
@@ -2566,7 +2671,7 @@ function _ctFaseAccoppiamenti(cat, ci) {
   // Squadre extra già qualificate
   const extraHTML = `
     <div style="margin-top:14px;border:1.5px dashed var(--bordo);border-radius:10px;padding:12px;">
-      <div style="font-size:12px;font-weight:700;color:var(--testo-xs);margin-bottom:8px;">🏟️ Squadre già qualificate (entrano direttamente senza qualifiche)</div>
+      <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:8px;">🏟️ Squadre già qualificate (entrano direttamente senza qualifiche)</div>
       ${(cat.squadreExtra||[]).map((sq,si)=>`
         <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
           <input value="${sq.nome}" placeholder="Nome squadra"
@@ -2576,7 +2681,7 @@ function _ctFaseAccoppiamenti(cat, ci) {
             style="width:140px;border:1px solid var(--bordo);border-radius:6px;padding:5px 10px;font-size:12px;font-family:inherit;"
             onchange="CT.categorie[${ci}].squadreExtra[${si}].aGirone=this.value">
           <button onclick="CT.categorie[${ci}].squadreExtra.splice(${si},1);renderAdminCreaTorneo()"
-            style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:4px 8px;cursor:pointer;">✕</button>
+            style="background:var(--red-bg);border:1px solid rgba(220,38,38,0.2);color:var(--red);border-radius:6px;padding:4px 8px;cursor:pointer;">✕</button>
         </div>`).join('')}
       <button onclick="CT.categorie[${ci}].squadreExtra.push({nome:'',aGirone:'ARANCIO'});renderAdminCreaTorneo()"
         style="background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;">
@@ -2654,23 +2759,23 @@ function _ctFaseGironiFinali(cat, ci) {
         <input value="${g.nome}" placeholder="Nome girone finale"
           style="flex:1;border:1.5px solid var(--arancio,#ea580c);border-radius:7px;padding:5px 10px;font-size:13px;font-weight:800;font-family:inherit;background:white;color:var(--arancio,#ea580c);"
           onchange="CT.categorie[${ci}].gironiFinali[${gi}].nome=this.value">
-        <span style="font-size:11px;color:var(--testo-xs);">Gioca il:</span>
+        <span style="font-size:11px;color:var(--text-3);">Gioca il:</span>
         <select style="border:1px solid var(--bordo);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;"
           onchange="CT.categorie[${ci}].gironiFinali[${gi}].giorno=parseInt(this.value)">
           ${CT.torneo.giorni.map((_,di)=>`<option value="${di}" ${(g.giorno??1)===di?'selected':''}>${giornoLabel(di)}</option>`).join('')}
         </select>
       </div>
       <div style="padding:10px 12px;">
-        <div style="font-size:11px;color:var(--testo-xs);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre (placeholder + fisse)</div>
+        <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Squadre (placeholder + fisse)</div>
         ${g.squadre.map((sq,si)=>`
           <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bordo-lt);">
-            <span style="font-size:12px;color:var(--testo-xs);width:20px;text-align:right;">${si+1}.</span>
+            <span style="font-size:12px;color:var(--text-3);width:20px;text-align:right;">${si+1}.</span>
             <input value="${sq.nome}"
               style="flex:1;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-weight:600;font-family:inherit;${sq._placeholder?'background:var(--blu-bg);color:var(--blu);':''}"
               onchange="CT.categorie[${ci}].gironiFinali[${gi}].squadre[${si}].nome=this.value">
             ${sq._placeholder?`<span style="font-size:10px;background:var(--blu-bg);color:var(--blu);padding:2px 6px;border-radius:10px;white-space:nowrap;">placeholder</span>`:''}
             <button onclick="CT.categorie[${ci}].gironiFinali[${gi}].squadre.splice(${si},1);renderAdminCreaTorneo()"
-              style="background:none;border:none;color:var(--testo-xs);cursor:pointer;font-size:14px;">✕</button>
+              style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;">✕</button>
           </div>`).join('')}
         <button onclick="CT.categorie[${ci}].gironiFinali[${gi}].squadre.push({nome:'',prio:'normale',_placeholder:false});renderAdminCreaTorneo()"
           style="margin-top:6px;background:var(--sfondo);border:1.5px dashed var(--bordo);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--blu);cursor:pointer;">+ Squadra fissa</button>
@@ -2689,11 +2794,11 @@ function _ctFaseGironiFinali(cat, ci) {
       <tr style="background:${i%2===0?'white':'var(--sfondo)'};">
         <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;white-space:nowrap;">
           <div style="display:flex;flex-direction:column;gap:1px;">
-            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},-1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===0?'disabled':''}>▲</button>
-            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--testo-lt);" ${i===lista.length-1?'disabled':''}>▼</button>
+            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},-1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--text-2);" ${i===0?'disabled':''}>▲</button>
+            <button onclick="_ctSpostaPartita(${ci},'calendarioFinali',${i},1)" style="background:var(--sfondo);border:1px solid var(--bordo);border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px;line-height:1.2;color:var(--text-2);" ${i===lista.length-1?'disabled':''}>▼</button>
           </div>
         </td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--testo-xs);font-weight:700;">${i+1}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;font-size:11px;color:var(--text-3);font-weight:700;">${i+1}</td>
         <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);">
           <input value="${p.ora}" style="width:56px;border:1px solid var(--bordo);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;font-weight:700;"
             onchange="CT.categorie[${ci}].calendarioFinali[${i}].ora=this.value">
@@ -2704,7 +2809,7 @@ function _ctFaseGironiFinali(cat, ci) {
         </td>
         <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-size:11px;color:var(--arancio,#ea580c);font-weight:700;">${p.gironeNome}</td>
         <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq1}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);font-size:11px;">vs</td>
+        <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--text-3);font-size:11px;">vs</td>
         <td style="padding:4px 6px;border-bottom:1px solid var(--bordo-lt);font-weight:600;font-size:12px;">${p.sq2}</td>
       </tr>`).join('');
     return `<div class="card" style="margin-top:12px;">
@@ -2766,13 +2871,13 @@ function _ctFaseFinali(cat, ci) {
           style="flex:1;border:1.5px solid var(--bordo);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:700;font-family:inherit;"
           onchange="CT.categorie[${ci}].finali[${fi}].nome=this.value">
         <button onclick="CT.categorie[${ci}].finali.splice(${fi},1);renderAdminCreaTorneo()"
-          style="background:var(--rosso-bg);border:1px solid rgba(220,38,38,0.2);color:var(--rosso);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>
+          style="background:var(--red-bg);border:1px solid rgba(220,38,38,0.2);color:var(--red);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;">✕</button>
       </div>
       <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <input value="${f.sq1}" placeholder="es. 1° GIRONE A oppure Vincente SEMIFINALE 01"
           style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
           onchange="CT.categorie[${ci}].finali[${fi}].sq1=this.value">
-        <span style="color:var(--testo-xs);font-size:12px;">vs</span>
+        <span style="color:var(--text-3);font-size:12px;">vs</span>
         <input value="${f.sq2}" placeholder="es. 1° GIRONE B oppure Vincente SEMIFINALE 02"
           style="flex:2;min-width:160px;border:1px solid var(--bordo);border-radius:5px;padding:4px 8px;font-size:12px;font-family:inherit;"
           onchange="CT.categorie[${ci}].finali[${fi}].sq2=this.value">
@@ -2812,11 +2917,11 @@ function _ctFaseFinali(cat, ci) {
           style="background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;color:var(--blu);cursor:pointer;font-family:inherit;">${t.label}</button>`).join('')}
       </div>
       ${finaliHTML}
-      ${!cat.finali.length?`<div style="text-align:center;padding:16px;color:var(--testo-xs);font-size:13px;">Scegli un template o aggiungi round manualmente</div>`:''}
+      ${!cat.finali.length?`<div style="text-align:center;padding:16px;color:var(--text-3);font-size:13px;">Scegli un template o aggiungi round manualmente</div>`:''}
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:12px;">
       <button onclick="CT.subStep.fase='gironifinali';renderAdminCreaTorneo()" class="btn btn-secondary">‹ Gironi Finali</button>
-      <button onclick="_ctCompletaCat(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;background:var(--verde);border-color:var(--verde);">✅ Completa Categoria</button>
+      <button onclick="_ctCompletaCat(${ci})" class="btn btn-p" style="padding:12px 28px;font-size:15px;background:var(--verde);border-color:var(--green);">✅ Completa Categoria</button>
     </div>`;
 }
 
@@ -2868,16 +2973,16 @@ async function _ctHtmlStep4() {
     <div class="card">
       <div class="card-title">✅ Riepilogo</div>
       <div style="background:var(--verde-bg);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="font-size:18px;font-weight:800;color:var(--verde);margin-bottom:6px;">🏆 ${CT.torneo.nome||'—'}</div>
-        <div style="font-size:13px;color:var(--testo-lt);">📍 ${CT.torneo.luogo||'—'} &nbsp;|&nbsp; ⏱️ ${CT.torneo.durata}min &nbsp;|&nbsp; 🏟 ${CT.torneo.campi} campi</div>
-        <div style="font-size:13px;color:var(--testo-lt);margin-top:4px;">📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--green);margin-bottom:6px;">🏆 ${CT.torneo.nome||'—'}</div>
+        <div style="font-size:13px;color:var(--text-2);">📍 ${CT.torneo.luogo||'—'} &nbsp;|&nbsp; ⏱️ ${CT.torneo.durata}min &nbsp;|&nbsp; 🏟 ${CT.torneo.campi} campi</div>
+        <div style="font-size:13px;color:var(--text-2);margin-top:4px;">📅 ${CT.torneo.giorni.map((g,i)=>g.data?_ctFmtData(g.data):'Giorno '+(i+1)).join(' • ')}</div>
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
           ${CT.categorie.map(cat=>`
             <div style="background:white;border-radius:8px;padding:8px 12px;font-size:12px;">
               <strong>${cat.nome}</strong> — ${cat.gironi.length} gironi qualif. + ${cat.gironiFinali.length} gironi finali &nbsp;|&nbsp; ${cat.calendario.length+cat.calendarioFinali.length} partite + ${cat.finali?.length||0} finali knockout
             </div>`).join('')}
         </div>
-        <div style="margin-top:8px;font-size:13px;color:var(--testo-lt);">⚽ ${totPartite} partite &nbsp;|&nbsp; 🏅 ${totFinali} round finali</div>
+        <div style="margin-top:8px;font-size:13px;color:var(--text-2);">⚽ ${totPartite} partite &nbsp;|&nbsp; 🏅 ${totFinali} round finali</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button onclick="ctSalvaDB()" style="background:var(--verde);color:white;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">💾 Salva nel Database</button>
@@ -2898,7 +3003,7 @@ async function _ctHtmlStep4() {
 // ══════════════════════════════════════════════════════════════
 async function ctSalvaDB() {
   const log=document.getElementById('ct-log');
-  if(log)log.innerHTML='<div style="color:var(--testo-lt);font-size:13px;">⏳ Salvataggio...</div>';
+  if(log)log.innerHTML='<div style="color:var(--text-2);font-size:13px;">⏳ Salvataggio...</div>';
   try {
     const torneo = await dbSaveTorneo({nome:CT.torneo.nome, data:CT.torneo.giorni[0]?.data||'', attivo:true});
     STATE.tornei = await dbGetTornei();
@@ -3017,11 +3122,11 @@ async function ctSalvaDB() {
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
     STATE.activeCat = STATE.categorie[0]?.id||null;
     renderCatBar(); renderTorneoBar();
-    if(log)log.innerHTML=`<div style="background:var(--verde-bg);border-radius:8px;padding:12px;color:var(--verde);font-weight:700;">✅ Torneo "${CT.torneo.nome}" creato!</div>`;
+    if(log)log.innerHTML=`<div style="background:var(--verde-bg);border-radius:8px;padding:12px;color:var(--green);font-weight:700;">✅ Torneo "${CT.torneo.nome}" creato!</div>`;
     toast('✅ Torneo creato!');
   } catch(e) {
     console.error(e);
-    if(log)log.innerHTML=`<div style="background:var(--rosso-bg);border-radius:8px;padding:12px;color:var(--rosso);font-size:13px;">❌ ${e.message}</div>`;
+    if(log)log.innerHTML=`<div style="background:var(--red-bg);border-radius:8px;padding:12px;color:var(--red);font-size:13px;">❌ ${e.message}</div>`;
     toast('❌ '+e.message);
   }
 }
@@ -3192,7 +3297,7 @@ async function renderAdminModifica() {
       <button onclick="modShowVeloce()" 
         style="background:white;border:2px solid var(--bordo);border-radius:12px;padding:20px 24px;text-align:left;cursor:pointer;font-family:inherit;">
         <div style="font-size:16px;font-weight:800;margin-bottom:4px;color:var(--testo);">⚡ Modifica Rapida</div>
-        <div style="font-size:13px;color:var(--testo-lt);">Cambia solo orari, campi, sposta squadre — veloce per correzioni minori</div>
+        <div style="font-size:13px;color:var(--text-2);">Cambia solo orari, campi, sposta squadre — veloce per correzioni minori</div>
       </button>
     </div>
     <div id="mod-veloce-content" style="margin-top:16px;"></div>
@@ -3312,7 +3417,7 @@ async function modShowVeloce() {
   const el = document.getElementById('mod-veloce-content');
   if (!el) return;
 
-  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
 
   if (!STATE.activeTorneo) { el.innerHTML = '<div class="empty-state">Seleziona un torneo.</div>'; return; }
   const cat = STATE.activeCat ? STATE.categorie.find(c => c.id === STATE.activeCat) : STATE.categorie[0];
@@ -3331,11 +3436,11 @@ async function modShowVeloce() {
         ⚽ Partite Gironi
       </button>
       <button id="mod-tab-knockout" onclick="modShowTab('knockout')"
-        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bordo);background:white;color:var(--testo-lt);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;">
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bordo);background:white;color:var(--text-2);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;">
         🏆 Fase Finale
       </button>
       <button id="mod-tab-squadre" onclick="modShowTab('squadre')"
-        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bordo);background:white;color:var(--testo-lt);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;">
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bordo);background:white;color:var(--text-2);font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;">
         👕 Sposta Squadre
       </button>
     </div>`;
@@ -3387,7 +3492,7 @@ async function modShowVeloce() {
                     style="width:110px;border:1px solid var(--bordo);border-radius:5px;padding:3px 6px;font-size:11px;font-family:inherit;">
                 </td>
                 <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.home?.nome||'?'}</td>
-                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
+                <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--text-3);">vs</td>
                 <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${p.away?.nome||'?'}</td>
                 <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
                   <button onclick="modSalvaPartita(${p.id},'${g.id}')"
@@ -3436,7 +3541,7 @@ async function modShowVeloce() {
                       style="width:36px;border:1px solid var(--bordo);border-radius:5px;padding:3px 4px;font-size:12px;text-align:center;font-family:inherit;">
                   </td>
                   <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${hm?.nome||(m.note_home||'?')}</td>
-                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--testo-xs);">vs</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);text-align:center;color:var(--text-3);">vs</td>
                   <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);font-weight:600;">${am?.nome||(m.note_away||'?')}</td>
                   <td style="padding:5px 8px;border-bottom:1px solid var(--bordo-lt);">
                     <button onclick="modSalvaKO(${m.id})"
@@ -3572,7 +3677,7 @@ async function modSpostaSquadra() {
   const [sqId, srcGironeId] = sourceVal.split('|').map(v => isNaN(v) ? v : parseInt(v));
   if (srcGironeId === destGironeId) { toast('La squadra è già in questo girone'); return; }
   if (!confirm('Spostare la squadra nel nuovo girone? Le partite del girone originale verranno eliminate e rigenerate.')) return;
-  if (log) log.innerHTML = '<div style="font-size:12px;color:var(--testo-lt);">⏳ Spostamento in corso...</div>';
+  if (log) log.innerHTML = '<div style="font-size:12px;color:var(--text-2);">⏳ Spostamento in corso...</div>';
   try {
     // 1. Rimuovi dal girone originale
     await db.from('girone_squadre').delete().eq('girone_id', srcGironeId).eq('squadra_id', sqId);
@@ -3589,12 +3694,12 @@ async function modSpostaSquadra() {
     if (sqSrc?.length >= 2) await dbGeneraPartite(srcGironeId, sqSrc.map(r => r.squadra_id));
     if (sqDest?.length >= 2) await dbGeneraPartite(destGironeId, sqDest.map(r => r.squadra_id));
     if (typeof _cacheClear === 'function') _cacheClear();
-    if (log) log.innerHTML = '<div style="background:var(--verde-bg);border-radius:8px;padding:8px 12px;color:var(--verde);font-size:12px;font-weight:700;">✅ Squadra spostata! Le partite sono state rigenerate.</div>';
+    if (log) log.innerHTML = '<div style="background:var(--verde-bg);border-radius:8px;padding:8px 12px;color:var(--green);font-size:12px;font-weight:700;">✅ Squadra spostata! Le partite sono state rigenerate.</div>';
     toast('✅ Squadra spostata con successo!');
     // Ricarica la sezione
     setTimeout(() => renderAdminModifica(), 1000);
   } catch(e) {
-    if (log) log.innerHTML = `<div style="color:var(--rosso);font-size:12px;">❌ Errore: ${e.message}</div>`;
+    if (log) log.innerHTML = `<div style="color:var(--red);font-size:12px;">❌ Errore: ${e.message}</div>`;
     toast('❌ ' + e.message);
   }
 }
@@ -3616,7 +3721,7 @@ async function modRinominaSquadra() {
 // ============================================================
 //  SIMULAZIONE & RESET RISULTATI
 // ============================================================
-const _SIM_PWD = '19880204';
+const _SIM_PWD = (typeof CONFIG !== 'undefined' && CONFIG.SIM_PWD) ? CONFIG.SIM_PWD : '19880204';
 let _simUnlocked = false;
 
 function toggleSimulazione() {
@@ -3730,7 +3835,18 @@ async function resetRisultati() {
       for (const g of gironi) {
         await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
       }
+      // Azzera risultati knockout
       await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('categoria_id', catId);
+      // Azzera anche home_id/away_id dei placeholder (risolti dal resolver) — li riscriverà dopo
+      const { data: koList } = await db.from('knockout').select('id,note_home,note_away').eq('categoria_id', catId);
+      for (const ko of (koList||[])) {
+        const upd = {};
+        if (ko.note_home) upd.home_id = null;
+        if (ko.note_away) upd.away_id = null;
+        if (Object.keys(upd).length) await db.from('knockout').update(upd).eq('id', ko.id);
+      }
+      // Invalida cache resolver
+      if (typeof _resolverCache !== 'undefined') delete _resolverCache[catId];
       const gironiIds = gironi.map(g => g.id);
       if (gironiIds.length) {
         const { data: partite } = await db.from('partite').select('id').in('girone_id', gironiIds);
@@ -3750,6 +3866,16 @@ async function resetRisultatiGirone() {
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
     await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false }).eq('categoria_id', STATE.activeCat);
+    // Azzera home_id/away_id dei placeholder nei knockout
+    const { data: koListG } = await db.from('knockout').select('id,note_home,note_away').eq('categoria_id', STATE.activeCat);
+    for (const ko of (koListG||[])) {
+      const upd = {};
+      if (ko.note_home) upd.home_id = null;
+      if (ko.note_away) upd.away_id = null;
+      if (Object.keys(upd).length) await db.from('knockout').update(upd).eq('id', ko.id);
+    }
+    // Invalida cache resolver
+    if (typeof _resolverCache !== 'undefined') delete _resolverCache[STATE.activeCat];
     if (typeof _cacheClear === 'function') _cacheClear();
     _simLog('✅ Reset categoria completato!'); toast('✅ Risultati categoria azzerati!'); await renderCurrentSection();
   } catch(e) { _simLog('❌ ' + e.message); }
@@ -3824,130 +3950,204 @@ function _resolveNomePH(nome) {
   return nome;
 }
 
+// Cache per evitare chiamate ripetute in < 30s
+const _resolverCache = {};
+window._CACHE_TTL_OVERRIDE = 60000; // 60s cache
+
 async function _aggiornaResolver(categoriaId) {
+  if (!categoriaId) return;
+  const now = Date.now();
+  const lastRun = _resolverCache[categoriaId] || 0;
+  if (now - lastRun < 30000) {
+    console.log('[Resolver] Skip — eseguito', Math.round((now-lastRun)/1000), 's fa');
+    return;
+  }
+  _resolverCache[categoriaId] = now;
   try {
-    const gironi = await getGironiWithData(categoriaId);
-    const isPlaceh = s => !s || /^\d+[°\u00ba\u00b0]?\s/.test(s) || /^(miglior|peggior)/i.test(s);
-    const sortFn = (a,b) => b.pts!==a.pts ? b.pts-a.pts : (b.gf-b.gs)!==(a.gf-a.gs) ? (b.gf-b.gs)-(a.gf-a.gs) : b.gf-a.gf;
-    const clG = {};
-    const clSp = {};
+    // SOLUZIONE SEMPLICE: legge tutte le partite con join squadre direttamente dal DB
+    const { data: gironiDB } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
+    if (!gironiDB?.length) return;
 
-    // Funzione resolver (usa clG e clSp correnti)
-    const resolveSq = (nome) => {
-      if (!nome) return null;
-      const s = String(nome).trim();
-      // Formato "N° Girone X"
-      let m = s.match(/^(\d+)[°\u00ba\u00b0]?\s+Girone\s+([A-Z0-9]+)$/i);
-      if (m) {
-        const cl = clG['GIRONE ' + m[2].toUpperCase()];
-        return cl?.[parseInt(m[1])-1]?.sq || null;
-      }
-      // Formato "N° NOME" generico
-      m = s.match(/^(\d+)[°\u00ba\u00b0]?\s+(.+)$/i);
-      if (m) {
-        const pos = parseInt(m[1]) - 1;
-        const key = m[2].trim().toUpperCase();
-        const keyNorm = key.replace(/-/g,'');
-        if (clG[key]?.[pos]?.sq) return clG[key][pos].sq;
-        for (const [k, lista] of Object.entries(clSp)) {
-          if (k.replace(/-/g,'') === keyNorm || keyNorm.includes(k.replace('CLASSIFICA MIGLIORI ','').replace(/-/g,''))) {
-            return lista?.[pos]?.sq || null;
-          }
-        }
-        return null;
-      }
-      // Formato "Miglior seconda/terza 123/456/4-5-6"
-      m = s.match(/^Miglior[ei]?\s+(second|terz|quart)[ao]\s*([\d\-]+)?$/i);
-      if (m) {
-        const tipo = m[1].toLowerCase();
-        const gruppo = (m[2]||'').replace(/-/g,'');
-        let key = tipo==='second' ? 'CLASSIFICA MIGLIORI SECONDE' :
-                  tipo==='terz'   ? 'CLASSIFICA MIGLIORI TERZE' :
-                                    'CLASSIFICA MIGLIORI QUARTE';
-        if (gruppo==='123') key += ' 123';
-        else if (gruppo==='456') key += ' 456';
-        return clSp[key]?.[0]?.sq || null;
-      }
-      return null;
-    };
+    const gironeIds = gironiDB.map(g => g.id);
 
-    // Funzione per processare un girone con risoluzione placeholder
-    const processGirone = (g) => {
+    // Carica TUTTE le partite con join squadre in una sola query
+    const { data: tuttePartite } = await db.from('partite')
+      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
+      .in('girone_id', gironeIds);
+
+    if (!tuttePartite?.length) return;
+
+    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n);
+    const sortFn = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
+    const clG = {}, clSp = {};
+
+    // ── PASSO 1: calcola classifiche Gironi A-L dai join delle partite ──
+    for (const g of gironiDB) {
+      const nome = g.nome.toUpperCase().trim();
+      if (!/^GIRONE\s+[A-LI]$/.test(nome)) continue;
+
+      const pGirone = (tuttePartite || []).filter(p => p.girone_id === g.id);
       const sqMap = {};
-      for (const p of g.partite) {
-        const hSq = (p.home && !isPlaceh(p.home.nome)) ? p.home : resolveSq(p.home?.nome);
-        const aSq = (p.away && !isPlaceh(p.away.nome)) ? p.away : resolveSq(p.away?.nome);
-        if (hSq?.id) sqMap[hSq.id] = hSq;
-        if (aSq?.id) sqMap[aSq.id] = aSq;
-      }
-      const sq = Object.values(sqMap);
-      if (sq.length < 2) return null;
-      const partiteRisolte = g.partite.map(p => ({
-        home_id: ((p.home && !isPlaceh(p.home.nome)) ? p.home : resolveSq(p.home?.nome))?.id,
-        away_id: ((p.away && !isPlaceh(p.away.nome)) ? p.away : resolveSq(p.away?.nome))?.id,
-        gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata
-      }));
-      return calcGironeClassifica({squadre: sq, partite: partiteRisolte});
-    };
-
-    const makeSpeciale = (chiavi, pos) => {
-      const lista = [];
-      chiavi.forEach(k => { const cl=clG[k.toUpperCase()]; if(cl?.[pos]?.g>0) lista.push(cl[pos]); });
-      lista.sort(sortFn);
-      return lista;
-    };
-
-    const isClassif = g => { const n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori'); };
-
-    // PASSO 1: Gironi A-L (squadre reali)
-    for (const g of gironi) {
-      if (isClassif(g)) continue;
-      const sqMap = {};
-      for (const p of g.partite) {
+      for (const p of pGirone) {
         if (p.home?.id && !isPlaceh(p.home.nome)) sqMap[p.home.id] = p.home;
         if (p.away?.id && !isPlaceh(p.away.nome)) sqMap[p.away.id] = p.away;
       }
       const sq = Object.values(sqMap);
       if (sq.length < 2) continue;
-      const cl = calcGironeClassifica({squadre: sq, partite: g.partite});
-      if (cl.length) clG[g.nome.toUpperCase().trim()] = cl;
+      const cl = calcGironeClassifica({ squadre: sq, partite: pGirone });
+      if (cl.length) clG[nome] = cl;
     }
 
-    // PASSO 2: Classifiche speciali da A-L
-    const keysAL = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
-    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpeciale(keysAL, 1);
-    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpeciale(keysAL, 2);
-    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpeciale(keysAL, 3);
+    // ── PASSO 2: Migliori Seconde/Terze/Quarte da A-L ──
+    const keysAL = Object.keys(clG).filter(k => /^GIRONE [A-LI]$/.test(k));
+    const makeSpec = (chiavi, pos) => {
+      const lista = [];
+      chiavi.forEach(k => { if (clG[k]?.[pos]) lista.push(clG[k][pos]); });
+      return lista.sort(sortFn);
+    };
+    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysAL, 1);
+    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
 
-    // PASSO 3: Gironi 1-10 (usano placeholder dai gironi A-L e dalle classifiche speciali)
-    for (const g of gironi) {
-      if (isClassif(g)) continue;
-      const key = g.nome.toUpperCase().trim();
-      if (clG[key]?.length >= 4) continue;
-      if (!/GIRONE\s+\d+$/i.test(g.nome)) continue; // solo gironi numerati
-      const cl = processGirone(g);
-      if (cl?.length) clG[key] = cl;
+    // ── PASSO 3: risolve placeholder per Gironi 1-10 ──
+    const ORD = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
+    const risolviSq = (nome) => {
+      if (!nome) return null;
+      const s = nome.trim();
+      // "PRIMA GIRONE A", "QUARTA GIRONE 1"
+      const m1 = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
+      if (m1) { const pos=ORD[m1[1].toLowerCase()]??0; return clG['GIRONE '+m1[2].toUpperCase()]?.[pos]?.sq||null; }
+      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123" ecc.
+      const m2 = s.match(/^((?:prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+)?miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
+      if (m2) {
+        const pos = ORD[(m2[1]||'').trim().toLowerCase()] ?? 0;
+        const tipo = m2[2].toLowerCase();
+        const grp = (m2[3]||'').replace(/-/g,'');
+        let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        if (grp) k += ' '+grp;
+        return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
+      }
+      // "N° Girone X"
+      const m3 = s.match(/^(\d+)[°º]\s+(.+)$/i);
+      if (m3) { const pos=parseInt(m3[1])-1; return clG['GIRONE '+m3[2].trim().toUpperCase()]?.[pos]?.sq||null; }
+      return null;
+    };
+
+    for (const g of gironiDB) {
+      const nome = g.nome.toUpperCase().trim();
+      if (!/^GIRONE\s+\d+$/.test(nome)) continue;
+      const pGirone = (tuttePartite||[]).filter(p => p.girone_id === g.id);
+      const sqMap = {};
+      for (const p of pGirone) {
+        const hSq = (!p.home||isPlaceh(p.home.nome)) ? risolviSq(p.home?.nome) : p.home;
+        const aSq = (!p.away||isPlaceh(p.away.nome)) ? risolviSq(p.away?.nome) : p.away;
+        if (hSq?.id) sqMap[hSq.id] = hSq;
+        if (aSq?.id) sqMap[aSq.id] = aSq;
+      }
+      const sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      const pRis = pGirone.map(p => ({
+        ...p,
+        home_id: ((!p.home||isPlaceh(p.home.nome))?risolviSq(p.home?.nome):p.home)?.id,
+        away_id: ((!p.away||isPlaceh(p.away.nome))?risolviSq(p.away?.nome):p.away)?.id,
+      }));
+      const cl = calcGironeClassifica({ squadre: sq, partite: pRis });
+      if (cl.length) clG[nome] = cl;
     }
 
-    // PASSO 4: Classifiche speciali 123 e 456
-    clSp['CLASSIFICA MIGLIORI SECONDE 123'] = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 1);
-    clSp['CLASSIFICA MIGLIORI TERZE 123']   = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 2);
-    clSp['CLASSIFICA MIGLIORI SECONDE 456'] = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 1);
-    clSp['CLASSIFICA MIGLIORI TERZE 456']   = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 2);
+    // ── PASSO 4: Migliori Seconde/Terze/Quarte da 1-3, 4-6, 7-9 ──
+    [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]]].forEach(([suf,nums]) => {
+      const chiavi = nums.map(n => 'GIRONE '+n);
+      ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
+        const lista = makeSpec(chiavi, ti+1);
+        if (lista.length) {
+          clSp['CLASSIFICA MIGLIORI '+t+' '+suf] = lista;
+          clSp['CLASSIFICA MIGLIORI '+t+' '+suf.split('').join('-')] = lista;
+        }
+      });
+    });
 
-    // PASSO 5: Gironi Champions/Europa (usano tutti i placeholder precedenti)
-    for (const g of gironi) {
-      if (isClassif(g)) continue;
-      const key = g.nome.toUpperCase().trim();
-      if (clG[key]?.length >= 3) continue;
-      if (/GIRONE\s+\d+$/i.test(g.nome)) continue; // già processati
-      const cl = processGirone(g);
-      if (cl?.length) clG[key] = cl;
+    // ── PASSO 5: Gironi Champions/Europa ──
+    for (const g of gironiDB) {
+      const nome = g.nome.toUpperCase().trim();
+      if (/^GIRONE\s+[A-LI]$/.test(nome)) continue;
+      if (/^GIRONE\s+\d+$/.test(nome)) continue;
+      if (clG[nome]?.length >= 2) continue;
+      const pGirone = (tuttePartite||[]).filter(p => p.girone_id === g.id);
+      const sqMap = {};
+      for (const p of pGirone) {
+        const hSq = (!p.home||isPlaceh(p.home.nome)) ? risolviSq(p.home?.nome) : p.home;
+        const aSq = (!p.away||isPlaceh(p.away.nome)) ? risolviSq(p.away?.nome) : p.away;
+        if (hSq?.id) sqMap[hSq.id] = hSq;
+        if (aSq?.id) sqMap[aSq.id] = aSq;
+      }
+      const sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      const pRis = pGirone.map(p => ({
+        ...p,
+        home_id: ((!p.home||isPlaceh(p.home.nome))?risolviSq(p.home?.nome):p.home)?.id,
+        away_id: ((!p.away||isPlaceh(p.away.nome))?risolviSq(p.away?.nome):p.away)?.id,
+      }));
+      const cl = calcGironeClassifica({ squadre: sq, partite: pRis });
+      if (cl.length) clG[nome] = cl;
     }
 
-    _clGlobale = clG;
-    _clSpecGlobale = clSp;
-    window._resolveNome = (nome) => { const sq = resolveSq(nome); return sq ? sq.nome : nome; };
+    window._clGlobale = clG;
+    window._clSpecGlobale = clSp;
+    window._resolveNome = (nome) => {
+      const sq = risolviSq(nome);
+      return sq ? sq.nome : nome;
+    };
+
+    // ── SCRIVI NEL DB: aggiorna home_id/away_id per partite con placeholder ──
+    let risolti = 0;
+    // Mappa squadraId → sqReale per aggiornare i nomi placeholder nel DB
+    const sqNomiDaAggiornare = {}; // {placeholder_id: squadra_reale}
+
+    for (const p of (tuttePartite||[])) {
+      const hIsPlaceh = p.home?.nome && isPlaceh(p.home.nome);
+      const aIsPlaceh = p.away?.nome && isPlaceh(p.away.nome);
+      if (!hIsPlaceh && !aIsPlaceh) continue;
+
+      const hSq = hIsPlaceh ? risolviSq(p.home.nome) : null;
+      const aSq = aIsPlaceh ? risolviSq(p.away.nome) : null;
+
+      const upd = {};
+      if (hSq?.id && hSq.id !== p.home_id) { upd.home_id = hSq.id; }
+      if (aSq?.id && aSq.id !== p.away_id) { upd.away_id = aSq.id; }
+
+      // Traccia anche i nomi da aggiornare nelle squadre
+      if (hIsPlaceh && hSq?.id && p.home_id) sqNomiDaAggiornare[p.home_id] = hSq;
+      if (aIsPlaceh && aSq?.id && p.away_id) sqNomiDaAggiornare[p.away_id] = aSq;
+
+      if (Object.keys(upd).length) {
+        await db.from('partite').update(upd).eq('id', p.id);
+        risolti++;
+      }
+    }
+
+    // Aggiorna girone_squadre: sostituisce placeholder con squadre reali
+    const { data: gironiSquadre } = await db.from('girone_squadre')
+      .select('id,girone_id,squadra_id,squadre(id,nome)')
+      .in('girone_id', gironiDB.map(g=>g.id));
+
+    for (const gs of (gironiSquadre||[])) {
+      if (!gs.squadre?.nome || !isPlaceh(gs.squadre.nome)) continue;
+      const sqReale = risolviSq(gs.squadre.nome);
+      if (sqReale?.id && sqReale.id !== gs.squadra_id) {
+        // Evita duplicati nel girone
+        const giaPresente = (gironiSquadre||[]).some(x => x.girone_id===gs.girone_id && x.squadra_id===sqReale.id && x.id!==gs.id);
+        if (!giaPresente) {
+          await db.from('girone_squadre').update({squadra_id: sqReale.id}).eq('id', gs.id);
+          risolti++;
+        }
+      }
+    }
+
+    if (risolti > 0) {
+      _mostraNotificaTriangolari();
+      if (typeof _cacheClear === 'function') _cacheClear();
+    }
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
