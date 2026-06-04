@@ -155,11 +155,16 @@ async function loadTorneo() {
     STATE.activeCat = catSalvata.id;
     preloadCategoria(catSalvata.id);
   } else if (STATE.categorie.length > 1 && !STATE.activeCat) {
-    STATE.activeCat = null;
-    renderTorneoBar();
-    document.getElementById('cat-bar').style.display = 'none';
-    mostraSelezioneCat();
-    return;
+    // Se admin: auto-seleziona prima categoria per poter inserire risultati
+    if (STATE.isAdmin) {
+      STATE.activeCat = STATE.categorie[0].id;
+    } else {
+      STATE.activeCat = null;
+      renderTorneoBar();
+      document.getElementById('cat-bar').style.display = 'none';
+      mostraSelezioneCat();
+      return;
+    }
   } else {
     STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   }
@@ -2015,6 +2020,8 @@ function enterAdmin(user) {
     _mostraNavArbitro(); STATE.currentSection='a-risultati';
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
     document.getElementById('sec-a-risultati').classList.add('active');
+    // Auto-seleziona categoria se non selezionata
+    if (!STATE.activeCat && STATE.categorie.length) STATE.activeCat = STATE.categorie[0].id;
     document.getElementById('cat-bar').style.display=''; renderCatBar(); renderAdminRisultati();
   } else {
     document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
@@ -4379,4 +4386,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
