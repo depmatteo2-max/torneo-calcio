@@ -698,10 +698,17 @@ async function verificaEGeneraTriangolari(categoriaId) {
     const risultatiKnockout = {};
     for (const ko of (allKo||[])) {
       const rn = (ko.round_name||'').toUpperCase().trim();
-      const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
+      // Indicizza con chiave esatta e con numero paddato
+      risultatiKnockout[rn] = ko;
+      const rnPad = rn.replace(/(\d+)$/, m => m.padStart(2,'0'));
+      risultatiKnockout[rnPad] = ko;
+      // Vecchi formati specifici
+      const mSem = rn.match(/SEMIFINALE\s*(\d+)$/i);
       if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2,'0')] = ko;
-      const mQ = rn.match(/QUARTO\s*(\d+)/i);
-      if (mQ) risultatiKnockout['QUARTO ' + mQ[1].padStart(2,'0')] = ko;
+      const mQ = rn.match(/QUARTO\s+DI\s+FINALE\s*(\d+)$/i);
+      if (mQ) risultatiKnockout['QUARTO DI FINALE ' + mQ[1].padStart(2,'0')] = ko;
+      const mG = rn.match(/^GARA\s*(\d+)$/i);
+      if (mG) risultatiKnockout['GARA ' + mG[1].padStart(2,'0')] = ko;
     }
 
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
@@ -786,13 +793,15 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   if (!placeholder) return null;
   const s = placeholder.trim();
 
-  // Vincente/Perdente SEMIFINALE/QUARTO/FINALE
-  const mVP = s.match(/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|FINALE)\s*(\d+)/i);
+  // Vincente/Perdente SEMIFINALE / QUARTO DI FINALE / GARA / SEMIFINALE 1/4 A
+  const mVP = s.match(/^(Vincente|Perdente)\s+(.+)$/i);
   if (mVP) {
     const tipo = mVP[1].toLowerCase();
-    const round = mVP[2].toUpperCase();
-    const num = mVP[3].padStart(2,'0');
-    const match = risultatiKnockout[round + ' ' + num];
+    const roundRaw = mVP[2].trim().toUpperCase();
+    // Prova corrispondenza esatta o con numero paddato
+    const chiaveExact = roundRaw;
+    const chiavePad = roundRaw.replace(/(\d+)$/, m => m.padStart(2,'0'));
+    const match = risultatiKnockout[chiaveExact] || risultatiKnockout[chiavePad];
     if (!match?.giocata) return null;
     const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
     const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
@@ -4028,10 +4037,25 @@ async function _aggiornaResolver(categoriaId) {
     const risolviSq = (nome) => {
       if (!nome) return null;
       const s = nome.trim();
+
       // "PRIMA GIRONE A", "QUARTA GIRONE 1"
       const m1 = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
       if (m1) { const pos=ORD[m1[1].toLowerCase()]??0; return clG['GIRONE '+m1[2].toUpperCase()]?.[pos]?.sq||null; }
-      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123" ecc.
+
+      // "N° Girone X" — es. "1° Girone A", "4° Girone I"
+      const m3 = s.match(/^(\d+)[°º]\s+(Girone\s+.+)$/i);
+      if (m3) { const pos=parseInt(m3[1])-1; return clG[m3[2].trim().toUpperCase()]?.[pos]?.sq||null; }
+
+      // "N° MIGLIOR SECONDA/TERZA/QUARTA" — es. "3° MIGLIOR SECONDA", "MIGLIOR TERZA"
+      const m4 = s.match(/^(?:(\d+)[°º]\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+      if (m4) {
+        const pos = m4[1] ? parseInt(m4[1])-1 : 0;
+        const tipo = m4[2].toLowerCase();
+        const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        return (clSp[k]||[])[pos]?.sq||null;
+      }
+
+      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123" ecc. (vecchio formato)
       const m2 = s.match(/^((?:prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+)?miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
       if (m2) {
         const pos = ORD[(m2[1]||'').trim().toLowerCase()] ?? 0;
@@ -4041,9 +4065,9 @@ async function _aggiornaResolver(categoriaId) {
         if (grp) k += ' '+grp;
         return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
       }
-      // "N° Girone X"
-      const m3 = s.match(/^(\d+)[°º]\s+(.+)$/i);
-      if (m3) { const pos=parseInt(m3[1])-1; return clG['GIRONE '+m3[2].trim().toUpperCase()]?.[pos]?.sq||null; }
+
+      // Vincente/Perdente QUARTO DI FINALE / SEMIFINALE / GARA — risolti da risultatiKnockout
+      // (gestiti separatamente nel loop knockout)
       return null;
     };
 
@@ -4165,4 +4189,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
