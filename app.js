@@ -691,6 +691,41 @@ async function verificaEGeneraTriangolari(categoriaId) {
       }
     }
 
+    // ── PASSO 2b: costruisci clSp — migliori seconde/terze/quarte da tutti i gironi A-L ──
+    const clSp = {};
+    const sortFnSp = (a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      const dA = a.gf - a.gs, dB = b.gf - b.gs;
+      if (dB !== dA) return dB - dA;
+      return b.gf - a.gf;
+    };
+    const keysALsp = Object.keys(classificheGironi).filter(k => /^GIRONE\s+[A-LI]$/i.test(k));
+    const makeSpecSp = (chiavi, pos) => {
+      const lista = [];
+      chiavi.forEach(k => { if (classificheGironi[k]?.[pos]) lista.push(classificheGironi[k][pos]); });
+      return lista.sort(sortFnSp);
+    };
+    if (keysALsp.length) {
+      clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpecSp(keysALsp, 1);
+      clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpecSp(keysALsp, 2);
+      clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpecSp(keysALsp, 3);
+    }
+    // Aggiunge anche classifiche dai gironi 1-9 se presenti
+    const keysNums = Object.keys(classificheGironi).filter(k => /^GIRONE\s+\d+$/i.test(k));
+    if (keysNums.length) {
+      [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]]].forEach(([suf,nums]) => {
+        const chiavi = nums.map(n => 'GIRONE '+n).filter(k => classificheGironi[k]);
+        if (!chiavi.length) return;
+        ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
+          const lista = makeSpecSp(chiavi, ti+1);
+          if (lista.length) {
+            clSp['CLASSIFICA MIGLIORI '+t+' '+suf] = lista;
+            clSp['CLASSIFICA MIGLIORI '+t+' '+suf.split('').join('-')] = lista;
+          }
+        });
+      });
+    }
+
     // ── PASSO 3: leggi risultati knockout ──
     const { data: allKo } = await db.from('knockout')
       .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
@@ -4207,6 +4242,74 @@ async function _aggiornaResolver(categoriaId) {
       }
     }
 
+    // ── AGGIORNA KNOCKOUT: risolve N° MIGLIOR SECONDA/TERZA ecc. ──
+    const { data: allKoUpdate } = await db.from('knockout')
+      .select('id,note_home,note_away,home_id,away_id,round_name,gol_home,gol_away,giocata')
+      .eq('categoria_id', categoriaId);
+
+    // Indice knockout per round_name (per Vincente/Perdente)
+    const koByRound = {};
+    for (const ko of (allKoUpdate||[])) {
+      if (!ko.round_name) continue;
+      const rn = ko.round_name.trim().toUpperCase();
+      koByRound[rn] = ko;
+      koByRound[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+    }
+
+    // Funzione risolvi placeholder per knockout (usa clG, clSp, koByRound)
+    const risolviKO = (ph) => {
+      if (!ph) return null;
+      const s = ph.trim();
+
+      // Vincente/Perdente QUALCOSA
+      const mVP = s.match(/^(Vincente|Perdente)\s+(.+)$/i);
+      if (mVP) {
+        const tipo = mVP[1].toLowerCase();
+        const rn = mVP[2].trim().toUpperCase();
+        const ko = koByRound[rn] || koByRound[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))];
+        if (!ko?.giocata) return null;
+        const vince = ko.gol_home >= ko.gol_away ? ko.home_id : ko.away_id;
+        const perde = ko.gol_home <= ko.gol_away ? ko.home_id : ko.away_id;
+        return tipo === 'vincente' ? vince : perde;
+      }
+
+      // N° Girone X
+      const mGir = s.match(/^(\d+)[°º]\s+Girone\s+(.+)$/i);
+      if (mGir) {
+        const pos = parseInt(mGir[1]) - 1;
+        const k = 'GIRONE ' + mGir[2].trim().toUpperCase();
+        return clG[k]?.[pos]?.sq?.id || null;
+      }
+
+      // N° MIGLIOR SECONDA/TERZA/QUARTA oppure solo MIGLIOR SECONDA
+      const mMig = s.match(/^(?:(\d+)[°º]\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+      if (mMig) {
+        const pos = mMig[1] ? parseInt(mMig[1]) - 1 : 0;
+        const tipo = mMig[2].toLowerCase();
+        const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        return clSp[k]?.[pos]?.sq?.id || null;
+      }
+
+      // Prova risolviSq
+      return risolviSq(s)?.id || null;
+    };
+
+    for (const ko of (allKoUpdate||[])) {
+      const upd = {};
+      if (ko.note_home) {
+        const sqId = risolviKO(ko.note_home);
+        if (sqId && sqId !== ko.home_id) upd.home_id = sqId;
+      }
+      if (ko.note_away) {
+        const sqId = risolviKO(ko.note_away);
+        if (sqId && sqId !== ko.away_id) upd.away_id = sqId;
+      }
+      if (Object.keys(upd).length) {
+        await db.from('knockout').update(upd).eq('id', ko.id);
+        risolti++;
+      }
+    }
+
     if (risolti > 0) {
       _mostraNotificaTriangolari();
       if (typeof _cacheClear === 'function') _cacheClear();
@@ -4214,4 +4317,3 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
-
