@@ -46,6 +46,10 @@ async function init() {
     // Carica dati e renderizza
     await loadTorneo();
     tryAutoLogin();
+    // Precarica tutte le categorie in background
+    if (STATE.activeTorneo && typeof preloadTutteLCategorie === 'function') {
+      setTimeout(() => preloadTutteLCategorie(STATE.activeTorneo), 500);
+    }
 
     // Realtime in background — non blocca l'avvio
     setTimeout(() => {
@@ -115,7 +119,19 @@ function _clearSavedCat() { try { localStorage.removeItem('spe_cat'); } catch(e)
 async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   _saveSavedTorneo(STATE.activeTorneo);
-  STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+  // Cache categorie in sessionStorage per caricamento istantaneo
+  const _cacheKey = 'mclion_cats_' + STATE.activeTorneo;
+  try {
+    const _cached = sessionStorage.getItem(_cacheKey);
+    if (_cached) {
+      STATE.categorie = JSON.parse(_cached);
+    } else {
+      STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+      sessionStorage.setItem(_cacheKey, JSON.stringify(STATE.categorie));
+    }
+  } catch(e) {
+    STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+  }
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
 
@@ -510,8 +526,15 @@ async function selectGiornata(g) { STATE.activeGiornata = g; _renderGiornataBar(
 async function _caricaGiornate() {
   if (!STATE.activeCat) return;
   try {
+    // Cache giornate in memoria per 5 minuti
+    const _gCacheKey = 'giornate_' + STATE.activeCat;
+    if (window._giornateCache?.[_gCacheKey] && Date.now() - window._giornateCache[_gCacheKey].ts < 300000) {
+      STATE._giornateDisponibili = window._giornateCache[_gCacheKey].data;
+      const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
+      STATE.activeGiornata = oggi || 'tutte';
+      return;
+    }
     const dateSet = new Set();
-    // UNA SOLA query invece di N query sequenziali
     const gironi = await dbGetGironi(STATE.activeCat);
     const gironiIds = gironi.map(g => g.id);
     if (gironiIds.length) {
@@ -527,6 +550,8 @@ async function _caricaGiornate() {
       return (meseEntry ? meseEntry[1] : 0) * 100 + giorno;
     };
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
+    if (!window._giornateCache) window._giornateCache = {};
+    window._giornateCache['giornate_' + STATE.activeCat] = { data: STATE._giornateDisponibili, ts: Date.now() };
     const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
     STATE.activeGiornata = oggi || 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
@@ -969,8 +994,10 @@ async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   if (!el.innerHTML.trim()) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳</div>';
-  await _aggiornaResolver(STATE.activeCat);
+  // Carica gironi prima, poi risolvi in background
   var gironi = await getGironiWithData(STATE.activeCat);
+  if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
+  _aggiornaResolver(STATE.activeCat); // in background
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
@@ -1519,6 +1546,8 @@ async function _importaRiga(idx) {
       if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background = 'var(--verde)'; }
     }
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    // Invalida cache
+    try { sessionStorage.removeItem('mclion_cats_' + STATE.activeTorneo); } catch(e2) {}
     renderCatBar();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = `✓ Importa "${nomeScritto||'categoria'}"`; }
@@ -4346,3 +4375,4 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
+

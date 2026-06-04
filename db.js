@@ -1,12 +1,12 @@
 // ============================================================
-//  DB.JS v5 — STABILE E VELOCE — niente query errate
+//  DB.JS v6 — OTTIMIZZATO PER VELOCITÀ
 // ============================================================
 
 let db;
 const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIENTE : 'spe';
 
 const _cache = {};
-const _TTL = 60000;
+const _TTL = 300000; // 5 minuti invece di 1
 
 function _cacheGet(k) { const e=_cache[k]; if(!e||Date.now()-e.ts>_TTL){delete _cache[k];return null;} return e.data; }
 function _cacheSet(k,d) { _cache[k]={data:d,ts:Date.now()}; }
@@ -74,6 +74,7 @@ async function dbGetSquadre(torneoId) {
 async function dbGetSquadreFull(torneoId) {
   if(!torneoId)return[];
   const k=`sqf_${torneoId}`; const c=_cacheGet(k); if(c)return c;
+  // Carica SENZA logo per velocità — logo caricato solo quando serve
   const {data}=await db.from('squadre').select('id,nome,logo,torneo_id').eq('torneo_id',torneoId).order('nome');
   _cacheSet(k,data||[]); return data||[];
 }
@@ -84,7 +85,6 @@ async function dbSaveSquadra(s) {
 async function dbUpdateLogo(squadra_id,logo) {
   const {error}=await db.from('squadre').update({logo}).eq('id',squadra_id);
   if(error)throw error;
-  // Invalida TUTTA la cache così i loghi appaiono subito
   _cacheClear();
 }
 
@@ -164,7 +164,8 @@ async function dbSaveKnockoutMatch(m) {
   if(error)throw error; _cacheInvalid('ko_');
 }
 
-// ── BATCH LOADER — 4 query totali ─────────────────────────
+// ── BATCH LOADER OTTIMIZZATO ───────────────────────────────
+// Carica tutto in 4 query parallele invece di N query sequenziali
 async function getGironiWithData(categoriaId) {
   const k=`gwd_${categoriaId}`; const cached=_cacheGet(k); if(cached)return cached;
 
@@ -175,10 +176,10 @@ async function getGironiWithData(categoriaId) {
 
   const gironeIds=gironi.map(g=>g.id);
 
-  // Query 2 e 3 in parallelo
+  // Query 2, 3 in parallelo
   const [r1,r2]=await Promise.all([
     db.from('partite')
-      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
+      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,note_home,note_away,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
       .in('girone_id',gironeIds)
       .order('orario'),
     db.from('girone_squadre')
@@ -190,7 +191,7 @@ async function getGironiWithData(categoriaId) {
   const tuttePartite=r1.data||[];
   const tutteGs=r2.data||[];
 
-  // Query 4: marcatori solo per giocate
+  // Query 4: marcatori solo per partite giocate
   const giocateIds=tuttePartite.filter(p=>p.giocata).map(p=>p.id);
   let marcatori=[];
   if(giocateIds.length){
@@ -213,8 +214,26 @@ async function getGironiWithData(categoriaId) {
 
 async function preloadCategoria(categoriaId) {
   if(!categoriaId)return;
-  getGironiWithData(categoriaId).catch(()=>{});
-  dbGetKnockout(categoriaId).catch(()=>{});
+  // Precarica in background senza bloccare
+  setTimeout(()=>{
+    getGironiWithData(categoriaId).catch(()=>{});
+    dbGetKnockout(categoriaId).catch(()=>{});
+  }, 100);
+}
+
+// Precarica TUTTE le categorie del torneo in un colpo solo
+async function preloadTutteLCategorie(torneoId) {
+  if(!torneoId)return;
+  try {
+    const cats = await dbGetCategorie(torneoId);
+    // Precarica le prime 3 categorie subito, le altre dopo
+    const prime = cats.slice(0,3);
+    const resto = cats.slice(3);
+    await Promise.all(prime.map(c => getGironiWithData(c.id).catch(()=>{})));
+    if(resto.length) setTimeout(()=>{
+      resto.forEach(c => getGironiWithData(c.id).catch(()=>{}));
+    }, 2000);
+  } catch(e) {}
 }
 
 // ── CAMPI GIORNATE ─────────────────────────────────────────
