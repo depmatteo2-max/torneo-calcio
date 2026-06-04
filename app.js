@@ -147,7 +147,8 @@ async function loadTorneo() {
   } else {
     STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   }
-  if (STATE.activeCat) await _caricaGiornate();
+  // _caricaGiornate in background — non blocca il render iniziale
+  if (STATE.activeCat) _caricaGiornate().then(() => _renderGiornataBar());
   renderTorneoBar(); renderCatBar(); await renderCurrentSection();
 }
 
@@ -261,7 +262,7 @@ async function selezionaCategoriaPublic(catId) {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   preloadCategoria(catId);
-  await _caricaGiornate();
+  _caricaGiornate(); // non await — non blocca
   renderTorneoBar();
   renderCatBar();
   document.getElementById('pub-nav').style.display = 'flex';
@@ -510,9 +511,12 @@ async function _caricaGiornate() {
   if (!STATE.activeCat) return;
   try {
     const dateSet = new Set();
+    // UNA SOLA query invece di N query sequenziali
     const gironi = await dbGetGironi(STATE.activeCat);
-    for (const g of gironi) {
-      const { data: partite } = await db.from('partite').select('giorno').eq('girone_id', g.id).not('giorno', 'is', null);
+    const gironiIds = gironi.map(g => g.id);
+    if (gironiIds.length) {
+      const { data: partite } = await db.from('partite')
+        .select('giorno').in('girone_id', gironiIds).not('giorno', 'is', null);
       (partite || []).forEach(p => { if (p.giorno) dateSet.add(p.giorno); });
     }
     const mesi = {'gennaio':1,'febbraio':2,'marzo':3,'aprile':4,'maggio':5,'giugno':6,'luglio':7,'agosto':8,'settembre':9,'ottobre':10,'novembre':11,'dicembre':12};
@@ -4342,3 +4346,4 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
+
