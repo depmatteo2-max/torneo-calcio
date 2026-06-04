@@ -278,7 +278,9 @@ async function selezionaCategoriaPublic(catId) {
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
   preloadCategoria(catId);
-  _caricaGiornate(); // non await — non blocca
+  _caricaGiornate();
+  // Precarica loghi in background
+  if (typeof preloadLoghiCategoria === 'function') setTimeout(() => preloadLoghiCategoria(catId), 1000);
   renderTorneoBar();
   renderCatBar();
   document.getElementById('pub-nav').style.display = 'flex';
@@ -560,7 +562,9 @@ async function _caricaGiornate() {
 function logoHTML(sq, size = 'md') {
   const cls = size === 'sm' ? 'team-logo-sm' : 'team-logo';
   const avcls = size === 'sm' ? 'team-avatar-sm' : 'team-avatar';
-  if (sq && sq.logo) return `<img src="${sq.logo}" class="${cls}" alt="${sq.nome}">`;
+  // Usa logo dalla cache separata se non è nella squadra
+  const logo = sq?.logo || (sq?.id && typeof _logoCache !== 'undefined' ? _logoCache[sq.id] : null);
+  if (logo) return `<img src="${logo}" class="${cls}" alt="${sq?.nome||''}" loading="lazy">`;
   const name = sq ? sq.nome : '?';
   const ini = name.split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase();
   return `<div class="${avcls}">${ini}</div>`;
