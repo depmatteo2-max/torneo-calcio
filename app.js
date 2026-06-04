@@ -1003,10 +1003,10 @@ async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   if (!el.innerHTML.trim()) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳</div>';
-  // Carica gironi prima, poi risolvi in background
+  // Carica gironi prima (da cache statica), poi risolvi in background
   var gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
-  _aggiornaResolver(STATE.activeCat); // in background
+  _aggiornaResolver(STATE.activeCat).catch(()=>{}); // in background
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
@@ -1165,7 +1165,8 @@ async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
-  await _aggiornaResolver(STATE.activeCat);
+  // _aggiornaResolver in background — non blocca il caricamento
+  _aggiornaResolver(STATE.activeCat).catch(()=>{});
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
   let tuttePartite = [];
