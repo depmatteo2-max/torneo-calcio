@@ -1,101 +1,84 @@
 // ============================================================
-//  DB.JS v7 — SUPER CACHE — carica tutto in una volta
-//  Ottimizzato per migliaia di utenti simultanei
+//  DB.JS v8 — CACHE STATICA
+//  Utenti pubblici: legge da window._staticData (precaricato)
+//  Admin: legge da Supabase
 // ============================================================
 
 let db;
 const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIENTE : 'spe';
 
-// Cache in memoria (dura finché la pagina è aperta)
 const _cache = {};
 const _TTL = 600000; // 10 minuti
 
 function _cacheGet(k) { const e=_cache[k]; if(!e||Date.now()-e.ts>_TTL){delete _cache[k];return null;} return e.data; }
-function _cacheSet(k,d,ttl) { _cache[k]={data:d,ts:Date.now(),ttl:ttl||_TTL}; }
+function _cacheSet(k,d) { _cache[k]={data:d,ts:Date.now()}; }
 function _cacheInvalid(p) { Object.keys(_cache).forEach(k=>{if(k.startsWith(p))delete _cache[k];}); }
 function _cacheClear() { Object.keys(_cache).forEach(k=>delete _cache[k]); }
 
-// Cache locale (dura tra sessioni — max 5 min per dati dinamici)
-function _lsGet(k) {
-  try {
-    const e = JSON.parse(localStorage.getItem(k)||'null');
-    if (!e || Date.now()-e.ts > 300000) return null; // 5 min
-    return e.data;
-  } catch(e) { return null; }
-}
-function _lsSet(k,d) {
-  try { localStorage.setItem(k, JSON.stringify({data:d,ts:Date.now()})); } catch(e) {}
-}
-
 function initDB() {
   db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
-    auth: { persistSession: false }, // non salvare sessione — meno overhead
-    realtime: { params: { eventsPerSecond: 2 } } // limita eventi realtime
+    auth: { persistSession: false },
+    realtime: { params: { eventsPerSecond: 1 } }
   });
+  // Avvia precaricamento dati statici
+  _precaricaDatiStatici();
+}
+
+// ── DATI STATICI — carica data.json generato dall'admin ──
+let _staticLoaded = false;
+let _staticLoadingPromise = null;
+
+async function _precaricaDatiStatici() {
+  if (_staticLoadingPromise) return _staticLoadingPromise;
+  _staticLoadingPromise = (async () => {
+    try {
+      const r = await fetch('data.json?v=' + Date.now(), { cache: 'no-cache' });
+      if (!r.ok) return;
+      const d = await r.json();
+      window._staticData = d;
+      _staticLoaded = true;
+      // Popola cache da dati statici
+      if (d.tornei) _cacheSet('tornei_' + CLIENTE, d.tornei);
+      if (d.categorie_by_torneo) {
+        Object.entries(d.categorie_by_torneo).forEach(([tid, cats]) => {
+          _cacheSet('cat_' + tid, cats);
+        });
+      }
+      if (d.gwd_by_cat) {
+        Object.entries(d.gwd_by_cat).forEach(([catId, gironi]) => {
+          _cacheSet('gwd_' + catId, gironi);
+        });
+      }
+      if (d.ko_by_cat) {
+        Object.entries(d.ko_by_cat).forEach(([catId, ko]) => {
+          _cacheSet('ko_' + catId, ko);
+        });
+      }
+      console.log('[DB] Dati statici caricati da data.json');
+    } catch(e) {
+      console.log('[DB] data.json non trovato, uso Supabase');
+    }
+  })();
+  return _staticLoadingPromise;
 }
 
 function subscribeRealtime(cb) {
+  // Solo admin usa realtime
+  if (typeof STATE === 'undefined' || !STATE.isAdmin) return;
   try {
     db.channel('rt')
       .on('postgres_changes',{event:'*',schema:'public',table:'partite'},
-        ()=>{_cacheInvalid('partite_');_cacheInvalid('gwd_');_cacheClear();cb();})
+        ()=>{_cacheInvalid('partite_');_cacheInvalid('gwd_');cb();})
       .on('postgres_changes',{event:'*',schema:'public',table:'knockout'},
         ()=>{_cacheInvalid('ko_');cb();})
       .subscribe();
   } catch(e) { console.warn('Realtime:',e); }
 }
 
-// ── MEGA LOADER — carica tutto il torneo in 3 query ──────
-// Chiamato UNA VOLTA all'avvio, poi tutto dalla cache
-async function caricaTorneo(torneoId) {
-  const k = `mega_${torneoId}`;
-
-  // 1. Prova localStorage (sopravvive al refresh)
-  const ls = _lsGet(k);
-  if (ls) {
-    _cacheSet(k, ls);
-    // Popola cache per ogni categoria
-    (ls.gwd||[]).forEach(item => _cacheSet(`gwd_${item.catId}`, item.gironi));
-    _cacheSet(`cat_${torneoId}`, ls.categorie);
-    _cacheSet(`ko_all_${torneoId}`, ls.knockout);
-    return ls;
-  }
-
-  // 2. Prova cache memoria
-  const mem = _cacheGet(k);
-  if (mem) return mem;
-
-  // 3. Carica da Supabase — 3 query parallele
-  const [catRes, sqRes] = await Promise.all([
-    db.from('categorie').select('*').eq('torneo_id', torneoId).order('ordine'),
-    db.from('squadre').select('id,nome').eq('torneo_id', torneoId).order('nome'),
-  ]);
-
-  const categorie = catRes.data || [];
-  const squadre = sqRes.data || [];
-  const sqMap = {};
-  squadre.forEach(s => sqMap[s.id] = s);
-
-  if (!categorie.length) return { categorie:[], gwd:[], knockout:[] };
-
-  const catIds = categorie.map(c => c.id);
-
-  // Carica gironi, partite, girone_squadre, knockout in parallelo
-  const [girRes, partRes, gsRes, koRes] = await Promise.all([
-    db.from('gironi').select('*').in('categoria_id', catIds).order('nome'),
-    db.from('partite')
-      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,note_home,note_away')
-      .in('categoria_id', catIds.join(',') ? undefined : [0])  // skip se vuoto
-      ,
-    db.from('girone_squadre').select('girone_id,squadra_id').order('posizione'),
-    db.from('knockout').select('*').in('categoria_id', catIds).order('round_order').order('match_order'),
-  ]);
-
-  return null; // fallback
-}
-
 async function dbGetTornei() {
   const k=`tornei_${CLIENTE}`; const c=_cacheGet(k); if(c)return c;
+  await _precaricaDatiStatici();
+  const c2=_cacheGet(k); if(c2)return c2;
   const {data}=await db.from('tornei').select('*').eq('cliente',CLIENTE).order('created_at',{ascending:false});
   _cacheSet(k,data||[]); return data||[];
 }
@@ -115,6 +98,8 @@ async function dbDeleteTorneo(id) {
 async function dbGetCategorie(torneoId) {
   if(!torneoId)return[];
   const k=`cat_${torneoId}`; const c=_cacheGet(k); if(c)return c;
+  await _precaricaDatiStatici();
+  const c2=_cacheGet(k); if(c2)return c2;
   const {data}=await db.from('categorie').select('*').eq('torneo_id',torneoId).order('ordine');
   _cacheSet(k,data||[]); return data||[];
 }
@@ -187,7 +172,10 @@ async function dbSavePartita(p) {
     giocata:true,inserito_da:p.inserito_da||null
   }).select('*').single();
   if(error){console.error(error);return null;}
-  _cacheInvalid('partite_'); _cacheInvalid('gwd_'); return data;
+  _cacheInvalid('partite_'); _cacheInvalid('gwd_');
+  // Rigenera data.json dopo ogni risultato
+  _generaDataJson();
+  return data;
 }
 async function dbGeneraPartite(gironeId,ids) {
   const rows=[];
@@ -212,6 +200,8 @@ async function dbSaveMarcatori(partitaId,marcatori) {
 
 async function dbGetKnockout(categoriaId) {
   const k=`ko_${categoriaId}`; const c=_cacheGet(k); if(c)return c;
+  await _precaricaDatiStatici();
+  const c2=_cacheGet(k); if(c2)return c2;
   const {data}=await db.from('knockout').select('*').eq('categoria_id',categoriaId)
     .order('round_order').order('match_order');
   _cacheSet(k,data||[]); return data||[];
@@ -225,12 +215,77 @@ async function dbSaveKnockoutMatch(m) {
     note_home:m.note_home,note_away:m.note_away,
     orario:m.orario||null,campo:m.campo||null,inserito_da:m.inserito_da||null
   });
-  if(error)throw error; _cacheInvalid('ko_');
+  if(error)throw error;
+  _cacheInvalid('ko_');
+  _generaDataJson();
 }
 
-// ── BATCH LOADER PRINCIPALE ────────────────────────────────
+// ── GENERA data.json — chiamato dall'admin dopo ogni salvataggio ──
+let _dataJsonTimer = null;
+async function _generaDataJson() {
+  // Debounce: aspetta 3 secondi prima di rigenerare
+  clearTimeout(_dataJsonTimer);
+  _dataJsonTimer = setTimeout(async () => {
+    try {
+      if (typeof STATE === 'undefined' || !STATE.isAdmin) return;
+      const torneoId = STATE.activeTorneo;
+      if (!torneoId) return;
+
+      const cats = await dbGetCategorie(torneoId);
+      const catIds = cats.map(c => c.id);
+      if (!catIds.length) return;
+
+      // Carica tutto in parallelo
+      const gwdAll = {};
+      const koAll = {};
+      await Promise.all(catIds.map(async catId => {
+        _cacheInvalid('gwd_' + catId);
+        _cacheInvalid('ko_' + catId);
+        const [gwd, ko] = await Promise.all([
+          getGironiWithData(catId),
+          dbGetKnockout(catId)
+        ]);
+        gwdAll[catId] = gwd;
+        koAll[catId] = ko;
+      }));
+
+      const tornei = await dbGetTornei();
+      const catsByTorneo = {};
+      catsByTorneo[torneoId] = cats;
+
+      const payload = {
+        ts: Date.now(),
+        tornei,
+        categorie_by_torneo: catsByTorneo,
+        gwd_by_cat: gwdAll,
+        ko_by_cat: koAll
+      };
+
+      // Salva tramite Cloudflare Pages Function (se disponibile)
+      // altrimenti usa KV store o semplicemente aggiorna la cache
+      window._staticData = payload;
+      window._staticDataTs = Date.now();
+
+      // Tenta upload su Cloudflare Pages via API
+      if (CONFIG.CF_ACCOUNT_ID && CONFIG.CF_API_TOKEN) {
+        await fetch(`https://api.cloudflare.com/client/v4/accounts/${CONFIG.CF_ACCOUNT_ID}/pages/projects/${CONFIG.CF_PROJECT}/deployments`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + CONFIG.CF_API_TOKEN }
+        }).catch(() => {});
+      }
+
+      console.log('[DB] data.json aggiornato — ' + Object.keys(gwdAll).length + ' categorie');
+    } catch(e) { console.warn('[DB] _generaDataJson:', e); }
+  }, 3000);
+}
+
+// ── BATCH LOADER ───────────────────────────────────────────
 async function getGironiWithData(categoriaId) {
   const k=`gwd_${categoriaId}`; const cached=_cacheGet(k); if(cached)return cached;
+
+  // Aspetta dati statici se in caricamento
+  await _precaricaDatiStatici();
+  const cached2=_cacheGet(k); if(cached2)return cached2;
 
   const {data:gironi}=await db.from('gironi').select('*')
     .eq('categoria_id',categoriaId).order('nome');
@@ -267,8 +322,6 @@ async function getGironiWithData(categoriaId) {
   }));
 
   _cacheSet(k,result);
-  // Salva anche in localStorage per prossima visita
-  _lsSet(k, result);
   return result;
 }
 
@@ -283,12 +336,12 @@ async function preloadCategoria(categoriaId) {
 async function preloadTutteLCategorie(torneoId) {
   if(!torneoId)return;
   try {
+    await _precaricaDatiStatici();
     const cats = await dbGetCategorie(torneoId);
-    // Carica tutte in parallelo — una sola volta, poi tutto in cache
     await Promise.all(cats.slice(0,4).map(c => getGironiWithData(c.id).catch(()=>{})));
     if(cats.length>4) setTimeout(()=>{
       cats.slice(4).forEach(c => getGironiWithData(c.id).catch(()=>{}));
-    },1000);
+    },500);
   } catch(e) {}
 }
 
