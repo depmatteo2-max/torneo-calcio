@@ -18,6 +18,7 @@ let STATE = {
 };
 
 async function init() {
+  window._appStartTime = Date.now();
   initDB();
   if (typeof CONFIG !== 'undefined') {
     if (CONFIG.NOME_SITO) { document.title = CONFIG.NOME_SITO; var ht=document.getElementById('header-title'); if(ht)ht.textContent=CONFIG.NOME_SITO; }
@@ -840,6 +841,8 @@ async function forzaRisoluzioneAccoppiamenti() {
 }
 
 function _mostraNotificaTriangolari() {
+  // Non mostrare la notifica se la pagina si è appena caricata (< 5s)
+  if (Date.now() - (window._appStartTime||0) < 5000) return;
   const old=document.getElementById('notifica-triangolari'); if(old)old.remove();
   const div=document.createElement('div'); div.id='notifica-triangolari';
   div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Gironi completati! Triangolari aggiornati.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
@@ -3835,7 +3838,18 @@ async function resetRisultati() {
       for (const g of gironi) {
         await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
       }
+      // Azzera risultati knockout
       await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('categoria_id', catId);
+      // Azzera anche home_id/away_id dei placeholder (risolti dal resolver) — li riscriverà dopo
+      const { data: koList } = await db.from('knockout').select('id,note_home,note_away').eq('categoria_id', catId);
+      for (const ko of (koList||[])) {
+        const upd = {};
+        if (ko.note_home) upd.home_id = null;
+        if (ko.note_away) upd.away_id = null;
+        if (Object.keys(upd).length) await db.from('knockout').update(upd).eq('id', ko.id);
+      }
+      // Invalida cache resolver
+      if (typeof _resolverCache !== 'undefined') delete _resolverCache[catId];
       const gironiIds = gironi.map(g => g.id);
       if (gironiIds.length) {
         const { data: partite } = await db.from('partite').select('id').in('girone_id', gironiIds);
@@ -3855,6 +3869,16 @@ async function resetRisultatiGirone() {
     const gironi = await dbGetGironi(STATE.activeCat);
     for (const g of gironi) await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
     await db.from('knockout').update({ gol_home: 0, gol_away: 0, giocata: false }).eq('categoria_id', STATE.activeCat);
+    // Azzera home_id/away_id dei placeholder nei knockout
+    const { data: koListG } = await db.from('knockout').select('id,note_home,note_away').eq('categoria_id', STATE.activeCat);
+    for (const ko of (koListG||[])) {
+      const upd = {};
+      if (ko.note_home) upd.home_id = null;
+      if (ko.note_away) upd.away_id = null;
+      if (Object.keys(upd).length) await db.from('knockout').update(upd).eq('id', ko.id);
+    }
+    // Invalida cache resolver
+    if (typeof _resolverCache !== 'undefined') delete _resolverCache[STATE.activeCat];
     if (typeof _cacheClear === 'function') _cacheClear();
     _simLog('✅ Reset categoria completato!'); toast('✅ Risultati categoria azzerati!'); await renderCurrentSection();
   } catch(e) { _simLog('❌ ' + e.message); }
@@ -3943,6 +3967,17 @@ async function _aggiornaResolver(categoriaId) {
   }
   _resolverCache[categoriaId] = now;
   try {
+    // Controlla se ci sono partite giocate — se no, non fare nulla
+    const { data: checkPartite } = await db.from('partite')
+      .select('id, gironi!inner(categoria_id)')
+      .eq('gironi.categoria_id', categoriaId)
+      .eq('giocata', true)
+      .limit(1);
+    if (!checkPartite?.length) {
+      console.log('[Resolver] Skip — nessuna partita giocata ancora');
+      return;
+    }
+
     // SOLUZIONE SEMPLICE: legge tutte le partite con join squadre direttamente dal DB
     const { data: gironiDB } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
     if (!gironiDB?.length) return;
@@ -4130,3 +4165,4 @@ async function _aggiornaResolver(categoriaId) {
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
+
