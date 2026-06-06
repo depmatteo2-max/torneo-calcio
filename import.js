@@ -244,6 +244,37 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
 
   if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background='var(--verde)'; }
 
+  // Aggiorna KV automaticamente dopo ogni import
+  try {
+    if (typeof _generaDataJson === 'function') {
+      // Forza aggiornamento immediato (senza debounce)
+      if (typeof _dataJsonTimer !== 'undefined') clearTimeout(_dataJsonTimer);
+      const cats = await dbGetCategorie(torneoId);
+      const catIds = cats.map(c => c.id);
+      const gwdAll = {}, koAll = {};
+      await Promise.all(catIds.map(async catId => {
+        const [gwd, ko] = await Promise.all([
+          getGironiWithData(catId),
+          dbGetKnockout(catId)
+        ]);
+        gwdAll[catId] = gwd;
+        koAll[catId] = ko;
+      }));
+      const tornei = await dbGetTornei();
+      const catsByTorneo = {}; catsByTorneo[torneoId] = cats;
+      const payload = { ts: Date.now(), tornei, categorie_by_torneo: catsByTorneo, gwd_by_cat: gwdAll, ko_by_cat: koAll };
+      window._staticData = payload;
+      await fetch('https://mclion-api.torneo-live.workers.dev/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer mclion2026' },
+        body: JSON.stringify(payload)
+      });
+      // Salva il torneo nel localStorage
+      try { localStorage.setItem('spe_torneo', String(torneoId)); } catch(e) {}
+      console.log('[Import] KV aggiornato automaticamente ✓');
+    }
+  } catch(e) { console.warn('[Import] KV update fallito:', e); }
+
   if (document.getElementById('import-preview')) {
     document.getElementById('import-preview').innerHTML = `
       <div style="padding:16px;background:#d5f5e3;border-radius:8px;border:1px solid #27ae60;margin-top:12px;">
