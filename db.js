@@ -38,7 +38,15 @@ async function _precaricaDatiStatici() {
       const d = await r.json();
       window._staticData = d;
       _staticLoaded = true;
-      if (d.tornei) _cacheSet('tornei_' + CLIENTE, d.tornei);
+      // Verifica che i tornei nel KV appartengano al cliente corretto
+      if (d.tornei) {
+        const torneiCliente = d.tornei.filter(t => !t.cliente || t.cliente === CLIENTE);
+        if (torneiCliente.length > 0) {
+          _cacheSet('tornei_' + CLIENTE, torneiCliente);
+        }
+        // Se nessun torneo appartiene a questo cliente, non popolare la cache
+        // così dbGetTornei() leggerà dal DB
+      }
       if (d.categorie_by_torneo) {
         Object.entries(d.categorie_by_torneo).forEach(([tid, cats]) => {
           _cacheSet('cat_' + tid, cats);
