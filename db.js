@@ -5,7 +5,7 @@
 // ============================================================
 
 let db;
-const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIENTE : 'spe';
+const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIENTE : 'mclion';
 const KV_WORKER_URL = 'https://mclion-api.torneo-live.workers.dev';
 const KV_AUTH = 'Bearer mclion2026';
 
