@@ -1,11 +1,13 @@
 // ============================================================
-//  DB.JS v8 — CACHE STATICA
-//  Utenti pubblici: legge da window._staticData (precaricato)
-//  Admin: legge da Supabase
+//  DB.JS v9 — CLOUDFLARE KV
+//  Utenti pubblici: legge da Cloudflare KV Worker
+//  Admin: legge da Supabase + scrive su KV dopo ogni salvataggio
 // ============================================================
 
 let db;
 const CLIENTE = (typeof CONFIG !== 'undefined' && CONFIG.CLIENTE) ? CONFIG.CLIENTE : 'spe';
+const KV_WORKER_URL = 'https://mclion-api.torneo-live.workers.dev';
+const KV_AUTH = 'Bearer mclion2026';
 
 const _cache = {};
 const _TTL = 600000; // 10 minuti
@@ -20,11 +22,10 @@ function initDB() {
     auth: { persistSession: false },
     realtime: { params: { eventsPerSecond: 1 } }
   });
-  // Avvia precaricamento dati statici
   _precaricaDatiStatici();
 }
 
-// ── DATI STATICI — carica data.json generato dall'admin ──
+// ── DATI STATICI — carica da Cloudflare KV Worker ──
 let _staticLoaded = false;
 let _staticLoadingPromise = null;
 
@@ -32,12 +33,11 @@ async function _precaricaDatiStatici() {
   if (_staticLoadingPromise) return _staticLoadingPromise;
   _staticLoadingPromise = (async () => {
     try {
-      const r = await fetch('data.json?v=' + Date.now(), { cache: 'no-cache' });
-      if (!r.ok) return;
+      const r = await fetch(KV_WORKER_URL + '/data', { cache: 'no-cache' });
+      if (!r.ok) throw new Error('KV not ok');
       const d = await r.json();
       window._staticData = d;
       _staticLoaded = true;
-      // Popola cache da dati statici
       if (d.tornei) _cacheSet('tornei_' + CLIENTE, d.tornei);
       if (d.categorie_by_torneo) {
         Object.entries(d.categorie_by_torneo).forEach(([tid, cats]) => {
@@ -54,21 +54,19 @@ async function _precaricaDatiStatici() {
           _cacheSet('ko_' + catId, ko);
         });
       }
-      // Popola cache loghi da dati statici
       if (d.logos) {
         window._staticLogos = d.logos;
         window._logoCache = d.logos;
       }
-      console.log('[DB] Dati statici caricati da data.json');
+      console.log('[DB] Dati caricati da Cloudflare KV');
     } catch(e) {
-      console.log('[DB] data.json non trovato, uso Supabase');
+      console.log('[DB] KV non disponibile, uso Supabase:', e.message);
     }
   })();
   return _staticLoadingPromise;
 }
 
 function subscribeRealtime(cb) {
-  // Solo admin usa realtime
   if (typeof STATE === 'undefined' || !STATE.isAdmin) return;
   try {
     db.channel('rt')
@@ -178,7 +176,6 @@ async function dbSavePartita(p) {
   }).select('*').single();
   if(error){console.error(error);return null;}
   _cacheInvalid('partite_'); _cacheInvalid('gwd_');
-  // Rigenera data.json dopo ogni risultato
   _generaDataJson();
   return data;
 }
@@ -225,10 +222,9 @@ async function dbSaveKnockoutMatch(m) {
   _generaDataJson();
 }
 
-// ── GENERA data.json — chiamato dall'admin dopo ogni salvataggio ──
+// ── GENERA E INVIA SU CLOUDFLARE KV ──────────────────────
 let _dataJsonTimer = null;
 async function _generaDataJson() {
-  // Debounce: aspetta 3 secondi prima di rigenerare
   clearTimeout(_dataJsonTimer);
   _dataJsonTimer = setTimeout(async () => {
     try {
@@ -240,7 +236,6 @@ async function _generaDataJson() {
       const catIds = cats.map(c => c.id);
       if (!catIds.length) return;
 
-      // Carica tutto in parallelo
       const gwdAll = {};
       const koAll = {};
       await Promise.all(catIds.map(async catId => {
@@ -266,29 +261,34 @@ async function _generaDataJson() {
         ko_by_cat: koAll
       };
 
-      // Salva tramite Cloudflare Pages Function (se disponibile)
-      // altrimenti usa KV store o semplicemente aggiorna la cache
+      // Aggiorna cache locale
       window._staticData = payload;
       window._staticDataTs = Date.now();
 
-      // Tenta upload su Cloudflare Pages via API
-      if (CONFIG.CF_ACCOUNT_ID && CONFIG.CF_API_TOKEN) {
-        await fetch(`https://api.cloudflare.com/client/v4/accounts/${CONFIG.CF_ACCOUNT_ID}/pages/projects/${CONFIG.CF_PROJECT}/deployments`, {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + CONFIG.CF_API_TOKEN }
-        }).catch(() => {});
-      }
+      // Invia al Worker Cloudflare KV
+      const res = await fetch(KV_WORKER_URL + '/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': KV_AUTH
+        },
+        body: JSON.stringify(payload)
+      });
 
-      console.log('[DB] data.json aggiornato — ' + Object.keys(gwdAll).length + ' categorie');
-    } catch(e) { console.warn('[DB] _generaDataJson:', e); }
+      if (res.ok) {
+        console.log('[DB] KV aggiornato su Cloudflare ✓');
+      } else {
+        console.warn('[DB] KV upload fallito:', res.status);
+      }
+    } catch(e) {
+      console.warn('[DB] _generaDataJson:', e);
+    }
   }, 3000);
 }
 
 // ── BATCH LOADER ───────────────────────────────────────────
 async function getGironiWithData(categoriaId) {
   const k=`gwd_${categoriaId}`; const cached=_cacheGet(k); if(cached)return cached;
-
-  // Aspetta dati statici se in caricamento
   await _precaricaDatiStatici();
   const cached2=_cacheGet(k); if(cached2)return cached2;
 
