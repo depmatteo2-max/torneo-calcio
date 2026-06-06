@@ -35,9 +35,16 @@ async function init() {
     STATE.tornei = await dbGetTornei();
     const savedId = _loadSavedTorneo();
     const attivi = STATE.tornei.filter(t => t.attivo);
-    if (savedId && attivi.find(t => t.id === savedId)) STATE.activeTorneo = savedId;
+    // Verifica che il torneo salvato esista davvero nel DB
+    const savedExists = savedId && STATE.tornei.find(t => t.id === savedId);
+    if (savedExists && attivi.find(t => t.id === savedId)) STATE.activeTorneo = savedId;
+    else if (savedExists) STATE.activeTorneo = savedId;
     else if (attivi.length) STATE.activeTorneo = attivi[0].id;
     else if (STATE.tornei.length) STATE.activeTorneo = STATE.tornei[0].id;
+    // Se il savedId non esiste più nel DB, pulisci il localStorage
+    if (savedId && !STATE.tornei.find(t => t.id === savedId)) {
+      try { localStorage.removeItem('spe_torneo'); } catch(e) {}
+    }
 
     // Nascondi loading SUBITO dopo aver trovato il torneo
     document.getElementById('loading-screen').style.display = 'none';
