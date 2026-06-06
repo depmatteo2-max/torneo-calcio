@@ -899,6 +899,37 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     return tipo === 'vincente' ? vince : perde;
   }
 
+  // Formato testo: "PRIMA/SECONDA/... GIRONE X" — es. "PRIMA GIRONE A", "QUARTA GIRONE 1"
+  const mPOS = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
+  if (mPOS) {
+    const ORD2 = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
+    const pos = ORD2[mPOS[1].toLowerCase()] ?? 0;
+    const k = 'GIRONE ' + mPOS[2].toUpperCase();
+    const cG = classificheGironi[k] || window._clGlobale?.[k];
+    if (cG?.length > pos) return cG[pos]?.sq?.id || null;
+  }
+
+  // Formato numerico senza °: "1 GIRONE A", "4 GIRONE I"
+  const mNnoGrad = s.match(/^(\d+)\s+(?:girone\s+)?([A-Z][A-Z0-9]*)$/i);
+  if (mNnoGrad && !/^\d+$/.test(mNnoGrad[2])) {
+    const pos = parseInt(mNnoGrad[1]) - 1;
+    const k = 'GIRONE ' + mNnoGrad[2].toUpperCase();
+    const cG = classificheGironi[k] || window._clGlobale?.[k];
+    if (cG?.length > pos) return cG[pos]?.sq?.id || null;
+  }
+
+  // Formato numerico senza °: "4 MIGLIOR SECONDA", "7 MIGLIOR TERZA"
+  const mMigN = s.match(/^(\d+)\s+MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d+))?$/i);
+  if (mMigN) {
+    const pos = parseInt(mMigN[1]) - 1;
+    const tipo = mMigN[2].toLowerCase();
+    const grp = mMigN[3] || '';
+    let k2 = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    if (grp) k2 += ' ' + grp;
+    const sp2 = clSp[k2] || window._clSpecGlobale?.[k2] || [];
+    if (sp2.length > pos) return sp2[pos]?.sq?.id || null;
+  }
+
   // Formato principale: "N° NOME GIRONE"
   // Es: "1° Girone A", "2° CLASSIFICA MIGLIORI SECONDE", "1° CLASSIFICA MIGLIORI SECONDE 123"
   const mN = s.match(/^(\d+)\s*[\u00b0\u00ba]\s+(.+)$/i);
@@ -960,7 +991,10 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
 async function forzaRisoluzioneAccoppiamenti() {
   if (!STATE.activeCat) return;
   toast('⏳ Risoluzione accoppiamenti...');
-  await verificaEGeneraTriangolari(STATE.activeCat);
+  // Reset cache resolver così forza un nuovo calcolo
+  delete _resolverCache[STATE.activeCat];
+  await _aggiornaResolver(STATE.activeCat);
+  _cacheInvalid('gwd_'); _cacheInvalid('ko_');
   await renderAdminKnockout(); await renderTabellone();
   toast('✅ Accoppiamenti aggiornati!');
 }
@@ -4130,7 +4164,7 @@ async function _aggiornaResolver(categoriaId) {
 
     if (!tuttePartite?.length) return;
 
-    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n);
+    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^\d+\s+[A-Z]/i.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n) || /^(vincente|perdente)\s/i.test(n);
     const sortFn = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
     const clG = {}, clSp = {};
 
@@ -4196,8 +4230,25 @@ async function _aggiornaResolver(categoriaId) {
         return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
       }
 
-      // Vincente/Perdente QUARTO DI FINALE / SEMIFINALE / GARA — risolti da risultatiKnockout
-      // (gestiti separatamente nel loop knockout)
+      // Formato senza °: "N GIRONE X" — es. "1 GIRONE A", "4 GIRONE I"
+      const m5 = s.match(/^(\d+)\s+(?:girone\s+)([A-Z0-9]+)$/i);
+      if (m5) { const pos=parseInt(m5[1])-1; return clG['GIRONE '+m5[2].toUpperCase()]?.[pos]?.sq||null; }
+
+      // Formato senza °: "N MIGLIOR SECONDA/TERZA/QUARTA"
+      const m6 = s.match(/^(\d+)\s+MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d+))?$/i);
+      if (m6) {
+        const pos = parseInt(m6[1])-1;
+        const tipo = m6[2].toLowerCase();
+        const grp = m6[3] || '';
+        let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        if (grp) k += ' '+grp;
+        return (clSp[k]||[])[pos]?.sq||null;
+      }
+
+      // Formato numerico senza °: "N MIGLIOR TERZA 123" ecc già gestito sopra
+
+      // "VINCENTE GARA N" / "PERDENTE GARA N" / "VINCENTE N" / "PERDENTE N"
+      // (gestiti separatamente nel loop knockout con koByRound)
       return null;
     };
 
@@ -4324,6 +4375,15 @@ async function _aggiornaResolver(categoriaId) {
       const rn = ko.round_name.trim().toUpperCase();
       koByRound[rn] = ko;
       koByRound[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+      // Indicizza anche senza emoji (es. "⚔️ GARA 1" → "GARA 1")
+      const rnNoEmoji = rn.replace(/^[^A-Z0-9]+/i, '').trim();
+      if (rnNoEmoji !== rn) {
+        koByRound[rnNoEmoji] = ko;
+        koByRound[rnNoEmoji.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+      }
+      // Indicizza anche solo il numero/lettera finale (es. "GARA 1" → "1", "GARA A" → "A")
+      const rnShort = rnNoEmoji.replace(/^GARA\s+/i, '').trim();
+      if (rnShort && rnShort !== rnNoEmoji) koByRound[rnShort] = ko;
     }
 
     // Funzione risolvi placeholder per knockout (usa clG, clSp, koByRound)
@@ -4331,12 +4391,31 @@ async function _aggiornaResolver(categoriaId) {
       if (!ph) return null;
       const s = ph.trim();
 
-      // Vincente/Perdente QUALCOSA
+      // Vincente/Perdente QUALCOSA (es. "Vincente GARA 1", "Perdente GARA A", "Vincente 13")
       const mVP = s.match(/^(Vincente|Perdente)\s+(.+)$/i);
       if (mVP) {
         const tipo = mVP[1].toLowerCase();
         const rn = mVP[2].trim().toUpperCase();
-        const ko = koByRound[rn] || koByRound[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))];
+        // Prova varie forme della chiave nel koByRound
+        const kandidati = [
+          rn,
+          rn.replace(/(\d+)$/, m => m.padStart(2,'0')),
+          'GARA ' + rn,
+          '⚔️ GARA ' + rn,
+          // Cerca parziale: se rn è "1", cerca chiavi che terminano con " 1"
+        ];
+        let ko = null;
+        for (const k of kandidati) {
+          ko = koByRound[k];
+          if (ko) break;
+        }
+        // Ricerca fuzzy: trova chiave che contiene il numero/lettera
+        if (!ko) {
+          const found = Object.keys(koByRound).find(k =>
+            k.replace(/[^A-Z0-9]/gi,'').toUpperCase().endsWith(rn.replace(/[^A-Z0-9]/gi,'').toUpperCase())
+          );
+          if (found) ko = koByRound[found];
+        }
         if (!ko?.giocata) return null;
         const vince = ko.gol_home >= ko.gol_away ? ko.home_id : ko.away_id;
         const perde = ko.gol_home <= ko.gol_away ? ko.home_id : ko.away_id;
