@@ -261,12 +261,18 @@ async function _generaDataJson() {
       const catsByTorneo = {};
       catsByTorneo[torneoId] = cats;
 
+      // Includi squadre/loghi nel payload per renderRisultati
+      const { data: squadreKV } = await db.from('squadre').select('id,nome,logo,torneo_id').eq('torneo_id', torneoId);
+      const logos = {};
+      (squadreKV||[]).forEach(s => { logos[s.id] = { nome: s.nome, logo: s.logo||null }; });
+
       const payload = {
         ts: Date.now(),
         tornei,
         categorie_by_torneo: catsByTorneo,
         gwd_by_cat: gwdAll,
-        ko_by_cat: koAll
+        ko_by_cat: koAll,
+        logos
       };
 
       // Aggiorna cache locale

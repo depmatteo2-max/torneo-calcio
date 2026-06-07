@@ -262,7 +262,11 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       }));
       const tornei = await dbGetTornei();
       const catsByTorneo = {}; catsByTorneo[torneoId] = cats;
-      const payload = { ts: Date.now(), tornei, categorie_by_torneo: catsByTorneo, gwd_by_cat: gwdAll, ko_by_cat: koAll };
+      // Includi anche le squadre/loghi nel payload KV
+      const { data: squadreKV } = await db.from('squadre').select('id,nome,logo,torneo_id').eq('torneo_id', torneoId);
+      const logos = {};
+      (squadreKV||[]).forEach(s => { logos[s.id] = { nome: s.nome, logo: s.logo||null }; });
+      const payload = { ts: Date.now(), tornei, categorie_by_torneo: catsByTorneo, gwd_by_cat: gwdAll, ko_by_cat: koAll, logos };
       window._staticData = payload;
       await fetch('https://mclion-api.torneo-live.workers.dev/update', {
         method: 'POST',
@@ -283,6 +287,8 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         <button onclick="location.reload()" style="margin-top:12px;background:#D42B2B;color:white;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:700;">
           🔄 Ricarica pagina
         </button>
+        <div id="kv-status" style="font-size:12px;color:#666;margin-top:8px;">⏳ Aggiornamento dati in corso...</div>
+        <script>setTimeout(()=>{document.getElementById('kv-status').textContent='✅ Dati pronti — puoi ricaricare!';},4000);</script>
       </div>`;
   }
 }
