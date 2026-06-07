@@ -470,9 +470,9 @@ function renderCatBar() {
     </div>`;
   } else if (STATE.isAdmin && multiCat) {
     // Admin: pillole orizzontali scorrevoli
-    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;">' +
+    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;-webkit-overflow-scrolling:touch;">' +
       STATE.categorie.map(c =>
-        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})" style="scroll-snap-align:start;white-space:nowrap;flex-shrink:0;">${c.nome}</button>`
+        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})" style="white-space:nowrap;flex-shrink:0;">${_abbreviaNomeCat(c.nome)}</button>`
       ).join('') + '</div>';
   }
   bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
@@ -519,8 +519,18 @@ function _trovaGiornataOggi(giornate) {
 }
 
 function _abbreviaNomeCat(nome) {
-  const abbr = {'Girone Silver 1':'Silver 1','Girone Silver 2':'Silver 2','Girone Gold 1':'Gold 1','Girone Gold 2':'Gold 2','Pulcini 2016':'Pulcini','Esordienti 2013':'Esord. 2013','Esordienti 2014':'Esord. 2014','Girone Unico':'Girone Unico'};
+  const abbr = {
+    'Girone Silver 1':'Silver 1','Girone Silver 2':'Silver 2',
+    'Girone Gold 1':'Gold 1','Girone Gold 2':'Gold 2',
+    'Pulcini 2016':'Pulcini','Esordienti 2013':'Esord. 2013',
+    'Esordienti 2014':'Esord. 2014','Girone Unico':'Girone Unico'
+  };
   if (abbr[nome]) return abbr[nome];
+  // MC Lion Trophy: abbreviazioni automatiche
+  const n = nome.trim();
+  if (/ESORDIENTI/i.test(n)) return 'Esord. ' + (n.match(/\d{4}/)?.[0]||'');
+  if (/PRIMI\s+CALCI/i.test(n)) return 'P.Calci ' + (n.match(/\d{4}/)?.[0]||'');
+  if (/PULCINI/i.test(n)) return 'Pulcini ' + (n.match(/\d{4}/)?.[0]||'');
   return nome.length > 14 ? nome.substring(0, 13) + '…' : nome;
 }
 
