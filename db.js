@@ -146,6 +146,30 @@ async function dbSaveSquadra(s) {
 async function dbUpdateLogo(squadra_id,logo) {
   const {error}=await db.from('squadre').update({logo}).eq('id',squadra_id);
   if(error)throw error; _cacheClear();
+  // Aggiorna loghi nel KV subito
+  _aggiornaLoghiKV().catch(()=>{});
+}
+
+async function _aggiornaLoghiKV() {
+  try {
+    const torneoId = (typeof STATE !== 'undefined' && STATE.activeTorneo) ? STATE.activeTorneo : null;
+    if (!torneoId) return;
+    // Leggi tutti i loghi dal DB
+    const {data:sq} = await db.from('squadre').select('id,nome,logo').eq('torneo_id', torneoId);
+    const logos = {};
+    (sq||[]).forEach(s => { logos[s.id] = {nome: s.nome, logo: s.logo||null}; });
+    // Aggiorna KV mantenendo il resto dei dati
+    const res = await fetch(KV_WORKER_URL + '/data', {cache:'no-cache'});
+    const kvData = res.ok ? await res.json() : {};
+    kvData.logos = logos;
+    kvData.ts = Date.now();
+    await fetch(KV_WORKER_URL + '/update', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization': KV_AUTH},
+      body: JSON.stringify(kvData)
+    });
+    console.log('[DB] Loghi aggiornati nel KV ✓');
+  } catch(e) { console.warn('[DB] Loghi KV update fallito:', e); }
 }
 
 async function dbGetGironi(categoriaId) {
