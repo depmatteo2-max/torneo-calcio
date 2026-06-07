@@ -469,11 +469,20 @@ function renderCatBar() {
       </button>
     </div>`;
   } else if (STATE.isAdmin && multiCat) {
-    // Admin: pillole orizzontali scorrevoli
-    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;-webkit-overflow-scrolling:touch;">' +
-      STATE.categorie.map(c =>
-        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})" style="white-space:nowrap;flex-shrink:0;">${_abbreviaNomeCat(c.nome)}</button>`
-      ).join('') + '</div>';
+    // Admin: stesso stile utente pubblico — nome categoria + tasto Cambia
+    catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
+      <span style="font-size:13px;font-weight:800;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${cat ? cat.nome : ''}
+      </span>
+      <button onclick="cambiaCategoria()"
+        style="flex-shrink:0;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
+               padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);
+               cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
+        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-2)'">
+        ⇄ Cambia
+      </button>
+    </div>`;
   }
   bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
   _renderGiornataBar();
@@ -526,7 +535,6 @@ function _abbreviaNomeCat(nome) {
     'Esordienti 2014':'Esord. 2014','Girone Unico':'Girone Unico'
   };
   if (abbr[nome]) return abbr[nome];
-  // MC Lion Trophy: abbreviazioni automatiche
   const n = nome.trim();
   if (/ESORDIENTI/i.test(n)) return 'Esord. ' + (n.match(/\d{4}/)?.[0]||'');
   if (/PRIMI\s+CALCI/i.test(n)) return 'P.Calci ' + (n.match(/\d{4}/)?.[0]||'');
