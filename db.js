@@ -64,7 +64,11 @@ async function _precaricaDatiStatici() {
       }
       if (d.logos) {
         window._staticLogos = d.logos;
-        window._logoCache = d.logos;
+        // _logoCache deve contenere solo la stringa base64, non l'oggetto {nome, logo}
+        window._logoCache = {};
+        Object.entries(d.logos).forEach(([id, val]) => {
+          window._logoCache[id] = (typeof val === 'object' && val !== null) ? val.logo : val;
+        });
       }
       console.log('[DB] Dati caricati da Cloudflare KV');
     } catch(e) {
