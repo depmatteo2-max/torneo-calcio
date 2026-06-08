@@ -732,7 +732,6 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
 
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
-    // Usa KV (getGironiWithData) invece di Supabase direttamente
     const gironiKV = await getGironiWithData(categoriaId);
     if (!gironiKV?.length) return;
 
@@ -743,14 +742,16 @@ async function verificaEGeneraTriangolari(categoriaId) {
       return b.gf-a.gf;
     };
 
-    // ── PASSO 1: calcola classifiche gironi normali (anche parziali) ──
+    // ── PASSO 1: classifiche gironi normali (anche parziali) ──
     const classificheGironi = {};
     for (const g of gironiKV) {
       if (/CLASSIFICA/i.test(g.nome)) continue;
-      const giocate = (g.partite||[]).filter(p => p.giocata && p.home_id && p.away_id
-        && !_isPlaceholder(p.home?.nome) && !_isPlaceholder(p.away?.nome));
+      const giocate = (g.partite||[]).filter(p =>
+        p.giocata && p.home_id && p.away_id &&
+        p.home?.id && p.away?.id &&
+        !_isPlaceholder(p.home.nome) && !_isPlaceholder(p.away.nome)
+      );
       if (!giocate.length) continue;
-      // Raccoglie squadre reali dalle partite giocate
       const sqMap = {};
       giocate.forEach(p => {
         if (p.home?.id) sqMap[p.home.id] = p.home;
@@ -762,7 +763,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       if (cl.length) classificheGironi[g.nome.toUpperCase().trim()] = cl;
     }
 
-    // ── PASSO 2b: costruisci clSp (migliori seconde/terze da A-L e 1-10) ──
+    // ── PASSO 2b: clSp — migliori seconde/terze da A-L e 1-10 ──
     const clSp = {};
     const makeSpec = (chiavi, pos) => {
       const lista = [];
@@ -775,7 +776,6 @@ async function verificaEGeneraTriangolari(categoriaId) {
       clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
       clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
     }
-    // Gruppi numerici
     [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]].forEach(([suf,nums]) => {
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => classificheGironi[k]);
       if (!chiavi.length) return;
@@ -788,7 +788,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
       });
     });
 
-    // ── PASSO 3: leggi knockout (Supabase — sempre aggiornato dopo ogni save) ──
+    // ── PASSO 3: knockout dal DB ──
     const { data: allKo } = await db.from('knockout')
       .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
       .eq('categoria_id', categoriaId);
@@ -799,20 +799,26 @@ async function verificaEGeneraTriangolari(categoriaId) {
       risultatiKnockout[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
     }
 
-    if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
-
     let risolti = 0;
 
     // ── PASSO 4: risolvi placeholder nelle partite gironi ──
+    // Le partite Champions/Europa hanno placeholder nel NOME squadra (home.nome),
+    // non in note_home. Dobbiamo cercare in entrambi i posti.
     for (const g of gironiKV) {
       for (const p of (g.partite||[])) {
-        if (!p.note_home && !p.note_away) continue;
-        const newH = _resolvePlaceholder(p.note_home, classificheGironi, risultatiKnockout, clSp);
-        const newA = _resolvePlaceholder(p.note_away, classificheGironi, risultatiKnockout, clSp);
+        // Placeholder può essere in note_home OPPURE in home.nome
+        const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
+        const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
+        if (!notaH && !notaA) continue;
+        const newH = notaH ? _resolvePlaceholder(notaH, classificheGironi, risultatiKnockout, clSp) : null;
+        const newA = notaA ? _resolvePlaceholder(notaA, classificheGironi, risultatiKnockout, clSp) : null;
         const upd = {};
         if (newH && newH !== p.home_id) upd.home_id = newH;
         if (newA && newA !== p.away_id) upd.away_id = newA;
-        if (Object.keys(upd).length) { await db.from('partite').update(upd).eq('id', p.id); risolti++; }
+        if (Object.keys(upd).length) {
+          await db.from('partite').update(upd).eq('id', p.id);
+          risolti++;
+        }
       }
     }
 
@@ -823,16 +829,20 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const upd = {};
       if (newH && newH !== match.home_id) upd.home_id = newH;
       if (newA && newA !== match.away_id) upd.away_id = newA;
-      if (Object.keys(upd).length) { await db.from('knockout').update(upd).eq('id', match.id); risolti++; }
+      if (Object.keys(upd).length) {
+        await db.from('knockout').update(upd).eq('id', match.id);
+        risolti++;
+      }
     }
 
     if (risolti > 0) {
-      // Rigenera KV dopo aver aggiornato gli accoppiamenti
       if (typeof _generaDataJson === 'function') await _generaDataJson().catch(()=>{});
+      if (typeof _cacheClear === 'function') _cacheClear();
       _mostraNotificaTriangolari();
       if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
       if (STATE.currentSection === 'tabellone') await renderTabellone();
       if (STATE.currentSection === 'a-risultati') await renderAdminRisultati();
+      if (STATE.currentSection === 'classifiche') await renderClassifiche();
     }
   } catch(e) { console.error('verificaEGeneraTriangolari:', e); }
 }
