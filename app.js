@@ -21,6 +21,11 @@ async function init() {
   window._appStartTime = Date.now();
   window._CACHE_TTL_OVERRIDE = 120000; // 2 minuti cache
 
+  // Pulisci cache sessione stale all'avvio
+  try {
+    Object.keys(sessionStorage).filter(k => k.startsWith('mclion_cats_')).forEach(k => sessionStorage.removeItem(k));
+  } catch(e) {}
+
   // Mostra subito l'app nascondendo il loading
   initDB();
 
@@ -119,18 +124,18 @@ function _clearSavedCat() { try { localStorage.removeItem('spe_cat'); } catch(e)
 async function loadTorneo() {
   if (!STATE.activeTorneo) { renderTorneoBar(); renderCatBar(); renderCurrentSection(); return; }
   _saveSavedTorneo(STATE.activeTorneo);
-  // Cache categorie in sessionStorage per caricamento istantaneo
-  const _cacheKey = 'mclion_cats_' + STATE.activeTorneo;
+  // Carica sempre le categorie fresche dal KV (no sessionStorage stale)
   try {
-    const _cached = sessionStorage.getItem(_cacheKey);
-    if (_cached) {
-      STATE.categorie = JSON.parse(_cached);
-    } else {
-      STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
-      sessionStorage.setItem(_cacheKey, JSON.stringify(STATE.categorie));
-    }
-  } catch(e) {
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
+    // Pulisci cache vecchia se presente
+    try { sessionStorage.removeItem('mclion_cats_' + STATE.activeTorneo); } catch(e2) {}
+  } catch(e) {
+    // Fallback: prova sessionStorage
+    try {
+      const _cached = sessionStorage.getItem('mclion_cats_' + STATE.activeTorneo);
+      if (_cached) STATE.categorie = JSON.parse(_cached);
+    } catch(e2) {}
+    if (!STATE.categorie?.length) STATE.categorie = [];
   }
   STATE.activeGiornata = 'tutte';
   STATE._giornateDisponibili = [];
