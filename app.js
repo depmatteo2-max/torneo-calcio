@@ -653,6 +653,83 @@ function _risolviGruppi(lista, giocate) {
 //  RISOLUZIONE PLACEHOLDER
 //  *** FIX: totaleSlot — non aggiunge squadre oltre gli slot originali ***
 // ============================================================
+function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={}, clSp={}) {
+  if (!placeholder) return null;
+  const s = placeholder.trim();
+
+  // Vincente/Perdente SEMIFINALE / QUARTO DI FINALE / GARA / SEMIFINALE 1/4 A
+  const mVP = s.match(/^(Vincente|Perdente)\s+(.+)$/i);
+  if (mVP) {
+    const tipo = mVP[1].toLowerCase();
+    const roundRaw = mVP[2].trim().toUpperCase();
+    // Prova corrispondenza esatta o con numero paddato
+    const chiaveExact = roundRaw;
+    const chiavePad = roundRaw.replace(/(\d+)$/, m => m.padStart(2,'0'));
+    const match = risultatiKnockout[chiaveExact] || risultatiKnockout[chiavePad];
+    if (!match?.giocata) return null;
+    const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
+    const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
+    return tipo === 'vincente' ? vince : perde;
+  }
+
+  // Formato principale: "N° NOME GIRONE"
+  // Es: "1° Girone A", "2° CLASSIFICA MIGLIORI SECONDE", "1° CLASSIFICA MIGLIORI SECONDE 123"
+  const mN = s.match(/^(\d+)\s*[\u00b0\u00ba]\s+(.+)$/i);
+  if (mN) {
+    const pos = parseInt(mN[1]);
+    const nomeRicerca = mN[2].trim().toUpperCase();
+
+    // Cerca nel dizionario classificheGironi (tutte le chiavi sono uppercase)
+    // Prova: esatto, poi con prefisso GIRONE
+    const chiave =
+      classificheGironi[nomeRicerca] ? nomeRicerca :
+      classificheGironi['GIRONE ' + nomeRicerca] ? 'GIRONE ' + nomeRicerca :
+      Object.keys(classificheGironi).find(k => k === nomeRicerca || k === 'GIRONE ' + nomeRicerca);
+
+    if (chiave) {
+      const cl = classificheGironi[chiave];
+      if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+    }
+    // Prova nelle classifiche speciali (MIGLIOR SECONDA ecc.)
+    if (/^MIGLIOR/i.test(nomeRicerca)) {
+      const kS = 'CLASSIFICA MIGLIORI ' + nomeRicerca.replace(/^MIGLIOR\s+/i,'') + 'E';
+      const sp = clSp[kS] || window._clSpecGlobale?.[kS] || [];
+      if (sp.length >= pos) return sp[pos-1]?.sq?.id || null;
+    }
+    return null; // girone non ancora calcolato
+  }
+
+  // "N° MIGLIOR SECONDA/TERZA/QUARTA" senza classificheGironi
+  const mMig = s.match(/^(\d+)[°º]\s+MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+  if (mMig) {
+    const pos = parseInt(mMig[1]) - 1;
+    const tipo = mMig[2].toLowerCase();
+    const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
+    return sp[pos]?.sq?.id || null;
+  }
+
+  // "MIGLIOR SECONDA/TERZA/QUARTA" (1° posto)
+  const mMig0 = s.match(/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+  if (mMig0) {
+    const tipo = mMig0[1].toLowerCase();
+    const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
+    return sp[0]?.sq?.id || null;
+  }
+
+  // Formato breve: "3°A" senza spazio
+  const mShort = s.match(/^(\d+)[\u00b0\u00ba]([A-Za-z])$/);
+  if (mShort) {
+    const pos = parseInt(mShort[1]);
+    const lettera = mShort[2].toUpperCase();
+    const cl = classificheGironi['GIRONE ' + lettera] || classificheGironi[lettera];
+    if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+  }
+
+  return null;
+}
+
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
     // Usa KV (getGironiWithData) invece di Supabase direttamente
@@ -1786,27 +1863,13 @@ async function saveKO(match_id) {
 
 async function risolviManuale() {
   if (!STATE.activeCat) return;
-  const {data:gironi}=await db.from('gironi').select('id,nome').eq('categoria_id',STATE.activeCat);
-  if (!gironi||!gironi.length) { toast('Nessun girone trovato'); return; }
-  const classificheGironi={};
-  for (const g of gironi) {
-    const {data:partite}=await db.from('partite').select('id,home_id,away_id,gol_home,gol_away,giocata').eq('girone_id',g.id);
-    const {data:gsRows}=await db.from('girone_squadre').select('squadra_id,squadre(id,nome,logo)').eq('girone_id',g.id);
-    const squadre=(gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
-    classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:partite||[]});
-  }
-  const {data:matches}=await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id',STATE.activeCat);
-  let risolti=0;
-  for (const match of (matches||[])) {
-    const newH=_resolvePlaceholder(match.note_home,classificheGironi,{},window._clSpecGlobale||{});
-    const newA=_resolvePlaceholder(match.note_away,classificheGironi,{},window._clSpecGlobale||{});
-    if ((newH&&newH!==match.home_id)||(newA&&newA!==match.away_id)) {
-      const upd={}; if(newH)upd.home_id=newH; if(newA)upd.away_id=newA;
-      await db.from('knockout').update(upd).eq('id',match.id); risolti++;
-    }
-  }
-  if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
-  else toast('ℹ️ Nessun accoppiamento da aggiornare');
+  toast('⏳ Risoluzione in corso...');
+  // Usa verificaEGeneraTriangolari che ora usa KV + calcola tutto correttamente
+  await verificaEGeneraTriangolari(STATE.activeCat);
+  if (typeof _cacheClear === 'function') _cacheClear();
+  await renderAdminKnockout();
+  await renderTabellone();
+  toast('✅ Accoppiamenti aggiornati!');
 }
 
 // ============================================================
