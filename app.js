@@ -936,13 +936,28 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     return sp[pos]?.sq?.id || null;
   }
 
-  // "MIGLIOR SECONDA/TERZA/QUARTA" (1° posto)
-  const mMig0 = s.match(/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+  // "MIGLIOR SECONDA/TERZA/QUARTA" (1° posto) con suffisso opzionale 123/456/789
+  const mMig0 = s.match(/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
   if (mMig0) {
     const tipo = mMig0[1].toLowerCase();
-    const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
-    const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
+    const grp = (mMig0[2]||'').replace(/-/g,'');
+    let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    if (grp) k += ' '+grp;
+    const sp = clSp[k] || window._clSpecGlobale?.[k] || clSp[k.split(' ').slice(0,-1).join(' ')] || window._clSpecGlobale?.[k.split(' ').slice(0,-1).join(' ')] || [];
     return sp[0]?.sq?.id || null;
+  }
+
+  // "SESTA/SETTIMA/.../DECIMA MIGLIOR SECONDA 123" — ordinali lunghi con gruppo
+  const ORD_RP = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
+  const mOrdRP = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
+  if (mOrdRP) {
+    const pos = ORD_RP[mOrdRP[1].toLowerCase()] ?? 0;
+    const tipo = mOrdRP[2].toLowerCase();
+    const grp = (mOrdRP[3]||'').replace(/-/g,'');
+    let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    if (grp) k += ' '+grp;
+    const sp = clSp[k] || window._clSpecGlobale?.[k] || clSp[k.split(' ').slice(0,-1).join(' ')] || window._clSpecGlobale?.[k.split(' ').slice(0,-1).join(' ')] || [];
+    return sp[pos]?.sq?.id || null;
   }
 
   // Formato breve: "3°A" senza spazio
@@ -3914,17 +3929,14 @@ async function simulaRisultati() {
   _simLog('⏳ Avvio simulazione...');
   try {
     const catId = STATE.activeCat || STATE.categorie[0]?.id;
-    let totale = 0; const MAX = 10;
+    let totale = 0; const MAX = 8;
     for (let pass = 1; pass <= MAX; pass++) {
       if (catId) {
         await verificaEGeneraTriangolari(catId);
         if (typeof _cacheClear === 'function') _cacheClear();
         if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
       }
-      let nuovi = 0;
-
-      // ── Simula partite gironi ──
-      const gironi = await getGironiWithData(catId);
+      const gironi = await getGironiWithData(catId); let nuovi = 0;
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
@@ -3936,33 +3948,6 @@ async function simulaRisultati() {
           _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
         }
       }
-
-      // ── Simula partite knockout (fase finale) ──
-      if (catId) {
-        const ko = await dbGetKnockout(catId);
-        // Ricarica dopo verificaEGeneraTriangolari
-        const { data: koFresh } = await db.from('knockout')
-          .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
-          .eq('categoria_id', catId);
-        const daGiocareKO = (koFresh||[]).filter(m => !m.giocata && m.home_id && m.away_id);
-        if (daGiocareKO.length) {
-          _simLog('Pass ' + pass + ' — Knockout: ' + daGiocareKO.length + ' partite');
-          for (const m of daGiocareKO) {
-            const gh = _golCasuale(), ga = _golCasuale();
-            // Evita pareggi nei knockout — se pari, aggiungi 1 a caso
-            const finalH = gh === ga ? gh + 1 : gh;
-            const finalA = gh === ga ? ga : ga;
-            await dbSaveKnockoutMatch({
-              ...m,
-              gol_home: finalH, gol_away: finalA,
-              giocata: true, inserito_da: '🤖 Simulazione'
-            });
-            nuovi++; totale++;
-            _simLog('✓ KO: ' + m.round_name + ' ' + finalH + '–' + finalA);
-          }
-        }
-      }
-
       if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
     }
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
@@ -4215,7 +4200,7 @@ async function _aggiornaResolver(categoriaId) {
         return (clSp[k]||[])[pos]?.sq||null;
       }
 
-      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123" ecc. (vecchio formato)
+      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123", "MIGLIOR SECONDA 123" ecc.
       const m2 = s.match(/^((?:prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+)?miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
       if (m2) {
         const pos = ORD[(m2[1]||'').trim().toLowerCase()] ?? 0;
@@ -4223,7 +4208,22 @@ async function _aggiornaResolver(categoriaId) {
         const grp = (m2[3]||'').replace(/-/g,'');
         let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
         if (grp) k += ' '+grp;
-        return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
+        const risultato = (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
+        if (risultato) return risultato;
+        // Prova anche senza gruppo (fallback alla classifica globale)
+        const kBase = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        return (clSp[kBase]||[])[pos]?.sq||null;
+      }
+
+      // "SESTA MIGLIOR SECONDA", "DECIMA MIGLIOR SECONDA" ecc. — ordinali oltre quarta
+      const mOrd = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
+      if (mOrd) {
+        const pos = ORD[mOrd[1].toLowerCase()] ?? 0;
+        const tipo = mOrd[2].toLowerCase();
+        const grp = (mOrd[3]||'').replace(/-/g,'');
+        let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        if (grp) k += ' '+grp;
+        return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||clSp[k.split(' ').slice(0,-1).join(' ')]||[])[pos]?.sq||null;
       }
 
       // Vincente/Perdente QUARTO DI FINALE / SEMIFINALE / GARA — risolti da risultatiKnockout
