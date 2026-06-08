@@ -469,20 +469,11 @@ function renderCatBar() {
       </button>
     </div>`;
   } else if (STATE.isAdmin && multiCat) {
-    // Admin: stesso stile utente pubblico — nome categoria + tasto Cambia
-    catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
-      <span style="font-size:13px;font-weight:800;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${cat ? cat.nome : ''}
-      </span>
-      <button onclick="cambiaCategoria()"
-        style="flex-shrink:0;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
-               padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);
-               cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
-        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
-        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-2)'">
-        ⇄ Cambia
-      </button>
-    </div>`;
+    // Admin: pillole orizzontali scorrevoli
+    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
+      STATE.categorie.map(c =>
+        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})">${c.nome}</button>`
+      ).join('') + '</div>';
   }
   bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
   _renderGiornataBar();
@@ -528,17 +519,8 @@ function _trovaGiornataOggi(giornate) {
 }
 
 function _abbreviaNomeCat(nome) {
-  const abbr = {
-    'Girone Silver 1':'Silver 1','Girone Silver 2':'Silver 2',
-    'Girone Gold 1':'Gold 1','Girone Gold 2':'Gold 2',
-    'Pulcini 2016':'Pulcini','Esordienti 2013':'Esord. 2013',
-    'Esordienti 2014':'Esord. 2014','Girone Unico':'Girone Unico'
-  };
+  const abbr = {'Girone Silver 1':'Silver 1','Girone Silver 2':'Silver 2','Girone Gold 1':'Gold 1','Girone Gold 2':'Gold 2','Pulcini 2016':'Pulcini','Esordienti 2013':'Esord. 2013','Esordienti 2014':'Esord. 2014','Girone Unico':'Girone Unico'};
   if (abbr[nome]) return abbr[nome];
-  const n = nome.trim();
-  if (/ESORDIENTI/i.test(n)) return 'Esord. ' + (n.match(/\d{4}/)?.[0]||'');
-  if (/PRIMI\s+CALCI/i.test(n)) return 'P.Calci ' + (n.match(/\d{4}/)?.[0]||'');
-  if (/PULCINI/i.test(n)) return 'Pulcini ' + (n.match(/\d{4}/)?.[0]||'');
   return nome.length > 14 ? nome.substring(0, 13) + '…' : nome;
 }
 
@@ -1306,7 +1288,12 @@ async function renderTabellone() {
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
-  const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
+  const sqMap={};
+  squadre.forEach(s=>{
+    sqMap[s.id]=s;
+    // Aggiungi logo da _logoCache se disponibile
+    if (!s.logo && window._logoCache?.[s.id]) sqMap[s.id]={...s, logo:window._logoCache[s.id]};
+  });
   if (!ko.length) { el.innerHTML='<div class="empty-state">Tabellone non ancora generato.</div>'; return; }
   const ROUND_COLORS={'PLATINO':'#FFD700','GOLD':'#FFA500','SILVER':'#C0C0C0','BRONZO':'#CD7F32','WHITE':'#B0BEC5'};
   const renderRounds=(matches,label)=>{
@@ -1920,7 +1907,11 @@ async function renderAdminKnockout() {
   await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
-  const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
+  const sqMap={};
+  squadre.forEach(s=>{
+    sqMap[s.id]=s;
+    if (!s.logo && window._logoCache?.[s.id]) sqMap[s.id]={...s, logo:window._logoCache[s.id]};
+  });
   const pending=ko.filter(k=>(!k.home_id||!k.away_id)&&(k.note_home||k.note_away));
   let html='';
   if (pending.length) {
