@@ -3914,14 +3914,20 @@ async function simulaRisultati() {
   _simLog('⏳ Avvio simulazione...');
   try {
     const catId = STATE.activeCat || STATE.categorie[0]?.id;
-    let totale = 0; const MAX = 8;
+    let totale = 0; const MAX = 15;
     for (let pass = 1; pass <= MAX; pass++) {
       if (catId) {
+        // Reset cache resolver ad ogni passaggio per ricalcolare classifiche aggiornate
+        if (typeof _resolverCache !== 'undefined') delete _resolverCache[catId];
+        await _aggiornaResolver(catId);
         await verificaEGeneraTriangolari(catId);
         if (typeof _cacheClear === 'function') _cacheClear();
         if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
       }
-      const gironi = await getGironiWithData(catId); let nuovi = 0;
+      let nuovi = 0;
+
+      // ── Simula partite gironi ──
+      const gironi = await getGironiWithData(catId);
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
@@ -3933,6 +3939,28 @@ async function simulaRisultati() {
           _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
         }
       }
+
+      // ── Simula partite knockout ──
+      if (catId) {
+        const { data: koFresh } = await db.from('knockout')
+          .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away,categoria_id,is_consolazione,campo,orario')
+          .eq('categoria_id', catId);
+        const daGiocareKO = (koFresh||[]).filter(m => !m.giocata && m.home_id && m.away_id);
+        if (daGiocareKO.length) {
+          _simLog('Pass ' + pass + ' — Knockout: ' + daGiocareKO.length + ' partite');
+          for (const m of daGiocareKO) {
+            let gh = _golCasuale(), ga = _golCasuale();
+            if (gh === ga) gh++;
+            await dbSaveKnockoutMatch({
+              ...m, gol_home: gh, gol_away: ga,
+              giocata: true, inserito_da: '🤖 Simulazione'
+            });
+            nuovi++; totale++;
+            _simLog('✓ KO ' + m.round_name + ': ' + gh + '–' + ga);
+          }
+        }
+      }
+
       if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
     }
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
