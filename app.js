@@ -936,28 +936,13 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     return sp[pos]?.sq?.id || null;
   }
 
-  // "MIGLIOR SECONDA/TERZA/QUARTA" (1° posto) con suffisso opzionale 123/456/789
-  const mMig0 = s.match(/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
+  // "MIGLIOR SECONDA/TERZA/QUARTA" (1° posto)
+  const mMig0 = s.match(/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
   if (mMig0) {
     const tipo = mMig0[1].toLowerCase();
-    const grp = (mMig0[2]||'').replace(/-/g,'');
-    let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
-    if (grp) k += ' '+grp;
-    const sp = clSp[k] || window._clSpecGlobale?.[k] || clSp[k.split(' ').slice(0,-1).join(' ')] || window._clSpecGlobale?.[k.split(' ').slice(0,-1).join(' ')] || [];
+    const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
     return sp[0]?.sq?.id || null;
-  }
-
-  // "SESTA/SETTIMA/.../DECIMA MIGLIOR SECONDA 123" — ordinali lunghi con gruppo
-  const ORD_RP = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
-  const mOrdRP = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
-  if (mOrdRP) {
-    const pos = ORD_RP[mOrdRP[1].toLowerCase()] ?? 0;
-    const tipo = mOrdRP[2].toLowerCase();
-    const grp = (mOrdRP[3]||'').replace(/-/g,'');
-    let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
-    if (grp) k += ' '+grp;
-    const sp = clSp[k] || window._clSpecGlobale?.[k] || clSp[k.split(' ').slice(0,-1).join(' ')] || window._clSpecGlobale?.[k.split(' ').slice(0,-1).join(' ')] || [];
-    return sp[pos]?.sq?.id || null;
   }
 
   // Formato breve: "3°A" senza spazio
@@ -4145,7 +4130,7 @@ async function _aggiornaResolver(categoriaId) {
 
     if (!tuttePartite?.length) return;
 
-    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n);
+    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^\d+\s+[A-Z]/i.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n) || /^(vincente|perdente)\s/i.test(n);
     const sortFn = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
     const clG = {}, clSp = {};
 
@@ -4200,7 +4185,7 @@ async function _aggiornaResolver(categoriaId) {
         return (clSp[k]||[])[pos]?.sq||null;
       }
 
-      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123", "MIGLIOR SECONDA 123" ecc.
+      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123" ecc. (vecchio formato)
       const m2 = s.match(/^((?:prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+)?miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
       if (m2) {
         const pos = ORD[(m2[1]||'').trim().toLowerCase()] ?? 0;
@@ -4208,22 +4193,7 @@ async function _aggiornaResolver(categoriaId) {
         const grp = (m2[3]||'').replace(/-/g,'');
         let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
         if (grp) k += ' '+grp;
-        const risultato = (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
-        if (risultato) return risultato;
-        // Prova anche senza gruppo (fallback alla classifica globale)
-        const kBase = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
-        return (clSp[kBase]||[])[pos]?.sq||null;
-      }
-
-      // "SESTA MIGLIOR SECONDA", "DECIMA MIGLIOR SECONDA" ecc. — ordinali oltre quarta
-      const mOrd = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
-      if (mOrd) {
-        const pos = ORD[mOrd[1].toLowerCase()] ?? 0;
-        const tipo = mOrd[2].toLowerCase();
-        const grp = (mOrd[3]||'').replace(/-/g,'');
-        let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
-        if (grp) k += ' '+grp;
-        return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||clSp[k.split(' ').slice(0,-1).join(' ')]||[])[pos]?.sq||null;
+        return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
       }
 
       // Vincente/Perdente QUARTO DI FINALE / SEMIFINALE / GARA — risolti da risultatiKnockout
@@ -4354,6 +4324,15 @@ async function _aggiornaResolver(categoriaId) {
       const rn = ko.round_name.trim().toUpperCase();
       koByRound[rn] = ko;
       koByRound[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+      // Senza emoji: "⚔️ GARA 1" → "GARA 1"
+      const rnNoEmoji = rn.replace(/^[^A-Z0-9]+/i, '').trim();
+      if (rnNoEmoji !== rn) {
+        koByRound[rnNoEmoji] = ko;
+        koByRound[rnNoEmoji.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+      }
+      // Solo numero/lettera finale: "GARA 1" → "1", "GARA A" → "A"
+      const rnShort = rnNoEmoji.replace(/^GARA\s+/i, '').trim();
+      if (rnShort && rnShort !== rnNoEmoji) koByRound[rnShort] = ko;
     }
 
     // Funzione risolvi placeholder per knockout (usa clG, clSp, koByRound)
@@ -4361,12 +4340,29 @@ async function _aggiornaResolver(categoriaId) {
       if (!ph) return null;
       const s = ph.trim();
 
-      // Vincente/Perdente QUALCOSA
+      // Vincente/Perdente QUALCOSA (es. "Vincente GARA 1", "Vincente A", "Vincente 13")
       const mVP = s.match(/^(Vincente|Perdente)\s+(.+)$/i);
       if (mVP) {
         const tipo = mVP[1].toLowerCase();
         const rn = mVP[2].trim().toUpperCase();
-        const ko = koByRound[rn] || koByRound[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))];
+        // Prova varie forme
+        const kandidati = [
+          rn,
+          rn.replace(/(\d+)$/, m => m.padStart(2,'0')),
+          'GARA ' + rn,
+          'GARA ' + rn.replace(/(\d+)$/, m => m.padStart(2,'0')),
+        ];
+        let ko = null;
+        for (const k of kandidati) { ko = koByRound[k]; if (ko) break; }
+        // Fuzzy: trova chiave che termina con il testo cercato
+        if (!ko) {
+          const found = Object.keys(koByRound).find(k => {
+            const kc = k.replace(/[^A-Z0-9]/gi,'').toUpperCase();
+            const rc = rn.replace(/[^A-Z0-9]/gi,'').toUpperCase();
+            return kc === rc || kc === 'GARA'+rc;
+          });
+          if (found) ko = koByRound[found];
+        }
         if (!ko?.giocata) return null;
         const vince = ko.gol_home >= ko.gol_away ? ko.home_id : ko.away_id;
         const perde = ko.gol_home <= ko.gol_away ? ko.home_id : ko.away_id;
