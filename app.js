@@ -829,8 +829,8 @@ async function renderClassifiche() {
 
     var key = g.nome.toUpperCase().trim();
 
-    // Usa classifica dalla cache se disponibile
-    var cl = clGCache[key];
+    // Usa classifica dalla cache se disponibile (incluso _clGlobale per gironi Champions/Europa)
+    var cl = clGCache[key] || window._clGlobale?.[key];
 
     if (!cl || !cl.length) {
       // Fallback: calcola dalle partite
@@ -875,7 +875,8 @@ async function renderClassifiche() {
     });
 
     var played = g.partite.filter(function(p){return p.giocata;}).length;
-    if (played===0) continue;
+    // Mostra sempre se abbiamo una classifica valida (es. gironi Champions risolti ma non ancora giocati)
+    if (played===0 && (!cl || cl.length < 2)) continue;
 
     html += '<div class="card" style="margin-bottom:8px;">';
     html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
@@ -4109,18 +4110,23 @@ async function _aggiornaResolver(categoriaId) {
       const pGirone = (tuttePartite||[]).filter(p => p.girone_id === g.id);
       const sqMap = {};
       for (const p of pGirone) {
-        const hSq = (!p.home||isPlaceh(p.home.nome)) ? risolviSq(p.home?.nome) : p.home;
-        const aSq = (!p.away||isPlaceh(p.away.nome)) ? risolviSq(p.away?.nome) : p.away;
+        // Usa note_home/away come fallback se home/away è null o placeholder
+        const hNome = p.home?.nome || p.note_home || null;
+        const aNome = p.away?.nome || p.note_away || null;
+        const hSq = (!p.home||isPlaceh(hNome)) ? risolviSq(hNome) : p.home;
+        const aSq = (!p.away||isPlaceh(aNome)) ? risolviSq(aNome) : p.away;
         if (hSq?.id) sqMap[hSq.id] = hSq;
         if (aSq?.id) sqMap[aSq.id] = aSq;
       }
       const sq = Object.values(sqMap);
       if (sq.length < 2) continue;
-      const pRis = pGirone.map(p => ({
-        ...p,
-        home_id: ((!p.home||isPlaceh(p.home.nome))?risolviSq(p.home?.nome):p.home)?.id,
-        away_id: ((!p.away||isPlaceh(p.away.nome))?risolviSq(p.away?.nome):p.away)?.id,
-      }));
+      const pRis = pGirone.map(p => {
+        const hNome2 = p.home?.nome || p.note_home || null;
+        const aNome2 = p.away?.nome || p.note_away || null;
+        const hSq2 = (!p.home||isPlaceh(hNome2)) ? risolviSq(hNome2) : p.home;
+        const aSq2 = (!p.away||isPlaceh(aNome2)) ? risolviSq(aNome2) : p.away;
+        return { ...p, home_id: hSq2?.id || p.home_id, away_id: aSq2?.id || p.away_id };
+      });
       const cl = calcGironeClassifica({ squadre: sq, partite: pRis });
       if (cl.length) clG[nome] = cl;
     }
@@ -4147,18 +4153,23 @@ async function _aggiornaResolver(categoriaId) {
       const pGirone = (tuttePartite||[]).filter(p => p.girone_id === g.id);
       const sqMap = {};
       for (const p of pGirone) {
-        const hSq = (!p.home||isPlaceh(p.home.nome)) ? risolviSq(p.home?.nome) : p.home;
-        const aSq = (!p.away||isPlaceh(p.away.nome)) ? risolviSq(p.away?.nome) : p.away;
+        // Usa note_home/away come fallback se home/away è null o placeholder
+        const hNome = p.home?.nome || p.note_home || null;
+        const aNome = p.away?.nome || p.note_away || null;
+        const hSq = (!p.home||isPlaceh(hNome)) ? risolviSq(hNome) : p.home;
+        const aSq = (!p.away||isPlaceh(aNome)) ? risolviSq(aNome) : p.away;
         if (hSq?.id) sqMap[hSq.id] = hSq;
         if (aSq?.id) sqMap[aSq.id] = aSq;
       }
       const sq = Object.values(sqMap);
       if (sq.length < 2) continue;
-      const pRis = pGirone.map(p => ({
-        ...p,
-        home_id: ((!p.home||isPlaceh(p.home.nome))?risolviSq(p.home?.nome):p.home)?.id,
-        away_id: ((!p.away||isPlaceh(p.away.nome))?risolviSq(p.away?.nome):p.away)?.id,
-      }));
+      const pRis = pGirone.map(p => {
+        const hNome2 = p.home?.nome || p.note_home || null;
+        const aNome2 = p.away?.nome || p.note_away || null;
+        const hSq2 = (!p.home||isPlaceh(hNome2)) ? risolviSq(hNome2) : p.home;
+        const aSq2 = (!p.away||isPlaceh(aNome2)) ? risolviSq(aNome2) : p.away;
+        return { ...p, home_id: hSq2?.id || p.home_id, away_id: aSq2?.id || p.away_id };
+      });
       const cl = calcGironeClassifica({ squadre: sq, partite: pRis });
       if (cl.length) clG[nome] = cl;
     }
