@@ -653,6 +653,18 @@ function _risolviGruppi(lista, giocate) {
 //  RISOLUZIONE PLACEHOLDER
 //  *** FIX: totaleSlot — non aggiunge squadre oltre gli slot originali ***
 // ============================================================
+function _isPlaceholder(nome) {
+  if (!nome) return false;
+  const s = nome.trim();
+  if (/^\d+[\u00b0\u00ba*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+  // "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE" e varianti con 123/456
+  if (/^\d+[\u00b0\u00ba]\s+CLASSIFICA/i.test(s)) return true;
+  if (/^\d+[\u00b0\u00ba*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
+  if (/^(miglior|peggio)/i.test(s)) return true;
+  if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
+  return false;
+}
+
 function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={}, clSp={}) {
   if (!placeholder) return null;
   const s = placeholder.trim();
