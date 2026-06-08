@@ -1006,7 +1006,7 @@ async function renderClassifiche() {
   // Carica gironi prima (da cache statica), poi risolvi in background
   var gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
-  _aggiornaResolver(STATE.activeCat).catch(()=>{}); // in background
+  await _aggiornaResolver(STATE.activeCat).catch(()=>{});
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
@@ -1031,15 +1031,36 @@ async function renderClassifiche() {
 
     if (!cl || !cl.length) {
       // Fallback: calcola dalle partite
+      // Per gironi con placeholder (es. 1-10), risolvi le squadre tramite _clGlobale
       var sqMap = {};
       for (var pi=0; pi<g.partite.length; pi++) {
         var p = g.partite[pi];
-        if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
-        if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
+        var hSq = p.home;
+        var aSq = p.away;
+        // Risolvi placeholder usando window._clGlobale/_clSpecGlobale
+        if (!hSq || isPlaceh(hSq.nome)) {
+          var hNome = hSq ? hSq.nome : null;
+          hSq = _resolveNomePHtoSq(hNome) || hSq;
+        }
+        if (!aSq || isPlaceh(aSq.nome)) {
+          var aNome = aSq ? aSq.nome : null;
+          aSq = _resolveNomePHtoSq(aNome) || aSq;
+        }
+        if (hSq && hSq.id && !isPlaceh(hSq.nome)) sqMap[hSq.id]=hSq;
+        if (aSq && aSq.id && !isPlaceh(aSq.nome)) sqMap[aSq.id]=aSq;
       }
       var sq = Object.values(sqMap);
       if (sq.length < 2) continue;
-      cl = calcGironeClassifica({squadre:sq, partite:g.partite});
+      // Ricostruisci partite con id reali per il calcolo classifica
+      var partiteRisolte = g.partite.map(function(p) {
+        var hSq2 = (!p.home||isPlaceh(p.home.nome)) ? _resolveNomePHtoSq(p.home&&p.home.nome) : p.home;
+        var aSq2 = (!p.away||isPlaceh(p.away.nome)) ? _resolveNomePHtoSq(p.away&&p.away.nome) : p.away;
+        return Object.assign({}, p, {
+          home_id: hSq2 ? hSq2.id : p.home_id,
+          away_id: aSq2 ? aSq2.id : p.away_id
+        });
+      });
+      cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
     }
 
     if (!cl || !cl.length) continue;
@@ -1166,7 +1187,7 @@ async function renderRisultati() {
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
   // _aggiornaResolver in background — non blocca il caricamento
-  _aggiornaResolver(STATE.activeCat).catch(()=>{});
+  await _aggiornaResolver(STATE.activeCat).catch(()=>{});
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
   let tuttePartite = [];
@@ -4120,6 +4141,30 @@ function _resolveNomePH(nome) {
   return nome;
 }
 
+// Restituisce l'oggetto squadra {id,nome,logo} risolvendo un placeholder
+function _resolveNomePHtoSq(nome) {
+  if (!nome) return null;
+  const s = nome.trim();
+  const ORD = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
+  // "PRIMA GIRONE A", "SECONDA GIRONE 1"
+  const m1 = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
+  if (m1) { const pos=ORD[m1[1].toLowerCase()]??0; return window._clGlobale?.['GIRONE '+m1[2].toUpperCase()]?.[pos]?.sq||null; }
+  // "N° Girone X"
+  const m2 = s.match(/^(\d+)[°º\u00b0\u00ba]\s+(?:Girone\s+)?([A-Z0-9]+)$/i);
+  if (m2) { const pos=parseInt(m2[1])-1; const k='GIRONE '+m2[2].trim().toUpperCase(); return window._clGlobale?.[k]?.[pos]?.sq||null; }
+  // "N° MIGLIOR SECONDA/TERZA/QUARTA [123]"
+  const m3 = s.match(/^(?:(\d+)[°º]\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
+  if (m3) {
+    const pos=m3[1]?parseInt(m3[1])-1:0;
+    const tipo=m3[2].toLowerCase();
+    const grp=(m3[3]||'').replace(/-/g,'');
+    let k=tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    if(grp) k+=' '+grp;
+    return (window._clSpecGlobale?.[k]||[])[pos]?.sq||null;
+  }
+  return null;
+}
+
 // Cache per evitare chiamate ripetute in < 30s
 const _resolverCache = {};
 window._CACHE_TTL_OVERRIDE = 60000; // 60s cache
@@ -4128,35 +4173,45 @@ async function _aggiornaResolver(categoriaId) {
   if (!categoriaId) return;
   const now = Date.now();
   const lastRun = _resolverCache[categoriaId] || 0;
-  if (now - lastRun < 30000) {
-    console.log('[Resolver] Skip — eseguito', Math.round((now-lastRun)/1000), 's fa');
+  if (now - lastRun < 5000) {
     return;
   }
   _resolverCache[categoriaId] = now;
   try {
-    // Controlla se ci sono partite giocate — se no, non fare nulla
-    const { data: checkPartite } = await db.from('partite')
-      .select('id, gironi!inner(categoria_id)')
-      .eq('gironi.categoria_id', categoriaId)
-      .eq('giocata', true)
-      .limit(1);
-    if (!checkPartite?.length) {
+    // Usa getGironiWithData (legge da KV, non da Supabase direttamente)
+    const gironiKV = await getGironiWithData(categoriaId);
+    if (!gironiKV?.length) return;
+
+    // Controlla se ci sono partite giocate
+    const hasGiocate = gironiKV.some(g => g.partite?.some(p => p.giocata));
+    if (!hasGiocate) {
       console.log('[Resolver] Skip — nessuna partita giocata ancora');
       return;
     }
 
-    // SOLUZIONE SEMPLICE: legge tutte le partite con join squadre direttamente dal DB
-    const { data: gironiDB } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
-    if (!gironiDB?.length) return;
-
+    // Ricostruisce struttura gironiDB e tuttePartite dai dati KV
+    const gironiDB = gironiKV.map(g => ({ id: g.id, nome: g.nome }));
     const gironeIds = gironiDB.map(g => g.id);
 
-    // Carica TUTTE le partite con join squadre in una sola query
-    const { data: tuttePartite } = await db.from('partite')
-      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
-      .in('girone_id', gironeIds);
+    // Costruisce tuttePartite dai dati KV (già hanno home/away con nome e logo)
+    const tuttePartite = [];
+    for (const g of gironiKV) {
+      for (const p of (g.partite || [])) {
+        tuttePartite.push({
+          id: p.id,
+          girone_id: g.id,
+          home_id: p.home_id,
+          away_id: p.away_id,
+          gol_home: p.gol_home,
+          gol_away: p.gol_away,
+          giocata: p.giocata,
+          home: p.home || null,
+          away: p.away || null,
+        });
+      }
+    }
 
-    if (!tuttePartite?.length) return;
+    if (!tuttePartite.length) return;
 
     const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^\d+\s+[A-Z]/i.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n) || /^(vincente|perdente)\s/i.test(n);
     const sortFn = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
