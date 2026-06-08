@@ -1288,12 +1288,7 @@ async function renderTabellone() {
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
-  const sqMap={};
-  squadre.forEach(s=>{
-    sqMap[s.id]=s;
-    // Aggiungi logo da _logoCache se disponibile
-    if (!s.logo && window._logoCache?.[s.id]) sqMap[s.id]={...s, logo:window._logoCache[s.id]};
-  });
+  const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
   if (!ko.length) { el.innerHTML='<div class="empty-state">Tabellone non ancora generato.</div>'; return; }
   const ROUND_COLORS={'PLATINO':'#FFD700','GOLD':'#FFA500','SILVER':'#C0C0C0','BRONZO':'#CD7F32','WHITE':'#B0BEC5'};
   const renderRounds=(matches,label)=>{
@@ -1907,11 +1902,7 @@ async function renderAdminKnockout() {
   await verificaEGeneraTriangolari(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
-  const sqMap={};
-  squadre.forEach(s=>{
-    sqMap[s.id]=s;
-    if (!s.logo && window._logoCache?.[s.id]) sqMap[s.id]={...s, logo:window._logoCache[s.id]};
-  });
+  const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
   const pending=ko.filter(k=>(!k.home_id||!k.away_id)&&(k.note_home||k.note_away));
   let html='';
   if (pending.length) {
@@ -3923,14 +3914,17 @@ async function simulaRisultati() {
   _simLog('⏳ Avvio simulazione...');
   try {
     const catId = STATE.activeCat || STATE.categorie[0]?.id;
-    let totale = 0; const MAX = 8;
+    let totale = 0; const MAX = 10;
     for (let pass = 1; pass <= MAX; pass++) {
       if (catId) {
         await verificaEGeneraTriangolari(catId);
         if (typeof _cacheClear === 'function') _cacheClear();
         if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
       }
-      const gironi = await getGironiWithData(catId); let nuovi = 0;
+      let nuovi = 0;
+
+      // ── Simula partite gironi ──
+      const gironi = await getGironiWithData(catId);
       for (const g of gironi) {
         const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
@@ -3942,6 +3936,33 @@ async function simulaRisultati() {
           _simLog('✓ ' + (p.home?.nome||'?') + ' ' + gh + '–' + ga + ' ' + (p.away?.nome||'?'));
         }
       }
+
+      // ── Simula partite knockout (fase finale) ──
+      if (catId) {
+        const ko = await dbGetKnockout(catId);
+        // Ricarica dopo verificaEGeneraTriangolari
+        const { data: koFresh } = await db.from('knockout')
+          .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
+          .eq('categoria_id', catId);
+        const daGiocareKO = (koFresh||[]).filter(m => !m.giocata && m.home_id && m.away_id);
+        if (daGiocareKO.length) {
+          _simLog('Pass ' + pass + ' — Knockout: ' + daGiocareKO.length + ' partite');
+          for (const m of daGiocareKO) {
+            const gh = _golCasuale(), ga = _golCasuale();
+            // Evita pareggi nei knockout — se pari, aggiungi 1 a caso
+            const finalH = gh === ga ? gh + 1 : gh;
+            const finalA = gh === ga ? ga : ga;
+            await dbSaveKnockoutMatch({
+              ...m,
+              gol_home: finalH, gol_away: finalA,
+              giocata: true, inserito_da: '🤖 Simulazione'
+            });
+            nuovi++; totale++;
+            _simLog('✓ KO: ' + m.round_name + ' ' + finalH + '–' + finalA);
+          }
+        }
+      }
+
       if (nuovi === 0) { _simLog('✓ Completato in ' + pass + ' passaggi!'); break; }
     }
     if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
