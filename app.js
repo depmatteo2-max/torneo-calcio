@@ -4190,6 +4190,22 @@ async function _aggiornaResolver(categoriaId) {
     clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
     clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
 
+    // ── PASSO 2b: costruisci clSp per gruppi 123, 456, 789, 7-10 ──
+    // Deve essere fatto PRIMA del Passo 3 così i gironi 1-10 possono usarle
+    const keysNums_pre = Object.keys(clG).filter(k => /^GIRONE\s+\d+$/i.test(k));
+    // Gruppi fissi dal formato MC Lion
+    [[['1','2','3'],'123'],[['4','5','6'],'456'],[['7','8','9'],'789'],[['8','9','10'],'8910']].forEach(([nums, suf]) => {
+      const chiavi = nums.map(n => 'GIRONE '+n).filter(k => clG[k]);
+      if (!chiavi.length) return;
+      const s = makeSpec(chiavi, 1); const t = makeSpec(chiavi, 2); const q = makeSpec(chiavi, 3);
+      if (s.length) { clSp['CLASSIFICA MIGLIORI SECONDE '+suf] = s; clSp['CLASSIFICA MIGLIORI SECONDE '+nums.join('-')] = s; }
+      if (t.length) { clSp['CLASSIFICA MIGLIORI TERZE '+suf] = t; clSp['CLASSIFICA MIGLIORI TERZE '+nums.join('-')] = t; }
+      if (q.length) { clSp['CLASSIFICA MIGLIORI QUARTE '+suf] = q; clSp['CLASSIFICA MIGLIORI QUARTE '+nums.join('-')] = q; }
+    });
+    // Aggiorna globali subito
+    window._clGlobale = clG;
+    window._clSpecGlobale = clSp;
+
     // ── PASSO 3: risolve placeholder per Gironi 1-10 ──
     const ORD = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
     const risolviSq = (nome) => {
@@ -4251,14 +4267,15 @@ async function _aggiornaResolver(categoriaId) {
       if (cl.length) clG[nome] = cl;
     }
 
-    // ── PASSO 4: Migliori Seconde/Terze/Quarte da 1-3, 4-6, 7-9 ──
-    [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]]].forEach(([suf,nums]) => {
-      const chiavi = nums.map(n => 'GIRONE '+n);
+    // ── PASSO 4: Migliori Seconde/Terze/Quarte da 1-3, 4-6, 7-9, 8-9-10 ──
+    [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]].forEach(([suf,nums]) => {
+      const chiavi = nums.map(n => 'GIRONE '+n).filter(k => clG[k]);
+      if (!chiavi.length) return;
       ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
         const lista = makeSpec(chiavi, ti+1);
         if (lista.length) {
           clSp['CLASSIFICA MIGLIORI '+t+' '+suf] = lista;
-          clSp['CLASSIFICA MIGLIORI '+t+' '+suf.split('').join('-')] = lista;
+          clSp['CLASSIFICA MIGLIORI '+t+' '+nums.join('-')] = lista;
         }
       });
     });
