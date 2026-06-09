@@ -776,8 +776,12 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   return null;
 }
 
-async function verificaEGeneraTriangolari(categoriaId) {
+async function verificaEGeneraTriangolari(categoriaId, _pass) {
   try {
+    const _maxPass = 5; // max 5 passaggi per catene lunghe (es. PRIMI CALCI 2018)
+    const _curPass = _pass || 1;
+    // Dal pass 2 in poi: invalida cache per leggere dati freschi dal KV aggiornato
+    if (_curPass > 1 && typeof _cacheClear === 'function') _cacheClear();
     const gironiKV = await getGironiWithData(categoriaId);
     if (!gironiKV?.length) return;
 
@@ -917,6 +921,11 @@ async function verificaEGeneraTriangolari(categoriaId) {
     if (risolti > 0) {
       if (typeof _generaDataJson === 'function') await _generaDataJson().catch(()=>{});
       if (typeof _cacheClear === 'function') _cacheClear();
+      // Multi-pass: riesegui per risolvere catene di placeholder (es. Girone 1→Topolino)
+      if (_curPass < _maxPass) {
+        await verificaEGeneraTriangolari(categoriaId, _curPass + 1);
+        return; // il pass successivo gestisce render e notifica
+      }
       _mostraNotificaTriangolari();
       if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
       if (STATE.currentSection === 'tabellone') await renderTabellone();
@@ -4135,6 +4144,10 @@ async function _aggiornaResolver(categoriaId) {
   _resolverCache[categoriaId] = now;
   try {
     // Usa getGironiWithData (legge da KV, non da Supabase direttamente)
+    const _maxPass = 5; // max 5 passaggi per catene lunghe (es. PRIMI CALCI 2018)
+    const _curPass = _pass || 1;
+    // Dal pass 2 in poi: invalida cache per leggere dati freschi dal KV aggiornato
+    if (_curPass > 1 && typeof _cacheClear === 'function') _cacheClear();
     const gironiKV = await getGironiWithData(categoriaId);
     if (!gironiKV?.length) return;
 
