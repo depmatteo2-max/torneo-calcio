@@ -21,9 +21,13 @@ async function init() {
   window._appStartTime = Date.now();
   window._CACHE_TTL_OVERRIDE = 120000; // 2 minuti cache
 
-  // Pulisci cache sessione stale all'avvio
+  // Pulisci cache stale all'avvio
   try {
+    // Rimuovi cache categorie sessionStorage
     Object.keys(sessionStorage).filter(k => k.startsWith('mclion_cats_')).forEach(k => sessionStorage.removeItem(k));
+    // Rimuovi torneo salvato — viene ricalcolato dal KV ogni volta
+    localStorage.removeItem('spe_torneo');
+    localStorage.removeItem('spe_cat');
   } catch(e) {}
 
   // Mostra subito l'app nascondendo il loading
@@ -662,6 +666,8 @@ function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
   if (/^\d+[\u00b0\u00ba*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
+  // "1 GIRONE A" formato numerico senza °
+  if (/^\d+\s+(Girone|Gruppo)\s+/i.test(s)) return true;
   // "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE" e varianti con 123/456
   if (/^\d+[\u00b0\u00ba]\s+CLASSIFICA/i.test(s)) return true;
   if (/^\d+[\u00b0\u00ba*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
@@ -687,6 +693,14 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
     const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
     return tipo === 'vincente' ? vince : perde;
+  }
+
+  // Formato "N GIRONE X" senza simbolo ° (es. "1 GIRONE A", "4 GIRONE I")
+  const mNg = s.match(/^(\d+)\s+GIRONE\s+([A-Z0-9]+)$/i);
+  if (mNg) {
+    const pos = parseInt(mNg[1]) - 1;
+    const k = 'GIRONE ' + mNg[2].toUpperCase();
+    return classificheGironi[k]?.[pos]?.sq?.id || null;
   }
 
   // Formato principale: "N° NOME GIRONE"
@@ -4043,8 +4057,8 @@ function _resolveNomePHtoSq(nome) {
   // "PRIMA GIRONE A", "SECONDA GIRONE 1"
   const m1 = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
   if (m1) { const pos=ORD[m1[1].toLowerCase()]??0; return window._clGlobale?.['GIRONE '+m1[2].toUpperCase()]?.[pos]?.sq||null; }
-  // "N° Girone X"
-  const m2 = s.match(/^(\d+)[°º\u00b0\u00ba]\s+(?:Girone\s+)?([A-Z0-9]+)$/i);
+  // "N° Girone X" o "N Girone X" (con o senza °)
+  const m2 = s.match(/^(\d+)[°º\u00b0\u00ba]?\s+(?:Girone\s+)?([A-Z0-9]+)$/i);
   if (m2) { const pos=parseInt(m2[1])-1; const k='GIRONE '+m2[2].trim().toUpperCase(); return window._clGlobale?.[k]?.[pos]?.sq||null; }
   // "N° MIGLIOR SECONDA/TERZA/QUARTA [123]"
   const m3 = s.match(/^(?:(\d+)[°º]\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
@@ -4164,6 +4178,9 @@ async function _aggiornaResolver(categoriaId) {
       // "PRIMA GIRONE A", "QUARTA GIRONE 1"
       const m1 = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
       if (m1) { const pos=ORD[m1[1].toLowerCase()]??0; return clG['GIRONE '+m1[2].toUpperCase()]?.[pos]?.sq||null; }
+      // "1 GIRONE A", "2 GIRONE B" (formato numerico senza simbolo °)
+      const m1b = s.match(/^(\d+)\s+girone\s+([A-Z0-9]+)$/i);
+      if (m1b) { const pos=parseInt(m1b[1])-1; return clG['GIRONE '+m1b[2].toUpperCase()]?.[pos]?.sq||null; }
 
       // "N° Girone X" — es. "1° Girone A", "4° Girone I"
       const m3 = s.match(/^(\d+)[°º]\s+(Girone\s+.+)$/i);
