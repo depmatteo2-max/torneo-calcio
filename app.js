@@ -985,21 +985,36 @@ async function renderClassifiche() {
   var gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
   await _aggiornaResolver(STATE.activeCat).catch(()=>{});
+  // Forza calcolo classifiche per gironi con placeholder non ancora in _clGlobale
+  var _clGlobale = window._clGlobale || {};
+  var _clSpecGlobale = window._clSpecGlobale || {};
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
   var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^\d+\s+miglior/i.test(s)||/^(miglior|peggior)/i.test(s)||/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(s); };
 
   // Usa classifiche già calcolate da _aggiornaResolver se disponibili
-  var clGCache = window._clGlobale || {};
-  var clSpCache = window._clSpecGlobale || {};
+  var clGCache = _clGlobale;
+  var clSpCache = _clSpecGlobale;
 
   var statsPerSquadra = {};
   var classificheGironi = {};
   var html = '';
 
-  for (var gi=0; gi<gironi.length; gi++) {
-    var g = gironi[gi];
+  // Ordina gironi: prima reali (A-E), poi derivati (1-5), poi finali (Topolino ecc.)
+  // Garantisce che le dipendenze siano già calcolate quando servono
+  var _sortGirone = function(g) {
+    var n = (g.nome||'').toUpperCase();
+    if (/^GIRONE [A-E]$/.test(n)) return 0;      // A-E primi
+    if (/^GIRONE [F-L]$/.test(n)) return 1;      // F-L secondi
+    if (/^GIRONE \d+$/.test(n)) return 2;        // numerici terzi
+    if (/CLASSIFICA|MIGLIORI/i.test(n)) return 9; // speciali ultimi
+    return 5;                                      // Topolino ecc. dopo numerici
+  };
+  var gironiOrdinati = gironi.slice().sort(function(a,b){ return _sortGirone(a)-_sortGirone(b); });
+
+  for (var gi=0; gi<gironiOrdinati.length; gi++) {
+    var g = gironiOrdinati[gi];
     if (isClassif(g)) continue;
 
     var key = g.nome.toUpperCase().trim();
@@ -1049,6 +1064,10 @@ async function renderClassifiche() {
 
     if (!cl || !cl.length) continue;
     classificheGironi[key] = cl;
+    // Aggiorna cache globale con classifiche calcolate inline
+    if (!window._clGlobale) window._clGlobale = {};
+    window._clGlobale[key] = cl;
+    clGCache[key] = cl;
 
     cl.forEach(function(row,idx){
       if (!row.sq||!row.sq.id) return;
@@ -4178,7 +4197,10 @@ async function _aggiornaResolver(categoriaId) {
   if (!categoriaId) return;
   const now = Date.now();
   const lastRun = _resolverCache[categoriaId] || 0;
-  if (now - lastRun < 5000) {
+  // Controlla se abbiamo gironi non ancora calcolati — forza riesecuzione
+  const _hasUncalculated = typeof getGironiWithData === 'function' && 
+    !!window._clGlobale && Object.keys(window._clGlobale).length > 0;
+  if (now - lastRun < 2000) {
     return;
   }
   _resolverCache[categoriaId] = now;
