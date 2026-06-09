@@ -1157,6 +1157,40 @@ async function renderClassifiche() {
     }
   });
 
+  // ── Classifiche gironi dalla FASE_FINALE (Girone 1-5, Topolino ecc.) ──
+  // Questi gironi non sono nel KV ma in window._clGlobale dopo _aggiornaResolver
+  var clGAll = window._clGlobale || {};
+  var gironiKVNomi = new Set(gironi.map(function(g){return g.nome.toUpperCase().trim();}));
+  var gironiExtra = Object.keys(clGAll).filter(function(k){
+    return !gironiKVNomi.has(k) && clGAll[k].length >= 2 &&
+           !/CLASSIFICA/i.test(k) && !/MIGLIORI/i.test(k);
+  }).sort();
+
+  if (gironiExtra.length) {
+    html += '<div class="section-label">🏟️ Gironi Fase 2 / Finali</div>';
+    gironiExtra.forEach(function(key) {
+      var cl = clGAll[key];
+      if (!cl || cl.length < 2) return;
+      var played2 = cl.filter(function(r){return r.g > 0;}).length;
+      var badge = played2 > 0 ? '<span class="badge badge-gray">'+played2+' sq con partite</span>' : '';
+      html += '<div class="card" style="margin-bottom:8px;">';
+      html += '<div class="card-title">'+key+badge+'</div>';
+      html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GF</th><th>GS</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
+      cl.forEach(function(row,idx){
+        if (!row.sq) return;
+        var q=idx<(cat&&cat.qualificate||1);
+        var diff=row.gf-row.gs;
+        html += '<tr class="'+(q?'qualifies':'')+'"><td><span class="'+(q?'q-dot':'nq-dot')+'"></span></td>';
+        html += '<td>'+logoHTML(row.sq,'sm')+'</td><td>'+row.sq.nome+'</td>';
+        html += '<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
+        html += '<td>'+row.gf+'</td><td>'+row.gs+'</td>';
+        html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'">'+( diff>0?'+':'')+diff+'</td>';
+        html += '<td class="pts-col">'+row.pts+'</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+  }
+
   el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
 };
 

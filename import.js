@@ -25,6 +25,8 @@ function _getRoundMeta(roundRaw) {
   if (/^GIRONE\s+\d+$/.test(r)) { const n=parseInt(r.match(/\d+/)[0]); return { key:r, meta:{order:10+n, consolazione:n>6, emoji:'🏟️', desc:r} }; }
   // Girone lettera A-L
   if (/^GIRONE\s+[A-L]$/.test(r)) return { key:r, meta:{order:5, consolazione:false, emoji:'🏟️', desc:r} };
+  // Girone nome (TOPOLINO, PAPERINO, PIPPO, QUI, QUO, CHAMPIONS, EUROPA, ecc.)
+  if (/^GIRONE\s+\w+/.test(r)) { const ord = /TOPOLINO/i.test(r)?20:/PAPERINO/i.test(r)?21:/PIPPO/i.test(r)?22:/^GIRONE QUI/i.test(r)?23:/QUO/i.test(r)?24:25; return { key:r, meta:{order:ord, consolazione:ord>21, emoji:'🏟️', desc:r} }; }
   // Semifinale generica
   if (/^SEMIFINALE\s*\d*/.test(r)) { const n=parseInt(r.match(/\d+/)?.[0]||'1'); return { key:r, meta:{order:14+n, consolazione:false, emoji:'⚔️', desc:r} }; }
   // Quarto di finale
