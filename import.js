@@ -52,7 +52,7 @@ function _isPlaceholder(nome) {
   if (/^\d+[\u00b0\u00ba*]?\s+[A-Z]$/.test(n)) return true;
   if (/^(Vincente|Perdente)\s+/i.test(n)) return true;
   if (/^(miglior|peggior)/i.test(n)) return true;
-  if (/^(PRIMA|SECONDA|TERZA|QUARTA|QUINTA|SESTA)\s+(GIRONE|MIGLIOR)/i.test(n)) return true;
+  if (/^(PRIMA|SECONDA|TERZA|QUARTA|QUINTA|SESTA|SETTIMA|OTTAVA|NONA|DECIMA)\s+(GIRONE|MIGLIOR)/i.test(n)) return true;
   if (/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)/i.test(n)) return true;
   return false;
 }
