@@ -749,6 +749,19 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     return sp[0]?.sq?.id || null;
   }
 
+  // "SETTIMA MIGLIOR SECONDA", "QUARTA MIGLIOR TERZA" ecc. (parola ordinale + MIGLIOR)
+  const ORD_RP = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
+  const mOrd = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
+  if (mOrd) {
+    const pos = ORD_RP[mOrd[1].toLowerCase()] ?? 0;
+    const tipo = mOrd[2].toLowerCase();
+    const grp = (mOrd[3]||'').replace(/-/g,'');
+    let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    if (grp) k += ' ' + grp;
+    const sp = clSp[k] || clSp[k.replace(/\s(\d)(\d)(\d)$/,' $1-$2-$3')] || window._clSpecGlobale?.[k] || [];
+    return sp[pos]?.sq?.id || null;
+  }
+
   // Formato breve: "3°A" senza spazio
   const mShort = s.match(/^(\d+)[\u00b0\u00ba]([A-Za-z])$/);
   if (mShort) {
