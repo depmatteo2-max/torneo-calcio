@@ -827,6 +827,21 @@ async function verificaEGeneraTriangolari(categoriaId) {
       clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
       clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
     }
+    // Gironi numerici: costruisci anche classifiche globali (senza suffisso)
+    // utile per categorie con soli gironi numerici (es. PRIMI CALCI 2018 gironi 1-5)
+    const keysNumAll = Object.keys(classificheGironi).filter(k => /^GIRONE \d+$/.test(k));
+    if (keysNumAll.length && !keysAL.length) {
+      // Nessun girone A-L: le MIGLIORI SECONDE globali vengono dai gironi numerici
+      clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysNumAll, 1);
+      clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysNumAll, 2);
+      clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysNumAll, 3);
+    } else if (keysNumAll.length && keysAL.length) {
+      // Sia A-L che numerici: merge per avere classifiche complete
+      const allKeys = [...keysAL, ...keysNumAll];
+      clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(allKeys, 1);
+      clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(allKeys, 2);
+      clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(allKeys, 3);
+    }
     [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]].forEach(([suf,nums]) => {
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => classificheGironi[k]);
       if (!chiavi.length) return;
@@ -964,7 +979,7 @@ async function renderClassifiche() {
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
 
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
-  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s)||/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(s); };
+  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^\d+\s+miglior/i.test(s)||/^(miglior|peggior)/i.test(s)||/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(s); };
 
   // Usa classifiche già calcolate da _aggiornaResolver se disponibili
   var clGCache = window._clGlobale || {};
@@ -4154,7 +4169,7 @@ async function _aggiornaResolver(categoriaId) {
 
     if (!tuttePartite.length) return;
 
-    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^\d+\s+[A-Z]/i.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n) || /^(vincente|perdente)\s/i.test(n);
+    const isPlaceh = n => !n || /^\d+[°º]?\s/.test(n) || /^\d+\s+[A-Z]/i.test(n) || /^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s/i.test(n) || /^(miglior|peggior)/i.test(n) || /^\d+\s+miglior/i.test(n) || /^(vincente|perdente)\s/i.test(n);
     const sortFn = (a,b) => b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;
     const clG = {}, clSp = {};
 
@@ -4177,14 +4192,18 @@ async function _aggiornaResolver(categoriaId) {
 
     // ── PASSO 2: Migliori Seconde/Terze/Quarte da A-L ──
     const keysAL = Object.keys(clG).filter(k => /^GIRONE [A-LI]$/.test(k));
+    const keysNumAllAggr = Object.keys(clG).filter(k => /^GIRONE \d+$/.test(k));
     const makeSpec = (chiavi, pos) => {
       const lista = [];
       chiavi.forEach(k => { if (clG[k]?.[pos]) lista.push(clG[k][pos]); });
       return lista.sort(sortFn);
     };
-    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysAL, 1);
-    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
-    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
+    // Classifica globale: usa A-L se disponibili, altrimenti numerici, altrimenti merge
+    const keysGlobali = keysAL.length && keysNumAllAggr.length ? [...keysAL, ...keysNumAllAggr]
+                      : keysAL.length ? keysAL : keysNumAllAggr;
+    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysGlobali, 1);
+    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysGlobali, 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysGlobali, 3);
 
     // ── PASSO 2b: costruisci clSp per gruppi 123, 456, 789, 7-10 ──
     // Deve essere fatto PRIMA del Passo 3 così i gironi 1-10 possono usarle
