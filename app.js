@@ -807,6 +807,11 @@ async function verificaEGeneraTriangolari(categoriaId) {
       if (cl.length) classificheGironi[g.nome.toUpperCase().trim()] = cl;
     }
 
+    // Aggiorna window._clGlobale con classificheGironi calcolate
+    if (Object.keys(classificheGironi).length) {
+      window._clGlobale = Object.assign(window._clGlobale || {}, classificheGironi);
+    }
+
     // ── PASSO 2b: clSp — migliori seconde/terze da A-L e 1-10 ──
     const clSp = {};
     const makeSpec = (chiavi, pos) => {
@@ -832,6 +837,11 @@ async function verificaEGeneraTriangolari(categoriaId) {
       });
     });
 
+    // Aggiorna globale con clSp calcolato localmente
+    if (Object.keys(clSp).length) {
+      window._clSpecGlobale = Object.assign(window._clSpecGlobale || {}, clSp);
+    }
+
     // ── PASSO 3: knockout dal DB ──
     const { data: allKo } = await db.from('knockout')
       .select('id,round_name,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away')
@@ -841,6 +851,14 @@ async function verificaEGeneraTriangolari(categoriaId) {
       const rn = (ko.round_name||'').toUpperCase().trim();
       risultatiKnockout[rn] = ko;
       risultatiKnockout[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+      // Aggiungi anche versione senza emoji (es. "⚔️ GARA 1" → "GARA 1")
+      const rnNoEmoji = rn.replace(/^[^A-Z0-9]+/i, '').trim();
+      if (rnNoEmoji !== rn) {
+        risultatiKnockout[rnNoEmoji] = ko;
+        risultatiKnockout[rnNoEmoji.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+        // Anche lettere: "GARA A" → indicizza anche senza padding
+        risultatiKnockout[rnNoEmoji.replace(/\s+/g,' ')] = ko;
+      }
     }
 
     let risolti = 0;
