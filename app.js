@@ -730,12 +730,14 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     return null; // girone non ancora calcolato
   }
 
-  // "N° MIGLIOR SECONDA/TERZA/QUARTA" senza classificheGironi
-  const mMig = s.match(/^(\d+)[°º]\s+MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+  // "N° MIGLIOR SECONDA/TERZA/QUARTA" con ° oppure "N MIGLIOR SECONDA" senza °
+  const mMig = s.match(/^(\d+)[°º]?\s+MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
   if (mMig) {
     const pos = parseInt(mMig[1]) - 1;
     const tipo = mMig[2].toLowerCase();
-    const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    const grp = (mMig[3]||'').replace(/-/g,'');
+    let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+    if (grp) k += ' ' + grp;
     const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
     return sp[pos]?.sq?.id || null;
   }
@@ -4092,7 +4094,7 @@ function _resolveNomePHtoSq(nome) {
   const m2 = s.match(/^(\d+)[°º\u00b0\u00ba]?\s+(?:Girone\s+)?([A-Z0-9]+)$/i);
   if (m2) { const pos=parseInt(m2[1])-1; const k='GIRONE '+m2[2].trim().toUpperCase(); return window._clGlobale?.[k]?.[pos]?.sq||null; }
   // "N° MIGLIOR SECONDA/TERZA/QUARTA [123]"
-  const m3 = s.match(/^(?:(\d+)[°º]\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
+  const m3 = s.match(/^(?:(\d+)[°º]?\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
   if (m3) {
     const pos=m3[1]?parseInt(m3[1])-1:0;
     const tipo=m3[2].toLowerCase();
@@ -4218,7 +4220,7 @@ async function _aggiornaResolver(categoriaId) {
       if (m3) { const pos=parseInt(m3[1])-1; return clG[m3[2].trim().toUpperCase()]?.[pos]?.sq||null; }
 
       // "N° MIGLIOR SECONDA/TERZA/QUARTA" — es. "3° MIGLIOR SECONDA", "MIGLIOR TERZA"
-      const m4 = s.match(/^(?:(\d+)[°º]\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO]$/i);
+      const m4 = s.match(/^(?:(\d+)[°º]?\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
       if (m4) {
         const pos = m4[1] ? parseInt(m4[1])-1 : 0;
         const tipo = m4[2].toLowerCase();
