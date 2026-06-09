@@ -18,7 +18,7 @@ function _getRoundMeta(roundRaw) {
   if (!roundRaw) return null;
   const r = roundRaw.toUpperCase().trim();
   if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
-  // Girone Champions/Europa League
+  // Girone Champions/Europa League / nomi speciali
   if (/GIRONE\s+(CHAMPIONS|EUROPA|TOPOLINO|PAPERINO|PIPPO|QUI|QUO)/i.test(r))
     return { key: r, meta: { order: 20, consolazione: /EUROPA|QUI|QUO/i.test(r), emoji: /CHAMPIONS/i.test(r)?'🏆':'🌍', desc: r } };
   // Girone numerato 1-10
@@ -27,12 +27,21 @@ function _getRoundMeta(roundRaw) {
   if (/^GIRONE\s+[A-L]$/.test(r)) return { key:r, meta:{order:5, consolazione:false, emoji:'🏟️', desc:r} };
   // Semifinale generica
   if (/^SEMIFINALE\s*\d*/.test(r)) { const n=parseInt(r.match(/\d+/)?.[0]||'1'); return { key:r, meta:{order:14+n, consolazione:false, emoji:'⚔️', desc:r} }; }
-  // Finale generica
-  if (/^FINALE/.test(r)) return { key:r, meta:{order:25, consolazione:true, emoji:'🏅', desc:r} };
   // Quarto di finale
   if (/^QUARTO\s+DI\s+FINALE/i.test(r)) { const n=parseInt(r.match(/\d+/)?.[0]||'1'); return { key:r, meta:{order:30+n, consolazione:n>4, emoji:'⚔️', desc:r} }; }
-  // Gara N
-  if (/^GARA\s+\d+$/.test(r)) { const n=parseInt(r.match(/\d+/)[0]); return { key:r, meta:{order:30+n, consolazione:n>6, emoji:'⚔️', desc:r} }; }
+  // Gara numerica (GARA 1, GARA 12 ecc.) — quarti
+  if (/^GARA\s+\d+$/.test(r)) { const n=parseInt(r.match(/\d+/)[0]); return { key:r, meta:{order:40+n, consolazione:n>6, emoji:'⚔️', desc:r} }; }
+  // Gara lettera (GARA A, GARA B ... GARA N) — semifinali
+  if (/^GARA\s+[A-Z]$/.test(r)) { const code=r.charCodeAt(r.length-1)-64; return { key:r, meta:{order:55+code, consolazione:code>8, emoji:'⚔️', desc:r} }; }
+  // FINALI X/Y POSTO (es. FINALI 1/4 POSTO, FINALI 5/8 POSTO)
+  if (/^FINALI?\s+\d+\/\d+\s+POSTO/i.test(r)) {
+    const m=r.match(/(\d+)\/(\d+)/); const n=m?parseInt(m[1]):99;
+    return { key:r, meta:{order:70+n, consolazione:n>4, emoji:'🏅', desc:r} };
+  }
+  // FINALE generico
+  if (/^FINALE/.test(r)) return { key:r, meta:{order:65, consolazione:true, emoji:'🏅', desc:r} };
+  // Qualsiasi altro FINALI
+  if (/^FINALI/i.test(r)) return { key:r, meta:{order:90, consolazione:true, emoji:'🏅', desc:r} };
   return null;
 }
 
@@ -43,7 +52,8 @@ function _isPlaceholder(nome) {
   if (/^\d+[\u00b0\u00ba*]?\s+[A-Z]$/.test(n)) return true;
   if (/^(Vincente|Perdente)\s+/i.test(n)) return true;
   if (/^(miglior|peggior)/i.test(n)) return true;
-  if (/^(PRIMA|SECONDA|TERZA|QUARTA)\s+GIRONE/i.test(n)) return true;
+  if (/^(PRIMA|SECONDA|TERZA|QUARTA|QUINTA|SESTA)\s+(GIRONE|MIGLIOR)/i.test(n)) return true;
+  if (/^MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)/i.test(n)) return true;
   return false;
 }
 
@@ -114,12 +124,20 @@ function leggiPartiteFase2(wb) {
     .filter(r => {
       const cat   = String(r.categoria || r.CATEGORIA || '').trim();
       const round = String(r.round || r.ROUND || '').trim();
-      return cat && round && _getRoundMeta(round) !== null;
+      if (!cat || !round) return false;
+      // Accetta qualsiasi round riconoscibile O qualsiasi GARA/FINALE
+      const meta = _getRoundMeta(round);
+      if (meta) return true;
+      // Fallback: accetta comunque se ha squadra_casa e squadra_trasferta
+      const home = String(r.squadra_casa || r.home || '').trim();
+      const away = String(r.squadra_trasferta || r.away || '').trim();
+      return !!(home && away);
     })
     .map((r, idx) => {
       const roundRaw = String(r.round || r.ROUND || '').trim();
       const rm = _getRoundMeta(roundRaw);
-      const { key, meta } = rm;
+      const key = rm ? rm.key : roundRaw.toUpperCase().trim();
+      const meta = rm ? rm.meta : { order: 99+idx, consolazione: false, emoji: '⚔️', desc: roundRaw };
       return {
         categoria   : String(r.categoria || r.CATEGORIA || '').trim(),
         round       : key,
@@ -169,7 +187,6 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       const girId = girR.id;
       gironiMap[girone.nome] = girId;
 
-      // Importa tutte le squadre (reali e placeholder)
       for (let si = 0; si < girone.squadre.length; si++) {
         const nomeSq = girone.squadre[si];
         if (!nomeSq) continue;
@@ -184,7 +201,6 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         await db.from('girone_squadre').insert({ girone_id: girId, squadra_id: squadreMap[key], posizione: si });
       }
 
-      // Importa partite del girone
       const pGir = dati.partite.filter(p =>
         (p.categoria===cat.codice||p.categoria===cat.nome) && p.girone===girone.nome
       );
@@ -234,7 +250,6 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
     }
   }
 
-  // Aggiorna stato
   if (typeof STATE !== 'undefined' && typeof dbGetCategorie === 'function') {
     STATE.categorie = await dbGetCategorie(STATE.activeTorneo);
     STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
@@ -244,10 +259,8 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
 
   if (btn) { btn.disabled = true; btn.textContent = '✅ Importata'; btn.style.background='var(--verde)'; }
 
-  // Aggiorna KV automaticamente dopo ogni import
   try {
     if (typeof _generaDataJson === 'function') {
-      // Forza aggiornamento immediato (senza debounce)
       if (typeof _dataJsonTimer !== 'undefined') clearTimeout(_dataJsonTimer);
       const cats = await dbGetCategorie(torneoId);
       const catIds = cats.map(c => c.id);
@@ -262,7 +275,6 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       }));
       const tornei = await dbGetTornei();
       const catsByTorneo = {}; catsByTorneo[torneoId] = cats;
-      // Includi anche le squadre/loghi nel payload KV
       const { data: squadreKV } = await db.from('squadre').select('id,nome,logo,torneo_id').eq('torneo_id', torneoId);
       const logos = {};
       (squadreKV||[]).forEach(s => { logos[s.id] = { nome: s.nome, logo: s.logo||null }; });
@@ -273,7 +285,6 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer mclion2026' },
         body: JSON.stringify(payload)
       });
-      // Salva il torneo nel localStorage
       try { localStorage.setItem('spe_torneo', String(torneoId)); } catch(e) {}
       console.log('[Import] KV aggiornato automaticamente ✓');
     }
