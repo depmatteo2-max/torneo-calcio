@@ -1009,13 +1009,12 @@ async function renderClassifiche() {
 
     if (!cl || !cl.length) {
       // Fallback: calcola dalle partite
-      // Per gironi con placeholder (es. 1-10), risolvi le squadre tramite _clGlobale
+      // Per gironi con placeholder (es. 1-10, Topolino), risolvi le squadre tramite _clGlobale
       var sqMap = {};
       for (var pi=0; pi<g.partite.length; pi++) {
         var p = g.partite[pi];
         var hSq = p.home;
         var aSq = p.away;
-        // Risolvi placeholder usando window._clGlobale/_clSpecGlobale
         if (!hSq || isPlaceh(hSq.nome)) {
           var hNome = hSq ? hSq.nome : null;
           hSq = _resolveNomePHtoSq(hNome) || hSq;
@@ -1027,9 +1026,16 @@ async function renderClassifiche() {
         if (hSq && hSq.id && !isPlaceh(hSq.nome)) sqMap[hSq.id]=hSq;
         if (aSq && aSq.id && !isPlaceh(aSq.nome)) sqMap[aSq.id]=aSq;
       }
+      // Se non ci sono partite, prova a costruire la classifica dalle squadre del girone
+      if (Object.keys(sqMap).length < 2) {
+        (g.squadre||[]).forEach(function(sq) {
+          if (!sq || !sq.id) return;
+          var sqR = isPlaceh(sq.nome) ? _resolveNomePHtoSq(sq.nome) : sq;
+          if (sqR && sqR.id && !isPlaceh(sqR.nome)) sqMap[sqR.id] = sqR;
+        });
+      }
       var sq = Object.values(sqMap);
       if (sq.length < 2) continue;
-      // Ricostruisci partite con id reali per il calcolo classifica
       var partiteRisolte = g.partite.map(function(p) {
         var hSq2 = (!p.home||isPlaceh(p.home.nome)) ? _resolveNomePHtoSq(p.home&&p.home.nome) : p.home;
         var aSq2 = (!p.away||isPlaceh(p.away.nome)) ? _resolveNomePHtoSq(p.away&&p.away.nome) : p.away;
