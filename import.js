@@ -33,8 +33,8 @@ function _getRoundMeta(roundRaw) {
   if (/^GARA\s+\d+$/.test(r)) { const n=parseInt(r.match(/\d+/)[0]); return { key:r, meta:{order:40+n, consolazione:n>6, emoji:'⚔️', desc:r} }; }
   // Gara lettera (GARA A, GARA B ... GARA N) — semifinali
   if (/^GARA\s+[A-Z]$/.test(r)) { const code=r.charCodeAt(r.length-1)-64; return { key:r, meta:{order:55+code, consolazione:code>8, emoji:'⚔️', desc:r} }; }
-  // FINALI X/Y POSTO (es. FINALI 1/4 POSTO, FINALI 5/8 POSTO)
-  if (/^FINALI?\s+\d+\/\d+\s+POSTO/i.test(r)) {
+  // FINALI/FASE FINALE X/Y POSTO (es. FINALI 1/4 POSTO, FASE FINALE 1/3 POSTO)
+  if (/^(FINALI?|FASE\s+FINALE)\s+\d+\/\d+\s+POSTO/i.test(r)) {
     const m=r.match(/(\d+)\/(\d+)/); const n=m?parseInt(m[1]):99;
     return { key:r, meta:{order:70+n, consolazione:n>4, emoji:'🏅', desc:r} };
   }
