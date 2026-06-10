@@ -1202,6 +1202,12 @@ async function renderClassifiche() {
     // Mostra solo se TUTTI i gironi del gruppo esistono nella categoria
     var tuttiPresenti = nums.every(function(n){ return _gironiNumPresenti.has(n); });
     if (!tuttiPresenti) return;
+    // Mostra solo se quel suffisso è effettivamente usato come placeholder
+    // (evita di mostrare 1-2-3 se le seconde dei gironi 1-2-3 non servono)
+    var suffissoUsato = !!(clSp['CLASSIFICA MIGLIORI SECONDE '+suf] && clSp['CLASSIFICA MIGLIORI SECONDE '+suf].length > 0) ||
+                        !!(clSp['CLASSIFICA MIGLIORI TERZE '+suf] && clSp['CLASSIFICA MIGLIORI TERZE '+suf].length > 0) ||
+                        !!(clSp['CLASSIFICA MIGLIORI QUARTE '+suf] && clSp['CLASSIFICA MIGLIORI QUARTE '+suf].length > 0);
+    if (!suffissoUsato) return;
     var label = nums.join('-');
     var col = _coloriNum[ci % _coloriNum.length];
     var s=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE '+suf]||clSp['CLASSIFICA MIGLIORI SECONDE '+label]||[]);
