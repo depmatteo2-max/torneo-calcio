@@ -1178,11 +1178,35 @@ async function renderClassifiche() {
   }
 
   // ── Classifiche Migliori da Gironi 1-3, 4-6, 7-9 ──
-  [['123','1-2-3','#D42B2B'],['456','4-5-6','#1A4FA0'],['789','7-8-9','#059669']].forEach(function(x){
-    var g=x[0],label=x[1],col=x[2];
-    var s=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE '+g]||clSp['CLASSIFICA MIGLIORI SECONDE '+g.split('').join('-')]||[]);
-    var t=fmtG(clSp['CLASSIFICA MIGLIORI TERZE '+g]||clSp['CLASSIFICA MIGLIORI TERZE '+g.split('').join('-')]||[]);
-    var q=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE '+g]||clSp['CLASSIFICA MIGLIORI QUARTE '+g.split('').join('-')]||[]);
+  // Mostra classifiche migliori numeriche solo per gruppi i cui gironi esistono TUTTI
+  // Calcola quali gironi numerici esistono in questa categoria
+  var _gironiNumPresenti = new Set(
+    gironi.map(function(g){ return g.nome.toUpperCase().trim(); })
+          .filter(function(n){ return /^GIRONE \d+$/.test(n); })
+          .map(function(n){ return parseInt(n.match(/\d+/)[0]); })
+  );
+  var _coloriNum = ['#D42B2B','#1A4FA0','#059669','#9333ea','#ea580c','#0891b2'];
+  // Gruppi fissi: mostra solo se TUTTI i gironi del gruppo esistono
+  var _gruppiNum = [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]]];
+  // Aggiungi gruppi dinamici presenti in clSp ma non nei fissi
+  Object.keys(clSp).forEach(function(k) {
+    var m = k.match(/CLASSIFICA MIGLIORI SECONDE (\d+)$/);
+    if (!m) return;
+    var suf = m[1];
+    if (_gruppiNum.find(function(x){return x[0]===suf;})) return;
+    var nums = suf.split('').map(Number);
+    _gruppiNum.push([suf, nums]);
+  });
+  _gruppiNum.forEach(function(entry, ci) {
+    var suf = entry[0], nums = entry[1];
+    // Mostra solo se TUTTI i gironi del gruppo esistono nella categoria
+    var tuttiPresenti = nums.every(function(n){ return _gironiNumPresenti.has(n); });
+    if (!tuttiPresenti) return;
+    var label = nums.join('-');
+    var col = _coloriNum[ci % _coloriNum.length];
+    var s=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE '+suf]||clSp['CLASSIFICA MIGLIORI SECONDE '+label]||[]);
+    var t=fmtG(clSp['CLASSIFICA MIGLIORI TERZE '+suf]||clSp['CLASSIFICA MIGLIORI TERZE '+label]||[]);
+    var q=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE '+suf]||clSp['CLASSIFICA MIGLIORI QUARTE '+label]||[]);
     if(s.length||t.length||q.length) {
       html+='<div class="section-label">🏅 Classifiche Migliori — Gironi '+label+'</div>';
       if(s.length) html+=mkSpeciale(s,'🥈 Migliori Seconde Gironi '+label,col);
