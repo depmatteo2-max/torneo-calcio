@@ -4206,10 +4206,6 @@ async function _aggiornaResolver(categoriaId) {
   _resolverCache[categoriaId] = now;
   try {
     // Usa getGironiWithData (legge da KV, non da Supabase direttamente)
-    const _maxPass = 5; // max 5 passaggi per catene lunghe (es. PRIMI CALCI 2018)
-    const _curPass = _pass || 1;
-    // Dal pass 2 in poi: invalida cache per leggere dati freschi dal KV aggiornato
-    if (_curPass > 1 && typeof _cacheClear === 'function') _cacheClear();
     const gironiKV = await getGironiWithData(categoriaId);
     if (!gironiKV?.length) return;
 
