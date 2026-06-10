@@ -229,6 +229,62 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       }
     }
 
+    // Crea gironi impliciti: gironi presenti in PARTITE_FASE1 ma non nel foglio GIRONI
+    const gironiImpliciti = [...new Set(
+      dati.partite
+        .filter(p => p.categoria===cat.codice||p.categoria===cat.nome)
+        .map(p => p.girone)
+    )].filter(g => g && !gironiMap[g]);
+
+    for (const gironeNome of gironiImpliciti) {
+      const { data: girR2, error: gErr2 } = await db.from('gironi').insert({
+        categoria_id: catId, nome: gironeNome
+      }).select('id').single();
+      if (gErr2) { console.warn('Girone implicito:', gErr2.message); continue; }
+      const girId2 = girR2.id;
+      gironiMap[gironeNome] = girId2;
+
+      // Raccoglie squadre uniche dalle partite di questo girone
+      const pGirImpl = dati.partite.filter(p =>
+        (p.categoria===cat.codice||p.categoria===cat.nome) && p.girone===gironeNome
+      );
+      const squadreGirone = new Set();
+      pGirImpl.forEach(p => { squadreGirone.add(p.home); squadreGirone.add(p.away); });
+
+      let pos = 0;
+      for (const nomeSq of squadreGirone) {
+        if (!nomeSq) continue;
+        const key = `${torneoId}||${nomeSq}`;
+        if (!squadreMap[key]) {
+          const { data: sqR2, error: sqErr2 } = await db.from('squadre').insert({
+            torneo_id: torneoId, nome: nomeSq
+          }).select('id').single();
+          if (sqErr2) { console.warn('Squadra:', sqErr2.message); continue; }
+          squadreMap[key] = sqR2.id;
+        }
+        await db.from('girone_squadre').insert({ girone_id: girId2, squadra_id: squadreMap[key], posizione: pos++ });
+      }
+
+      // Importa partite del girone implicito
+      for (const p of pGirImpl) {
+        const hPH = _isPlaceholder(p.home);
+        const aPH = _isPlaceholder(p.away);
+        const hId = squadreMap[`${torneoId}||${p.home}`] || null;
+        const aId = squadreMap[`${torneoId}||${p.away}`] || null;
+        const giornoVal = p.giornata || p.giorno || null;
+        await db.from('partite').insert({
+          girone_id: girId2,
+          home_id: hId, away_id: aId,
+          note_home: hPH ? p.home : null,
+          note_away: aPH ? p.away : null,
+          orario: p.orario || null,
+          giorno: giornoVal, giornata: giornoVal,
+          campo: p.campo || null,
+          giocata: false
+        });
+      }
+    }
+
     // Fase finale (knockout)
     const fase2Cat = dati.fase2.filter(p => p.categoria===cat.codice||p.categoria===cat.nome);
     for (let mi = 0; mi < fase2Cat.length; mi++) {
