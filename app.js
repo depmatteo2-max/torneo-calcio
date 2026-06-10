@@ -846,7 +846,22 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
       clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(allKeys, 2);
       clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(allKeys, 3);
     }
-    [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]].forEach(([suf,nums]) => {
+    // Genera gruppi sia statici che dinamici da tutti i gironi numerici presenti
+    const _allNumKeys = Object.keys(classificheGironi).filter(k => /^GIRONE \d+$/.test(k));
+    const _numVals = _allNumKeys.map(k => parseInt(k.match(/\d+/)[0])).sort((a,b)=>a-b);
+    // Gruppi fissi
+    const _gruppiNumerici = [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]];
+    // Aggiungi gruppi dinamici da 3 consecutivi
+    for (let i=0; i<_numVals.length-1; i++) {
+      for (let j=i+1; j<Math.min(i+4,_numVals.length); j++) {
+        const grp = _numVals.slice(i, j+1);
+        if (grp.length >= 2) {
+          const suf = grp.join('');
+          if (!_gruppiNumerici.find(g => g[0]===suf)) _gruppiNumerici.push([suf, grp]);
+        }
+      }
+    }
+    _gruppiNumerici.forEach(([suf,nums]) => {
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => classificheGironi[k]);
       if (!chiavi.length) return;
       ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
@@ -4362,7 +4377,20 @@ async function _aggiornaResolver(categoriaId) {
     }
 
     // ── PASSO 4: Migliori Seconde/Terze/Quarte da 1-3, 4-6, 7-9, 8-9-10 ──
-    [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]].forEach(([suf,nums]) => {
+    // Gruppi numerici dinamici (123, 456, 789, 345, ecc.)
+    const _allNumKeysAggr = Object.keys(clG).filter(k => /^GIRONE \d+$/.test(k));
+    const _numValsAggr = _allNumKeysAggr.map(k => parseInt(k.match(/\d+/)[0])).sort((a,b)=>a-b);
+    const _gruppiAggr = [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]];
+    for (let i=0; i<_numValsAggr.length-1; i++) {
+      for (let j=i+1; j<Math.min(i+4,_numValsAggr.length); j++) {
+        const grp = _numValsAggr.slice(i, j+1);
+        if (grp.length >= 2) {
+          const suf = grp.join('');
+          if (!_gruppiAggr.find(g => g[0]===suf)) _gruppiAggr.push([suf, grp]);
+        }
+      }
+    }
+    _gruppiAggr.forEach(([suf,nums]) => {
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => clG[k]);
       if (!chiavi.length) return;
       ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
