@@ -831,21 +831,8 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
       clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
       clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
     }
-    // Gironi numerici: costruisci anche classifiche globali (senza suffisso)
-    // utile per categorie con soli gironi numerici (es. PRIMI CALCI 2018 gironi 1-5)
-    const keysNumAll = Object.keys(classificheGironi).filter(k => /^GIRONE \d+$/.test(k));
-    if (keysNumAll.length && !keysAL.length) {
-      // Nessun girone A-L: le MIGLIORI SECONDE globali vengono dai gironi numerici
-      clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysNumAll, 1);
-      clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysNumAll, 2);
-      clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysNumAll, 3);
-    } else if (keysNumAll.length && keysAL.length) {
-      // Sia A-L che numerici: merge per avere classifiche complete
-      const allKeys = [...keysAL, ...keysNumAll];
-      clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(allKeys, 1);
-      clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(allKeys, 2);
-      clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(allKeys, 3);
-    }
+    // NON costruire classifica globale dai gironi numerici —
+    // quelli usano sempre il suffisso (123, 345, 456 ecc.)
     // Genera gruppi sia statici che dinamici da tutti i gironi numerici presenti
     const _allNumKeys = Object.keys(classificheGironi).filter(k => /^GIRONE \d+$/.test(k));
     const _numVals = _allNumKeys.map(k => parseInt(k.match(/\d+/)[0])).sort((a,b)=>a-b);
@@ -4314,12 +4301,11 @@ async function _aggiornaResolver(categoriaId) {
       chiavi.forEach(k => { if (clG[k]?.[pos]) lista.push(clG[k][pos]); });
       return lista.sort(sortFn);
     };
-    // Classifica globale: usa A-L se disponibili, altrimenti numerici, altrimenti merge
-    const keysGlobali = keysAL.length && keysNumAllAggr.length ? [...keysAL, ...keysNumAllAggr]
-                      : keysAL.length ? keysAL : keysNumAllAggr;
-    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysGlobali, 1);
-    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysGlobali, 2);
-    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysGlobali, 3);
+    // Classifica globale: solo dai gironi A-L
+    // I gironi numerici usano sempre il suffisso (123, 345, ecc.) — non la globale
+    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysAL, 1);
+    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
+    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
 
     // ── PASSO 2b: costruisci clSp per gruppi 123, 456, 789, 7-10 ──
     // Deve essere fatto PRIMA del Passo 3 così i gironi 1-10 possono usarle
