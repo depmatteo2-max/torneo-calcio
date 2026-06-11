@@ -991,6 +991,8 @@ async function renderClassifiche() {
   // Carica gironi prima (da cache statica), poi risolvi in background
   var gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
+  // Forza esecuzione _aggiornaResolver (reset throttle cache)
+  if (typeof _resolverCache !== 'undefined') delete _resolverCache[STATE.activeCat];
   await _aggiornaResolver(STATE.activeCat).catch(()=>{});
   // Forza calcolo classifiche per gironi con placeholder non ancora in _clGlobale
   var _clGlobale = window._clGlobale || {};
@@ -4285,8 +4287,19 @@ async function _aggiornaResolver(categoriaId) {
     const gironiKV = await getGironiWithData(categoriaId);
     if (!gironiKV?.length) return;
 
-    // Controlla se ci sono partite giocate
-    const hasGiocate = gironiKV.some(g => g.partite?.some(p => p.giocata));
+    // Controlla se ci sono partite giocate (usa sia KV che query diretta)
+    const hasGiocateKV = gironiKV.some(g => g.partite?.some(p => p.giocata));
+    // Se KV non ha partite giocate, verifica direttamente nel DB
+    let hasGiocate = hasGiocateKV;
+    if (!hasGiocateKV) {
+      try {
+        const { count } = await db.from('partite')
+          .select('id', { count: 'exact', head: true })
+          .eq('giocata', true)
+          .in('girone_id', gironiKV.map(g => g.id).filter(Boolean));
+        hasGiocate = (count || 0) > 0;
+      } catch(e) {}
+    }
     if (!hasGiocate) {
       console.log('[Resolver] Skip — nessuna partita giocata ancora');
       return;
