@@ -4371,9 +4371,14 @@ async function _aggiornaResolver(categoriaId) {
     };
     // Classifica globale: solo dai gironi A-L
     // I gironi numerici usano sempre il suffisso (123, 345, ecc.) — non la globale
-    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpec(keysAL, 1);
-    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpec(keysAL, 2);
-    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpec(keysAL, 3);
+    const _sec = makeSpec(keysAL, 1);
+    const _secIds = new Set(_sec.map(r => r.sq?.id).filter(Boolean));
+    const _ter = makeSpec(keysAL, 2).filter(r => !_secIds.has(r.sq?.id));
+    const _terIds = new Set(_ter.map(r => r.sq?.id).filter(Boolean));
+    const _qua = makeSpec(keysAL, 3).filter(r => !_secIds.has(r.sq?.id) && !_terIds.has(r.sq?.id));
+    clSp['CLASSIFICA MIGLIORI SECONDE'] = _sec;
+    clSp['CLASSIFICA MIGLIORI TERZE']   = _ter;
+    clSp['CLASSIFICA MIGLIORI QUARTE']  = _qua;
 
     // ── PASSO 2b: costruisci clSp per gruppi 123, 456, 789, 7-10 ──
     // Deve essere fatto PRIMA del Passo 3 così i gironi 1-10 possono usarle
@@ -4467,13 +4472,14 @@ async function _aggiornaResolver(categoriaId) {
       // Solo se TUTTI i gironi del gruppo esistono
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => clG[k]);
       if (chiavi.length !== nums.length) return;
-      ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
-        const lista = makeSpec(chiavi, ti+1);
-        if (lista.length) {
-          clSp['CLASSIFICA MIGLIORI '+t+' '+suf] = lista;
-          clSp['CLASSIFICA MIGLIORI '+t+' '+nums.join('-')] = lista;
-        }
-      });
+      const _s = makeSpec(chiavi, 1);
+      const _sIds = new Set(_s.map(r=>r.sq?.id).filter(Boolean));
+      const _t = makeSpec(chiavi, 2).filter(r=>!_sIds.has(r.sq?.id));
+      const _tIds = new Set(_t.map(r=>r.sq?.id).filter(Boolean));
+      const _q = makeSpec(chiavi, 3).filter(r=>!_sIds.has(r.sq?.id)&&!_tIds.has(r.sq?.id));
+      if (_s.length) { clSp['CLASSIFICA MIGLIORI SECONDE '+suf]=_s; clSp['CLASSIFICA MIGLIORI SECONDE '+nums.join('-')]=_s; }
+      if (_t.length) { clSp['CLASSIFICA MIGLIORI TERZE '+suf]=_t; clSp['CLASSIFICA MIGLIORI TERZE '+nums.join('-')]=_t; }
+      if (_q.length) { clSp['CLASSIFICA MIGLIORI QUARTE '+suf]=_q; clSp['CLASSIFICA MIGLIORI QUARTE '+nums.join('-')]=_q; }
     });
 
     // ── PASSO 4.5: Gironi Numerici (es. Girone 1-5 del 2018) ──
