@@ -928,7 +928,53 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         .sort((a,b) => a.nome.localeCompare(b.nome))
     ];
     // Loop unico su tutti i gironi in ordine (numerici → Champions/Europa)
+    // Dopo aver risolto tutti i Gironi numerici, aggiorna clSp con le loro classifiche
+    // così i Gironi Champions/Europa possono usare "MIGLIOR SECONDA 123" ecc.
+    let _numericiBatch = false;
     for (const g of _gironiDaRisolvere) {
+      // Punto di transizione: terminati i gironi numerici, ricalcola clSp
+      const _isNumerico = /^GIRONE\s+\d+$/i.test(g.nome);
+      if (!_isNumerico && !_numericiBatch) {
+        _numericiBatch = true;
+        // Ricalcola classifiche dei gironi numerici da KV (fresco)
+        const _clNum = {};
+        for (const gKV of gironiKV) {
+          if (!/^GIRONE\s+\d+$/i.test(gKV.nome)) continue;
+          const giocate = (gKV.partite||[]).filter(p =>
+            p.giocata && p.home_id && p.away_id &&
+            !_isPlaceholder(p.home?.nome) && !_isPlaceholder(p.away?.nome)
+          );
+          if (!giocate.length) continue;
+          const sqMap2 = {};
+          giocate.forEach(p => {
+            if (p.home?.id) sqMap2[p.home.id] = p.home;
+            if (p.away?.id) sqMap2[p.away.id] = p.away;
+          });
+          const sq2 = Object.values(sqMap2);
+          if (sq2.length < 2) continue;
+          const cl2 = calcGironeClassifica({ squadre: sq2, partite: giocate });
+          if (cl2.length) _clNum[gKV.nome.toUpperCase().trim()] = cl2;
+        }
+        // Aggiorna classificheGironi con i gironi numerici calcolati
+        Object.assign(classificheGironi, _clNum);
+        // Ricalcola clSp per gruppi 123, 456, 789
+        [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]]].forEach(([suf,nums]) => {
+          const chiavi = nums.map(n => 'GIRONE '+n).filter(k => classificheGironi[k]);
+          if (chiavi.length !== nums.length) return;
+          const _ms = []; const _mt = []; const _mq = [];
+          chiavi.forEach(k => {
+            if (classificheGironi[k]?.[1]) _ms.push(classificheGironi[k][1]);
+            if (classificheGironi[k]?.[2]) _mt.push(classificheGironi[k][2]);
+            if (classificheGironi[k]?.[3]) _mq.push(classificheGironi[k][3]);
+          });
+          if (_ms.length) { clSp['CLASSIFICA MIGLIORI SECONDE '+suf] = _ms.sort(sortFn); }
+          if (_mt.length) { clSp['CLASSIFICA MIGLIORI TERZE '+suf]   = _mt.sort(sortFn); }
+          if (_mq.length) { clSp['CLASSIFICA MIGLIORI QUARTE '+suf]  = _mq.sort(sortFn); }
+        });
+        // Aggiorna globale
+        window._clGlobale = Object.assign(window._clGlobale || {}, classificheGironi);
+        window._clSpecGlobale = Object.assign(window._clSpecGlobale || {}, clSp);
+      }
       // Step 1: raccogli tutti gli slot placeholder UNICI del girone
       const slotMap = {};
       for (const p of (g.partite||[])) {
@@ -4511,16 +4557,22 @@ async function _aggiornaResolver(categoriaId) {
       const m3 = s.match(/^(\d+)[°º]\s+(Girone\s+.+)$/i);
       if (m3) { const pos=parseInt(m3[1])-1; return clG[m3[2].trim().toUpperCase()]?.[pos]?.sq||null; }
 
-      // "N° MIGLIOR SECONDA/TERZA/QUARTA" — es. "3° MIGLIOR SECONDA", "MIGLIOR TERZA"
+      // "N° MIGLIOR SECONDA/TERZA/QUARTA [suf]" — es. "MIGLIOR SECONDA 123", "TERZA MIGLIOR TERZA 456"
+      // Cattura: (pos opzionale)(MIGLIOR SECONDA/TERZA/QUARTA)(suffisso numerico opzionale)
       const m4 = s.match(/^(?:(\d+)[°º]?\s+)?MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
       if (m4) {
         const pos = m4[1] ? parseInt(m4[1])-1 : 0;
         const tipo = m4[2].toLowerCase();
-        const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
-        return (clSp[k]||[])[pos]?.sq||null;
+        const grp = (m4[3]||'').replace(/-/g,''); // es. "123", "456", "789"
+        let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
+        if (grp) k += ' '+grp;
+        // Prova prima clSp locale (aggiornato dal Passo 4c), poi globale
+        const lista = clSp[k] || window._clSpecGlobale?.[k] || clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')] || [];
+        return lista[pos]?.sq||null;
       }
 
-      // "MIGLIOR SECONDA", "TERZA MIGLIOR SECONDA 123" ecc. (vecchio formato)
+      // "TERZA MIGLIOR SECONDA 123" — formato ordinale + MIGLIOR (già gestito da m4 sopra,
+      // ma questo gestisce ordinali come "SECONDA MIGLIOR SECONDA 123" in modo esplicito)
       const m2 = s.match(/^((?:prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+)?miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
       if (m2) {
         const pos = ORD[(m2[1]||'').trim().toLowerCase()] ?? 0;
@@ -4528,7 +4580,8 @@ async function _aggiornaResolver(categoriaId) {
         const grp = (m2[3]||'').replace(/-/g,'');
         let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
         if (grp) k += ' '+grp;
-        return (clSp[k]||clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')]||[])[pos]?.sq||null;
+        const lista = clSp[k] || window._clSpecGlobale?.[k] || clSp[k.replace(/(\d)(\d)(\d)$/,'$1-$2-$3')] || [];
+        return lista[pos]?.sq||null;
       }
 
       // Vincente/Perdente QUARTO DI FINALE / SEMIFINALE / GARA — risolti da risultatiKnockout
@@ -4607,6 +4660,29 @@ async function _aggiornaResolver(categoriaId) {
       const cl = calcGironeClassifica({ squadre: sq, partite: pRis });
       if (cl.length) clG[nome] = cl;
     }
+
+    // ── PASSO 4c: Ricalcola clSp gruppi numerici CON i Gironi 1-9 ora disponibili ──
+    // DEVE stare dopo il Passo 4.5 perché solo ora clG['GIRONE 1'...'GIRONE 9'] esistono.
+    // Serve per risolvere placeholder dei Gironi Champions/Europa come:
+    //   "PRIMA GIRONE 1"          → clG['GIRONE 1'][0]
+    //   "MIGLIOR SECONDA 123"     → migliore seconda tra Gironi 1,2,3
+    //   "TERZA MIGLIOR TERZA 123" → 3a migliore terza tra Gironi 1,2,3
+    //   "QUARTA GIRONE 1"         → clG['GIRONE 1'][3]
+    [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]]].forEach(([suf,nums]) => {
+      const chiavi = nums.map(n => 'GIRONE '+n).filter(k => clG[k]);
+      if (chiavi.length !== nums.length) return; // solo se TUTTI e 3 i gironi del gruppo esistono
+      const _s4c = makeSpec(chiavi, 1);
+      const _s4cIds = new Set(_s4c.map(r=>r.sq?.id).filter(Boolean));
+      const _t4c = makeSpec(chiavi, 2).filter(r=>!_s4cIds.has(r.sq?.id));
+      const _t4cIds = new Set(_t4c.map(r=>r.sq?.id).filter(Boolean));
+      const _q4c = makeSpec(chiavi, 3).filter(r=>!_s4cIds.has(r.sq?.id)&&!_t4cIds.has(r.sq?.id));
+      if (_s4c.length) clSp['CLASSIFICA MIGLIORI SECONDE '+suf] = _s4c;
+      if (_t4c.length) clSp['CLASSIFICA MIGLIORI TERZE '+suf]   = _t4c;
+      if (_q4c.length) clSp['CLASSIFICA MIGLIORI QUARTE '+suf]  = _q4c;
+    });
+    // Aggiorna globali subito così risolviSq (chiamata nel Passo 5) li vede
+    window._clGlobale    = Object.assign(window._clGlobale    || {}, clG);
+    window._clSpecGlobale= Object.assign(window._clSpecGlobale|| {}, clSp);
 
     // ── PASSO 5: Gironi Champions/Europa ──
     for (const g of gironiDB) {
