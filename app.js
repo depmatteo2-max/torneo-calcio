@@ -833,24 +833,22 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
     }
     // NON costruire classifica globale dai gironi numerici —
     // quelli usano sempre il suffisso (123, 345, 456 ecc.)
-    // Genera gruppi sia statici che dinamici da tutti i gironi numerici presenti
-    const _allNumKeys = Object.keys(classificheGironi).filter(k => /^GIRONE \d+$/.test(k));
-    const _numVals = _allNumKeys.map(k => parseInt(k.match(/\d+/)[0])).sort((a,b)=>a-b);
-    // Gruppi fissi
-    const _gruppiNumerici = [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]];
-    // Aggiungi gruppi dinamici da 3 consecutivi
-    for (let i=0; i<_numVals.length-1; i++) {
-      for (let j=i+1; j<Math.min(i+4,_numVals.length); j++) {
-        const grp = _numVals.slice(i, j+1);
-        if (grp.length >= 2) {
-          const suf = grp.join('');
-          if (!_gruppiNumerici.find(g => g[0]===suf)) _gruppiNumerici.push([suf, grp]);
-        }
-      }
-    }
+    // Genera solo i gruppi il cui suffisso appare già in window._clSpecGlobale
+    // (messo lì da _aggiornaResolver) OPPURE i gruppi fissi standard
+    const _gruppiNumerici = [['123',[1,2,3]],['345',[3,4,5]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]];
+    // Aggiungi gruppi da _clSpecGlobale esistente
+    Object.keys(window._clSpecGlobale||{}).forEach(k => {
+      const m = k.match(/CLASSIFICA MIGLIORI \w+ (\d+)$/);
+      if (!m) return;
+      const suf = m[1];
+      if (_gruppiNumerici.find(g => g[0]===suf)) return;
+      const nums = suf.split('').map(Number);
+      _gruppiNumerici.push([suf, nums]);
+    });
     _gruppiNumerici.forEach(([suf,nums]) => {
+      // Mostra solo se TUTTI i gironi del gruppo esistono
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => classificheGironi[k]);
-      if (!chiavi.length) return;
+      if (chiavi.length !== nums.length) return;
       ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
         const lista = makeSpec(chiavi, ti+1);
         if (lista.length) {
@@ -1082,16 +1080,12 @@ async function renderClassifiche() {
       chiavi.forEach(function(k){ if(classificheGironi[k]?.[pos]) lista.push(classificheGironi[k][pos]); });
       return lista.sort(_sortFnSp);
     };
-    // Ricalcola tutti i gruppi numerici ora disponibili
-    var _keysNumNow = Object.keys(classificheGironi).filter(function(k){ return /^GIRONE \d+$/.test(k); });
-    var _numValsNow = _keysNumNow.map(function(k){ return parseInt(k.match(/\d+/)[0]); }).sort(function(a,b){return a-b;});
-    for (var _ni=0; _ni<_numValsNow.length-1; _ni++) {
-      for (var _nj=_ni+1; _nj<Math.min(_ni+4,_numValsNow.length); _nj++) {
-        var _grp = _numValsNow.slice(_ni, _nj+1);
-        if (_grp.length >= 2) {
-          var _suf = _grp.join('');
-          var _ck = _grp.map(function(n){return 'GIRONE '+n;}).filter(function(k){return classificheGironi[k];});
-          if (_ck.length === _grp.length) { // solo se TUTTI i gironi del gruppo sono presenti
+    // Ricalcola solo i gruppi fissi predefiniti
+    var _gruppiFixed = [['123',[1,2,3]],['345',[3,4,5]],['456',[4,5,6]],['789',[7,8,9]]];
+    _gruppiFixed.forEach(function(entry) {
+      var _suf = entry[0], _grp = entry[1];
+      var _ck = _grp.map(function(n){return 'GIRONE '+n;}).filter(function(k){return classificheGironi[k];});
+      if (_ck.length === _grp.length) { // solo se TUTTI i gironi del gruppo sono presenti
             ['SECONDE','TERZE','QUARTE'].forEach(function(t,ti){
               var _lista = _makeSpecInline(_ck, ti+1);
               if (_lista.length) {
@@ -1102,9 +1096,8 @@ async function renderClassifiche() {
               }
             });
           }
-        }
       }
-    }
+    });
 
     cl.forEach(function(row,idx){
       if (!row.sq||!row.sq.id) return;
@@ -4433,22 +4426,12 @@ async function _aggiornaResolver(categoriaId) {
     }
 
     // ── PASSO 4: Migliori Seconde/Terze/Quarte da 1-3, 4-6, 7-9, 8-9-10 ──
-    // Gruppi numerici dinamici (123, 456, 789, 345, ecc.)
-    const _allNumKeysAggr = Object.keys(clG).filter(k => /^GIRONE \d+$/.test(k));
-    const _numValsAggr = _allNumKeysAggr.map(k => parseInt(k.match(/\d+/)[0])).sort((a,b)=>a-b);
-    const _gruppiAggr = [['123',[1,2,3]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]];
-    for (let i=0; i<_numValsAggr.length-1; i++) {
-      for (let j=i+1; j<Math.min(i+4,_numValsAggr.length); j++) {
-        const grp = _numValsAggr.slice(i, j+1);
-        if (grp.length >= 2) {
-          const suf = grp.join('');
-          if (!_gruppiAggr.find(g => g[0]===suf)) _gruppiAggr.push([suf, grp]);
-        }
-      }
-    }
+    // Gruppi numerici fissi + 345 per categorie come PRIMI CALCI 2018
+    const _gruppiAggr = [['123',[1,2,3]],['345',[3,4,5]],['456',[4,5,6]],['789',[7,8,9]],['8910',[8,9,10]]];
     _gruppiAggr.forEach(([suf,nums]) => {
+      // Solo se TUTTI i gironi del gruppo esistono
       const chiavi = nums.map(n => 'GIRONE '+n).filter(k => clG[k]);
-      if (!chiavi.length) return;
+      if (chiavi.length !== nums.length) return;
       ['SECONDE','TERZE','QUARTE'].forEach((t,ti) => {
         const lista = makeSpec(chiavi, ti+1);
         if (lista.length) {
