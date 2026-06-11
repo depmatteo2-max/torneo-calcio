@@ -1070,6 +1070,41 @@ async function renderClassifiche() {
     if (!window._clGlobale) window._clGlobale = {};
     window._clGlobale[key] = cl;
     clGCache[key] = cl;
+    // Ricalcola clSpCache con i nuovi gironi disponibili
+    // (serve per risolvere placeholder come "MIGLIOR SECONDA 345" quando Girone 3,4,5 sono appena calcolati)
+    var _sortFnSp = function(a,b){
+      var da=(a.g>0?(a.pts/a.g*100 + a.gf - a.gs):0);
+      var db=(b.g>0?(b.pts/b.g*100 + b.gf - b.gs):0);
+      return db-da;
+    };
+    var _makeSpecInline = function(chiavi, pos) {
+      var lista = [];
+      chiavi.forEach(function(k){ if(classificheGironi[k]?.[pos]) lista.push(classificheGironi[k][pos]); });
+      return lista.sort(_sortFnSp);
+    };
+    // Ricalcola tutti i gruppi numerici ora disponibili
+    var _keysNumNow = Object.keys(classificheGironi).filter(function(k){ return /^GIRONE \d+$/.test(k); });
+    var _numValsNow = _keysNumNow.map(function(k){ return parseInt(k.match(/\d+/)[0]); }).sort(function(a,b){return a-b;});
+    for (var _ni=0; _ni<_numValsNow.length-1; _ni++) {
+      for (var _nj=_ni+1; _nj<Math.min(_ni+4,_numValsNow.length); _nj++) {
+        var _grp = _numValsNow.slice(_ni, _nj+1);
+        if (_grp.length >= 2) {
+          var _suf = _grp.join('');
+          var _ck = _grp.map(function(n){return 'GIRONE '+n;}).filter(function(k){return classificheGironi[k];});
+          if (_ck.length === _grp.length) { // solo se TUTTI i gironi del gruppo sono presenti
+            ['SECONDE','TERZE','QUARTE'].forEach(function(t,ti){
+              var _lista = _makeSpecInline(_ck, ti+1);
+              if (_lista.length) {
+                clSpCache['CLASSIFICA MIGLIORI '+t+' '+_suf] = _lista;
+                clSpCache['CLASSIFICA MIGLIORI '+t+' '+_grp.join('-')] = _lista;
+                if (!window._clSpecGlobale) window._clSpecGlobale = {};
+                window._clSpecGlobale['CLASSIFICA MIGLIORI '+t+' '+_suf] = _lista;
+              }
+            });
+          }
+        }
+      }
+    }
 
     cl.forEach(function(row,idx){
       if (!row.sq||!row.sq.id) return;
@@ -1154,10 +1189,15 @@ async function renderClassifiche() {
     });
   };
   // ── Classifiche Migliori da Gironi A-L ──
+  // Mostra solo se NON ci sono classifiche con suffisso numerico (es. 345)
+  // Se esistono classifiche numeriche (2018), le migliori A-L non servono
+  var _hasSuffisoNum = Object.keys(clSp).some(function(k){
+    return /CLASSIFICA MIGLIORI \w+ \d+$/.test(k) && (clSp[k]||[]).length > 0;
+  });
   var sec=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE']||[]);
   var ter=fmtG(clSp['CLASSIFICA MIGLIORI TERZE']||[]);
   var qua=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE']||[]);
-  if(sec.length||ter.length||qua.length) {
+  if(!_hasSuffisoNum && (sec.length||ter.length||qua.length)) {
     html+='<div class="section-label">🏅 Classifiche Migliori — Gironi A-L</div>';
     if(sec.length) html+=mkSpeciale(sec,'🥈 Migliori Seconde (A-L)','#D42B2B');
     if(ter.length) html+=mkSpeciale(ter,'🥉 Migliori Terze (A-L)','#1A4FA0');
