@@ -4284,26 +4284,37 @@ async function _aggiornaResolver(categoriaId) {
   _resolverCache[categoriaId] = now;
   try {
     // Usa getGironiWithData (legge da KV, non da Supabase direttamente)
-    const gironiKV = await getGironiWithData(categoriaId);
+    // Leggi sempre da DB fresco (non dal KV) per avere i risultati aggiornati
+    let gironiKV = await getGironiWithData(categoriaId);
     if (!gironiKV?.length) return;
-
-    // Controlla se ci sono partite giocate (usa sia KV che query diretta)
-    const hasGiocateKV = gironiKV.some(g => g.partite?.some(p => p.giocata));
-    // Se KV non ha partite giocate, verifica direttamente nel DB
-    let hasGiocate = hasGiocateKV;
-    if (!hasGiocateKV) {
+    
+    // Se il KV non ha partite giocate, forza lettura dal DB direttamente
+    const _kvHasResults = gironiKV.some(g => g.partite?.some(p => p.giocata));
+    if (!_kvHasResults) {
       try {
-        const { count } = await db.from('partite')
-          .select('id', { count: 'exact', head: true })
-          .eq('giocata', true)
-          .in('girone_id', gironiKV.map(g => g.id).filter(Boolean));
-        hasGiocate = (count || 0) > 0;
-      } catch(e) {}
+        // Leggi partite giocate direttamente da Supabase
+        const { data: partiteDB } = await db.from('partite')
+          .select(`id,girone_id,home_id,away_id,gol_home,gol_away,giocata,note_home,note_away,
+            home:squadre!partite_home_id_fkey(id,nome,logo),
+            away:squadre!partite_away_id_fkey(id,nome,logo)`)
+          .in('girone_id', gironiKV.map(g=>g.id).filter(Boolean))
+          .eq('giocata', true);
+        if (partiteDB?.length) {
+          // Merge risultati DB nelle partite del KV
+          const ptMap = {};
+          (partiteDB||[]).forEach(p => { ptMap[p.id] = p; });
+          gironiKV = gironiKV.map(g => ({
+            ...g,
+            partite: (g.partite||[]).map(p => ptMap[p.id] ? {...p, ...ptMap[p.id]} : p)
+          }));
+        }
+      } catch(e) { console.warn('[Resolver] Fallback DB failed:', e); }
     }
-    if (!hasGiocate) {
-      console.log('[Resolver] Skip — nessuna partita giocata ancora');
-      return;
-    }
+
+    // Controlla partite giocate — procedi sempre se ci sono gironi
+    const hasGiocate = gironiKV.some(g => g.partite?.some(p => p.giocata));
+    // Non skippiamo più — il resolver calcola anche le classifiche degli schemi
+    // vuoti per preparare gli accoppiamenti
 
     // Ricostruisce struttura gironiDB e tuttePartite dai dati KV
     const gironiDB = gironiKV.map(g => ({ id: g.id, nome: g.nome }));
@@ -4466,8 +4477,6 @@ async function _aggiornaResolver(categoriaId) {
     });
 
     // ── PASSO 4.5: Gironi Numerici (es. Girone 1-5 del 2018) ──
-    const _gironiNumericiDB = gironiDB.filter(g => /^GIRONE\s+\d+$/i.test(g.nome));
-    console.log('[Resolver] Passo 4.5: gironi numerici trovati:', _gironiNumericiDB.map(g=>g.nome));
     for (const g of gironiDB) {
       const nome = g.nome.toUpperCase().trim();
       if (!/^GIRONE\s+\d+$/.test(nome)) continue;
@@ -4496,9 +4505,6 @@ async function _aggiornaResolver(categoriaId) {
     }
 
     // ── PASSO 5: Gironi Champions/Europa ──
-    const _gironiChamp = gironiDB.filter(g => !/^GIRONE\s+[A-LI]$/i.test(g.nome) && !/^GIRONE\s+\d+$/.test(g.nome));
-    console.log('[Resolver] Passo 5: gironi Champions/Europa:', _gironiChamp.map(g=>g.nome));
-    console.log('[Resolver] clG dopo Passo 4.5:', Object.keys(clG));
     for (const g of gironiDB) {
       const nome = g.nome.toUpperCase().trim();
       if (/^GIRONE\s+[A-LI]$/.test(nome)) continue;
