@@ -4061,7 +4061,11 @@ async function simulaRisultati() {
       // ── Simula partite gironi ──
       const gironi = await getGironiWithData(catId);
       for (const g of gironi) {
-        const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
+        // Simula solo partite con squadre REALI (non placeholder)
+        const daGiocare = g.partite.filter(p => 
+          !p.giocata && p.home_id && p.away_id &&
+          !_isPlaceholder(p.home?.nome) && !_isPlaceholder(p.away?.nome)
+        );
         if (!daGiocare.length) continue;
         _simLog('Pass ' + pass + ' — ' + g.nome + ': ' + daGiocare.length + ' partite');
         for (const p of daGiocare) {
