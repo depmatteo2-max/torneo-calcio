@@ -938,10 +938,45 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         if (notaA && !(notaA in slotMap)) slotMap[notaA] = null;
       }
       
-      // Step 2: risolvi ogni slot UNA SOLA VOLTA, skip squadre già assegnate
+      // Step 2: pre-popola _sqAssegnate con squadre già risolte in questo girone
+      // (da pass precedenti) per evitare di sovrascriverle
+      const _sqGirone = new Set();
+      for (const p of (g.partite||[])) {
+        if (p.home_id && !_isPlaceholder(p.home?.nome)) {
+          _sqGirone.add(p.home_id);
+          _sqAssegnate.add(p.home_id);
+        }
+        if (p.away_id && !_isPlaceholder(p.away?.nome)) {
+          _sqGirone.add(p.away_id);
+          _sqAssegnate.add(p.away_id);
+        }
+      }
+      
+      // Risolvi ogni slot UNA SOLA VOLTA, skip squadre già assegnate globalmente
       for (const nota of Object.keys(slotMap)) {
-        const squadraId = _resolvePlaceholder(nota, classificheGironi, risultatiKnockout, clSp, _sqAssegnate);
-        if (squadraId) { slotMap[nota] = squadraId; _sqAssegnate.add(squadraId); }
+        // Cerca prima se questo slot è già risolto nel DB
+        const giàRisolto = (g.partite||[]).find(p => {
+          const n = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home?.nome : null);
+          return n === nota && p.home_id && !_isPlaceholder(p.home?.nome);
+        }) || (g.partite||[]).find(p => {
+          const n = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away?.nome : null);
+          return n === nota && p.away_id && !_isPlaceholder(p.away?.nome);
+        });
+        
+        if (giàRisolto) {
+          // Usa l'ID già presente nel DB
+          const idEsistente = (g.partite||[]).find(p => {
+            const n = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home?.nome : null);
+            return n === nota && p.home_id && !_isPlaceholder(p.home?.nome);
+          })?.home_id || (g.partite||[]).find(p => {
+            const n = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away?.nome : null);
+            return n === nota && p.away_id && !_isPlaceholder(p.away?.nome);
+          })?.away_id;
+          if (idEsistente) { slotMap[nota] = idEsistente; }
+        } else {
+          const squadraId = _resolvePlaceholder(nota, classificheGironi, risultatiKnockout, clSp, _sqAssegnate);
+          if (squadraId) { slotMap[nota] = squadraId; _sqAssegnate.add(squadraId); }
+        }
       }
       
       // Step 3: aggiorna le partite
@@ -957,7 +992,6 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         if (Object.keys(upd).length) {
           await db.from('partite').update(upd).eq('id', p.id);
           risolti++;
-
         }
       }
     }
