@@ -4037,8 +4037,13 @@ async function simulaRisultati() {
         if (typeof _resolverCache !== 'undefined') delete _resolverCache[catId];
         await _aggiornaResolver(catId);
         await verificaEGeneraTriangolari(catId);
+        // Rigenera KV con dati aggiornati e svuota cache
+        if (typeof _generaDataJson === 'function') await _generaDataJson().catch(()=>{});
         if (typeof _cacheClear === 'function') _cacheClear();
         if (typeof _cache !== 'undefined') Object.keys(_cache).forEach(k => delete _cache[k]);
+        // Secondo resolver pass con dati freschi dal KV
+        if (typeof _resolverCache !== 'undefined') delete _resolverCache[catId];
+        await _aggiornaResolver(catId);
       }
       let nuovi = 0;
 
