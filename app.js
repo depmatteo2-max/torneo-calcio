@@ -4453,6 +4453,8 @@ async function _aggiornaResolver(categoriaId) {
     });
 
     // ── PASSO 4.5: Gironi Numerici (es. Girone 1-5 del 2018) ──
+    const _gironiNumericiDB = gironiDB.filter(g => /^GIRONE\s+\d+$/i.test(g.nome));
+    console.log('[Resolver] Passo 4.5: gironi numerici trovati:', _gironiNumericiDB.map(g=>g.nome));
     for (const g of gironiDB) {
       const nome = g.nome.toUpperCase().trim();
       if (!/^GIRONE\s+\d+$/.test(nome)) continue;
@@ -4481,6 +4483,9 @@ async function _aggiornaResolver(categoriaId) {
     }
 
     // ── PASSO 5: Gironi Champions/Europa ──
+    const _gironiChamp = gironiDB.filter(g => !/^GIRONE\s+[A-LI]$/i.test(g.nome) && !/^GIRONE\s+\d+$/.test(g.nome));
+    console.log('[Resolver] Passo 5: gironi Champions/Europa:', _gironiChamp.map(g=>g.nome));
+    console.log('[Resolver] clG dopo Passo 4.5:', Object.keys(clG));
     for (const g of gironiDB) {
       const nome = g.nome.toUpperCase().trim();
       if (/^GIRONE\s+[A-LI]$/.test(nome)) continue;
