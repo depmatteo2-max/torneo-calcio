@@ -911,22 +911,26 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
 
     let risolti = 0;
 
-    // ── PASSO 4: risolvi placeholder nelle partite gironi (3 fasi in ordine) ──
-    const _sqAssegnate = new Set(); // registro squadre già assegnate a un girone fase 2+
-    // NON pre-popola con A-I: le quarte di A-I devono poter entrare nei gironi 7-9
-    // Fase 1: risolvi gironi numerici in ordine (1,2,3,...,9)
-    // Ordine importante: il registro _sqAssegnate cresce in modo deterministico
-    const _gironiNumericiOrdinati = gironiKV
-      .filter(g => /^GIRONE\s+\d+$/i.test(g.nome))
-      .sort((a,b) => {
-        const na = parseInt(a.nome.match(/\d+/)?.[0]||0);
-        const nb = parseInt(b.nome.match(/\d+/)?.[0]||0);
-        return na - nb;
-      });
-    for (const g of _gironiNumericiOrdinati) {
-      
-      // Step 1: raccogli tutti gli slot placeholder unici del girone
-      const slotMap = {}; // placeholder → squadra_id (risolto)
+    // ── PASSO 4: risolvi placeholder nelle partite gironi ──
+    // Approccio: prima raccoglie TUTTI gli slot di TUTTI i gironi,
+    // poi li risolve in ordine garantendo unicità globale
+    const _sqAssegnate = new Set(); // registro globale - ogni squadra assegnata una sola volta
+    
+    // Costruisce lista ordinata di tutti i gironi da risolvere
+    const _gironiDaRisolvere = [
+      // Prima i gironi numerici in ordine
+      ...gironiKV
+        .filter(g => /^GIRONE\s+\d+$/i.test(g.nome))
+        .sort((a,b) => parseInt(a.nome.match(/\d+/)?.[0]||0) - parseInt(b.nome.match(/\d+/)?.[0]||0)),
+      // Poi Champions/Europa in ordine alfabetico
+      ...gironiKV
+        .filter(g => !/^GIRONE\s+[A-LI]$/i.test(g.nome) && !/^GIRONE\s+\d+$/i.test(g.nome))
+        .sort((a,b) => a.nome.localeCompare(b.nome))
+    ];
+    // Loop unico su tutti i gironi in ordine (numerici → Champions/Europa)
+    for (const g of _gironiDaRisolvere) {
+      // Step 1: raccogli tutti gli slot placeholder UNICI del girone
+      const slotMap = {};
       for (const p of (g.partite||[])) {
         const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
         const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
@@ -934,56 +938,19 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         if (notaA && !(notaA in slotMap)) slotMap[notaA] = null;
       }
       
-      // Step 2: risolvi ogni slot UNA SOLA VOLTA usando _sqAssegnate globale
+      // Step 2: risolvi ogni slot UNA SOLA VOLTA, skip squadre già assegnate
       for (const nota of Object.keys(slotMap)) {
         const squadraId = _resolvePlaceholder(nota, classificheGironi, risultatiKnockout, clSp, _sqAssegnate);
-        if (squadraId) {
-          slotMap[nota] = squadraId;
-          _sqAssegnate.add(squadraId); // aggiunge subito per evitare doppie tra slot
-        }
+        if (squadraId) { slotMap[nota] = squadraId; _sqAssegnate.add(squadraId); }
       }
       
-      // Step 3: aggiorna le partite con gli ID risolti
+      // Step 3: aggiorna le partite
       for (const p of (g.partite||[])) {
         const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
         const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
         if (!notaH && !notaA) continue;
         const newH = notaH ? slotMap[notaH] : null;
         const newA = notaA ? slotMap[notaA] : null;
-        const upd = {};
-        if (newH && newH !== p.home_id) upd.home_id = newH;
-        if (newA && newA !== p.away_id) upd.away_id = newA;
-        if (Object.keys(upd).length) {
-          await db.from('partite').update(upd).eq('id', p.id);
-          risolti++;
-        }
-      }
-    }
-    // Fase 2: risolvi Champions/Europa in ordine alfabetico
-    const _gironiChampOrd = gironiKV
-      .filter(g => !/^GIRONE\s+[A-LI]$/i.test(g.nome) && !/^GIRONE\s+\d+$/i.test(g.nome))
-      .sort((a,b) => a.nome.localeCompare(b.nome));
-    for (const g of _gironiChampOrd) {
-      
-      // Stessa logica slot-unici per Champions/Europa
-      const slotMapCh = {};
-      for (const p of (g.partite||[])) {
-        const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
-        const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
-        if (notaH && !(notaH in slotMapCh)) slotMapCh[notaH] = null;
-        if (notaA && !(notaA in slotMapCh)) slotMapCh[notaA] = null;
-      }
-      for (const nota of Object.keys(slotMapCh)) {
-        const squadraId = _resolvePlaceholder(nota, classificheGironi, risultatiKnockout, clSp, _sqAssegnate);
-        if (squadraId) { slotMapCh[nota] = squadraId; _sqAssegnate.add(squadraId); }
-      }
-      
-      for (const p of (g.partite||[])) {
-        const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
-        const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
-        if (!notaH && !notaA) continue;
-        const newH = notaH ? slotMapCh[notaH] : null;
-        const newA = notaA ? slotMapCh[notaA] : null;
         const upd = {};
         if (newH && newH !== p.home_id) upd.home_id = newH;
         if (newA && newA !== p.away_id) upd.away_id = newA;
