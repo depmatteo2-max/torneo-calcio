@@ -1096,7 +1096,6 @@ async function renderClassifiche() {
               }
             });
           }
-      }
     });
 
     cl.forEach(function(row,idx){
