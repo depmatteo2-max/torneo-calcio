@@ -907,17 +907,7 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         if (Object.keys(upd).length) {
           await db.from('partite').update(upd).eq('id', p.id);
           risolti++;
-          // Aggiorna anche girone_squadre con le squadre reali
-          if (upd.home_id) {
-            await db.from('girone_squadre')
-              .upsert({ girone_id: g.id, squadra_id: upd.home_id, posizione: 0 })
-              .eq('girone_id', g.id).eq('squadra_id', upd.home_id);
-          }
-          if (upd.away_id) {
-            await db.from('girone_squadre')
-              .upsert({ girone_id: g.id, squadra_id: upd.away_id, posizione: 1 })
-              .eq('girone_id', g.id).eq('squadra_id', upd.away_id);
-          }
+
         }
       }
     }
