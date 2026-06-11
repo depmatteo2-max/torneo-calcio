@@ -1205,9 +1205,19 @@ async function renderClassifiche() {
   var fmtG = function(lista) {
     return (lista||[]).filter(function(r){return r&&r.sq&&r.g>0;}).map(function(r){
       var gn = '';
-      Object.keys(clG).forEach(function(k){ 
-        if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ',''); 
+      // Cerca il girone di provenienza SOLO nei gironi numerici (1-9 ecc.)
+      // NON nei Champions/Europa che verrebbero dopo
+      Object.keys(clG).forEach(function(k){
+        if (!/^GIRONE\s+\d+$/i.test(k)) return; // solo gironi numerici
+        if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ','');
       });
+      // Se non trovato nei numerici, cerca ovunque (per le classifiche globali A-L)
+      if (!gn) {
+        Object.keys(clG).forEach(function(k){
+          if(/CHAMPION|EUROPA/i.test(k)) return; // escludi Champions/Europa
+          if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ','');
+        });
+      }
       return {sq:r.sq,pts:r.pts,g:r.g,v:r.v,p:r.p,s:r.s,gf:r.gf,gs:r.gs,girone:gn};
     });
   };
