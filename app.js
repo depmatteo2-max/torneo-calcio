@@ -665,14 +665,20 @@ function _risolviGruppi(lista, giocate) {
 function _isPlaceholder(nome) {
   if (!nome) return false;
   const s = nome.trim();
+  // Numero + Girone: "1 GIRONE A", "1° GIRONE A"
   if (/^\d+[\u00b0\u00ba*]?\s*(Girone|Gruppo)\s+/i.test(s)) return true;
-  // "1 GIRONE A" formato numerico senza °
-  if (/^\d+\s+(Girone|Gruppo)\s+/i.test(s)) return true;
-  // "N° CLASSIFICA MIGLIORI SECONDE/TERZE/QUARTE" e varianti con 123/456
+  // Parola ordinale + Girone: "PRIMA GIRONE A", "SECONDA GIRONE 1", "QUARTA GIRONE C"
+  if (/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+(girone|gruppo)\s+/i.test(s)) return true;
+  // Numero + MIGLIOR: "2 MIGLIOR SECONDA", "3 MIGLIOR SECONDA 345"
+  if (/^\d+[\u00b0\u00ba]?\s+miglior/i.test(s)) return true;
+  // Parola ordinale + MIGLIOR: "SECONDA MIGLIOR SECONDA", "SETTIMA MIGLIOR TERZA"
+  if (/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior/i.test(s)) return true;
+  // Solo MIGLIOR: "MIGLIOR SECONDA", "MIGLIOR TERZA 345"
+  if (/^miglior[ei]?\s+(second|terz|quart)/i.test(s)) return true;
+  // N° CLASSIFICA
   if (/^\d+[\u00b0\u00ba]\s+CLASSIFICA/i.test(s)) return true;
-  if (/^\d+[\u00b0\u00ba*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
-  if (/^(miglior|peggio)/i.test(s)) return true;
-  if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
+  // Vincente/Perdente
+  if (/^(Vincente|Perdente)\s+/i.test(s)) return true;
   return false;
 }
 
@@ -901,6 +907,17 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         if (Object.keys(upd).length) {
           await db.from('partite').update(upd).eq('id', p.id);
           risolti++;
+          // Aggiorna anche girone_squadre con le squadre reali
+          if (upd.home_id) {
+            await db.from('girone_squadre')
+              .upsert({ girone_id: g.id, squadra_id: upd.home_id, posizione: 0 })
+              .eq('girone_id', g.id).eq('squadra_id', upd.home_id);
+          }
+          if (upd.away_id) {
+            await db.from('girone_squadre')
+              .upsert({ girone_id: g.id, squadra_id: upd.away_id, posizione: 1 })
+              .eq('girone_id', g.id).eq('squadra_id', upd.away_id);
+          }
         }
       }
     }
