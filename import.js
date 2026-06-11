@@ -244,15 +244,22 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
       const girId2 = girR2.id;
       gironiMap[gironeNome] = girId2;
 
-      // Raccoglie squadre uniche dalle partite di questo girone
+      // Per gironi impliciti (placeholder), NON creare girone_squadre
+      // Le squadre verranno risolte dinamicamente dal resolver dalle note_home/note_away
+      // Creiamo solo le squadre placeholder come entità nel DB per le partite
       const pGirImpl = dati.partite.filter(p =>
         (p.categoria===cat.codice||p.categoria===cat.nome) && p.girone===gironeNome
       );
+      // Registra solo le squadre REALI (non placeholder) nel DB
       const squadreGirone = new Set();
-      pGirImpl.forEach(p => { squadreGirone.add(p.home); squadreGirone.add(p.away); });
-
-      let pos = 0;
-      for (const nomeSq of squadreGirone) {
+      pGirImpl.forEach(p => {
+        if (!_isPlaceholder(p.home)) squadreGirone.add(p.home);
+        if (!_isPlaceholder(p.away)) squadreGirone.add(p.away);
+      });
+      // Per le squadre placeholder, registrale nel DB senza girone_squadre
+      const allSqGirone = new Set();
+      pGirImpl.forEach(p => { allSqGirone.add(p.home); allSqGirone.add(p.away); });
+      for (const nomeSq of allSqGirone) {
         if (!nomeSq) continue;
         const key = `${torneoId}||${nomeSq}`;
         if (!squadreMap[key]) {
@@ -262,8 +269,8 @@ async function eseguiImportazioneConTorneo(torneoId, dati, btn) {
           if (sqErr2) { console.warn('Squadra:', sqErr2.message); continue; }
           squadreMap[key] = sqR2.id;
         }
-        await db.from('girone_squadre').insert({ girone_id: girId2, squadra_id: squadreMap[key], posizione: pos++ });
       }
+      // girone_squadre vuoto per gironi impliciti — il resolver popola dinamicamente
 
       // Importa partite del girone implicito
       for (const p of pGirImpl) {

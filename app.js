@@ -4440,6 +4440,34 @@ async function _aggiornaResolver(categoriaId) {
       });
     });
 
+    // ── PASSO 4.5: Gironi Numerici (es. Girone 1-5 del 2018) ──
+    for (const g of gironiDB) {
+      const nome = g.nome.toUpperCase().trim();
+      if (!/^GIRONE\s+\d+$/.test(nome)) continue;
+      if (clG[nome]?.length >= 2) continue;
+      const pGirone = (tuttePartite||[]).filter(p => p.girone_id === g.id);
+      const sqMap = {};
+      for (const p of pGirone) {
+        const hNome = p.home?.nome || p.note_home || null;
+        const aNome = p.away?.nome || p.note_away || null;
+        const hSq = (!p.home||isPlaceh(hNome)) ? risolviSq(hNome) : p.home;
+        const aSq = (!p.away||isPlaceh(aNome)) ? risolviSq(aNome) : p.away;
+        if (hSq?.id) sqMap[hSq.id] = hSq;
+        if (aSq?.id) sqMap[aSq.id] = aSq;
+      }
+      const sq = Object.values(sqMap);
+      if (sq.length < 2) continue;
+      const pRis = pGirone.map(p => {
+        const hNome2 = p.home?.nome || p.note_home;
+        const aNome2 = p.away?.nome || p.note_away;
+        const hSq2 = (!p.home||isPlaceh(hNome2)) ? risolviSq(hNome2) : p.home;
+        const aSq2 = (!p.away||isPlaceh(aNome2)) ? risolviSq(aNome2) : p.away;
+        return {...p, home_id: hSq2?.id||p.home_id, away_id: aSq2?.id||p.away_id, home: hSq2||p.home, away: aSq2||p.away};
+      });
+      const cl = calcGironeClassifica({ squadre: sq, partite: pRis });
+      if (cl.length) clG[nome] = cl;
+    }
+
     // ── PASSO 5: Gironi Champions/Europa ──
     for (const g of gironiDB) {
       const nome = g.nome.toUpperCase().trim();
