@@ -704,9 +704,11 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   // Formato "N GIRONE X" senza simbolo ° (es. "1 GIRONE A", "4 GIRONE I")
   const mNg = s.match(/^(\d+)\s+GIRONE\s+([A-Z0-9]+)$/i);
   if (mNg) {
-    const pos = parseInt(mNg[1]) - 1;
+    let pos = parseInt(mNg[1]) - 1;
     const k = 'GIRONE ' + mNg[2].toUpperCase();
-    return classificheGironi[k]?.[pos]?.sq?.id || null;
+    const cl = classificheGironi[k] || [];
+    if (_sqUsate) { while (pos < cl.length && _sqUsate.has(cl[pos]?.sq?.id)) pos++; }
+    return cl[pos]?.sq?.id || null;
   }
 
   // Formato principale: "N° NOME GIRONE"
@@ -725,7 +727,11 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
 
     if (chiave) {
       const cl = classificheGironi[chiave];
-      if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+      if (cl && cl.length >= pos) {
+        let posAdj = pos - 1;
+        if (_sqUsate) { while (posAdj < cl.length && _sqUsate.has(cl[posAdj]?.sq?.id)) posAdj++; }
+        return cl[posAdj]?.sq?.id || null;
+      }
     }
     // Prova nelle classifiche speciali (MIGLIOR SECONDA ecc.)
     if (/^MIGLIOR/i.test(nomeRicerca)) {
@@ -739,12 +745,13 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   // "N° MIGLIOR SECONDA/TERZA/QUARTA" con ° oppure "N MIGLIOR SECONDA" senza °
   const mMig = s.match(/^(\d+)[°º]?\s+MIGLIOR[EI]?\s+(SECOND|TERZ|QUART)[AO](?:\s+(\d[\d\-]*))?$/i);
   if (mMig) {
-    const pos = parseInt(mMig[1]) - 1;
+    let pos = parseInt(mMig[1]) - 1;
     const tipo = mMig[2].toLowerCase();
     const grp = (mMig[3]||'').replace(/-/g,'');
     let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
     if (grp) k += ' ' + grp;
     const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
+    if (_sqUsate) { while (pos < sp.length && _sqUsate.has(sp[pos]?.sq?.id)) pos++; }
     return sp[pos]?.sq?.id || null;
   }
 
@@ -763,12 +770,13 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   const ORD_RP = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
   const mOrd = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+miglior[ei]?\s+(second|terz|quart)[ao](?:\s+(\d[\d\-]*))?$/i);
   if (mOrd) {
-    const pos = ORD_RP[mOrd[1].toLowerCase()] ?? 0;
+    let pos = ORD_RP[mOrd[1].toLowerCase()] ?? 0;
     const tipo = mOrd[2].toLowerCase();
     const grp = (mOrd[3]||'').replace(/-/g,'');
     let k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
     if (grp) k += ' ' + grp;
     const sp = clSp[k] || clSp[k.replace(/\s(\d)(\d)(\d)$/,' $1-$2-$3')] || window._clSpecGlobale?.[k] || [];
+    if (_sqUsate) { while (pos < sp.length && _sqUsate.has(sp[pos]?.sq?.id)) pos++; }
     return sp[pos]?.sq?.id || null;
   }
 
@@ -779,6 +787,17 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     const lettera = mShort[2].toUpperCase();
     const cl = classificheGironi['GIRONE ' + lettera] || classificheGironi[lettera];
     if (cl && cl.length >= pos) return cl[pos-1]?.sq?.id || null;
+  }
+
+  // "PRIMA GIRONE A", "QUARTA GIRONE I", "SECONDA GIRONE 1" (ordinale + GIRONE + id)
+  const ORD_G = {prima:0,seconda:1,terza:2,quarta:3,quinta:4,sesta:5,settima:6,ottava:7,nona:8,decima:9};
+  const mOrdGir = s.match(/^(prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima)\s+girone\s+([A-Z0-9]+)$/i);
+  if (mOrdGir) {
+    let pos = ORD_G[mOrdGir[1].toLowerCase()] ?? 0;
+    const k = 'GIRONE ' + mOrdGir[2].toUpperCase();
+    const cl = classificheGironi[k] || window._clGlobale?.[k] || [];
+    if (_sqUsate) { while (pos < cl.length && _sqUsate.has(cl[pos]?.sq?.id)) pos++; }
+    return cl[pos]?.sq?.id || null;
   }
 
   return null;
@@ -892,18 +911,31 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
 
     let risolti = 0;
 
-    // ── PASSO 4: risolvi placeholder nelle partite gironi ──
-    // Registro globale: ogni squadra può essere assegnata a UN SOLO girone
-    const _sqAssegnate = new Set(); // squadra_id già assegnate
-    // Pre-popola con squadre già risolte (gironi A-L con squadre reali)
+    // ── PASSO 4: risolvi placeholder nelle partite gironi (3 fasi in ordine) ──
+    const _sqAssegnate = new Set(); // registro squadre già assegnate a un girone fase 2+
+    // NON pre-popola con A-I: le quarte di A-I devono poter entrare nei gironi 7-9
+    // Fase 1: risolvi gironi numerici (1-9, dipendono da A-L)
     for (const g of gironiKV) {
-      if (!/GIRONE\s+[A-LI]$/i.test(g.nome)) continue;
+      if (!/^GIRONE\s+\d+$/i.test(g.nome)) continue;
       for (const p of (g.partite||[])) {
-        if (p.home_id && !_isPlaceholder(p.home?.nome)) _sqAssegnate.add(p.home_id);
-        if (p.away_id && !_isPlaceholder(p.away?.nome)) _sqAssegnate.add(p.away_id);
+        const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
+        const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
+        if (!notaH && !notaA) continue;
+        const newH = notaH ? _resolvePlaceholder(notaH, classificheGironi, risultatiKnockout, clSp, _sqAssegnate) : null;
+        const newA = notaA ? _resolvePlaceholder(notaA, classificheGironi, risultatiKnockout, clSp, _sqAssegnate) : null;
+        const upd = {};
+        if (newH && newH !== p.home_id) { upd.home_id = newH; _sqAssegnate.add(newH); }
+        if (newA && newA !== p.away_id) { upd.away_id = newA; _sqAssegnate.add(newA); }
+        if (Object.keys(upd).length) {
+          await db.from('partite').update(upd).eq('id', p.id);
+          risolti++;
+        }
       }
     }
+    // Fase 2: risolvi Champions/Europa (dipendono da gironi 1-9)
     for (const g of gironiKV) {
+      if (/^GIRONE\s+[A-LI]$/i.test(g.nome)) continue;
+      if (/^GIRONE\s+\d+$/i.test(g.nome)) continue;
       for (const p of (g.partite||[])) {
         const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
         const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
@@ -1192,9 +1224,19 @@ async function renderClassifiche() {
   var fmtG = function(lista) {
     return (lista||[]).filter(function(r){return r&&r.sq&&r.g>0;}).map(function(r){
       var gn = '';
-      Object.keys(clG).forEach(function(k){ 
-        if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ',''); 
+      // Cerca il girone di provenienza SOLO nei gironi numerici (1-9 ecc.)
+      // NON nei Champions/Europa che verrebbero dopo
+      Object.keys(clG).forEach(function(k){
+        if (!/^GIRONE\s+\d+$/i.test(k)) return; // solo gironi numerici
+        if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ','');
       });
+      // Se non trovato nei numerici, cerca ovunque (per le classifiche globali A-L)
+      if (!gn) {
+        Object.keys(clG).forEach(function(k){
+          if(/CHAMPION|EUROPA/i.test(k)) return; // escludi Champions/Europa
+          if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ','');
+        });
+      }
       return {sq:r.sq,pts:r.pts,g:r.g,v:r.v,p:r.p,s:r.s,gf:r.gf,gs:r.gs,girone:gn};
     });
   };
