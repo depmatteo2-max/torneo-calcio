@@ -682,7 +682,7 @@ function _isPlaceholder(nome) {
   return false;
 }
 
-function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={}, clSp={}) {
+function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={}, clSp={}, _sqUsate=null) {
   if (!placeholder) return null;
   const s = placeholder.trim();
 
@@ -754,7 +754,9 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
     const tipo = mMig0[1].toLowerCase();
     const k = tipo==='second'?'CLASSIFICA MIGLIORI SECONDE':tipo==='terz'?'CLASSIFICA MIGLIORI TERZE':'CLASSIFICA MIGLIORI QUARTE';
     const sp = clSp[k] || window._clSpecGlobale?.[k] || [];
-    return sp[0]?.sq?.id || null;
+    let _pos0 = 0;
+    if (_sqUsate) { while (_pos0 < sp.length && _sqUsate.has(sp[_pos0]?.sq?.id)) _pos0++; }
+    return sp[_pos0]?.sq?.id || null;
   }
 
   // "SETTIMA MIGLIOR SECONDA", "QUARTA MIGLIOR TERZA" ecc. (parola ordinale + MIGLIOR)
@@ -891,19 +893,26 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
     let risolti = 0;
 
     // ── PASSO 4: risolvi placeholder nelle partite gironi ──
-    // Le partite Champions/Europa hanno placeholder nel NOME squadra (home.nome),
-    // non in note_home. Dobbiamo cercare in entrambi i posti.
+    // Registro globale: ogni squadra può essere assegnata a UN SOLO girone
+    const _sqAssegnate = new Set(); // squadra_id già assegnate
+    // Pre-popola con squadre già risolte (gironi A-L con squadre reali)
+    for (const g of gironiKV) {
+      if (!/GIRONE\s+[A-LI]$/i.test(g.nome)) continue;
+      for (const p of (g.partite||[])) {
+        if (p.home_id && !_isPlaceholder(p.home?.nome)) _sqAssegnate.add(p.home_id);
+        if (p.away_id && !_isPlaceholder(p.away?.nome)) _sqAssegnate.add(p.away_id);
+      }
+    }
     for (const g of gironiKV) {
       for (const p of (g.partite||[])) {
-        // Placeholder può essere in note_home OPPURE in home.nome
         const notaH = p.note_home || (_isPlaceholder(p.home?.nome) ? p.home.nome : null);
         const notaA = p.note_away || (_isPlaceholder(p.away?.nome) ? p.away.nome : null);
         if (!notaH && !notaA) continue;
-        const newH = notaH ? _resolvePlaceholder(notaH, classificheGironi, risultatiKnockout, clSp) : null;
-        const newA = notaA ? _resolvePlaceholder(notaA, classificheGironi, risultatiKnockout, clSp) : null;
+        const newH = notaH ? _resolvePlaceholder(notaH, classificheGironi, risultatiKnockout, clSp, _sqAssegnate) : null;
+        const newA = notaA ? _resolvePlaceholder(notaA, classificheGironi, risultatiKnockout, clSp, _sqAssegnate) : null;
         const upd = {};
-        if (newH && newH !== p.home_id) upd.home_id = newH;
-        if (newA && newA !== p.away_id) upd.away_id = newA;
+        if (newH && newH !== p.home_id) { upd.home_id = newH; _sqAssegnate.add(newH); }
+        if (newA && newA !== p.away_id) { upd.away_id = newA; _sqAssegnate.add(newA); }
         if (Object.keys(upd).length) {
           await db.from('partite').update(upd).eq('id', p.id);
           risolti++;
