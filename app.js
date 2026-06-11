@@ -914,10 +914,16 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
     // ── PASSO 4: risolvi placeholder nelle partite gironi (3 fasi in ordine) ──
     const _sqAssegnate = new Set(); // registro squadre già assegnate a un girone fase 2+
     // NON pre-popola con A-I: le quarte di A-I devono poter entrare nei gironi 7-9
-    // Fase 1: risolvi gironi numerici (1-9, dipendono da A-L)
-    // Per ogni girone, risolvi prima TUTTI gli slot unici, poi aggiorna le partite
-    for (const g of gironiKV) {
-      if (!/^GIRONE\s+\d+$/i.test(g.nome)) continue;
+    // Fase 1: risolvi gironi numerici in ordine (1,2,3,...,9)
+    // Ordine importante: il registro _sqAssegnate cresce in modo deterministico
+    const _gironiNumericiOrdinati = gironiKV
+      .filter(g => /^GIRONE\s+\d+$/i.test(g.nome))
+      .sort((a,b) => {
+        const na = parseInt(a.nome.match(/\d+/)?.[0]||0);
+        const nb = parseInt(b.nome.match(/\d+/)?.[0]||0);
+        return na - nb;
+      });
+    for (const g of _gironiNumericiOrdinati) {
       
       // Step 1: raccogli tutti gli slot placeholder unici del girone
       const slotMap = {}; // placeholder → squadra_id (risolto)
@@ -953,10 +959,11 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
         }
       }
     }
-    // Fase 2: risolvi Champions/Europa (dipendono da gironi 1-9)
-    for (const g of gironiKV) {
-      if (/^GIRONE\s+[A-LI]$/i.test(g.nome)) continue;
-      if (/^GIRONE\s+\d+$/i.test(g.nome)) continue;
+    // Fase 2: risolvi Champions/Europa in ordine alfabetico
+    const _gironiChampOrd = gironiKV
+      .filter(g => !/^GIRONE\s+[A-LI]$/i.test(g.nome) && !/^GIRONE\s+\d+$/i.test(g.nome))
+      .sort((a,b) => a.nome.localeCompare(b.nome));
+    for (const g of _gironiChampOrd) {
       
       // Stessa logica slot-unici per Champions/Europa
       const slotMapCh = {};
