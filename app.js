@@ -478,10 +478,12 @@ function renderCatBar() {
       </button>
     </div>`;
   } else if (STATE.isAdmin && multiCat) {
-    // Admin: pillole orizzontali scorrevoli
+    // Admin e arbitri: pillole orizzontali scorrevoli
+    // Per gli arbitri onclick chiama anche renderAdminRisultati
+    const _isScorer = STATE.userRole === 'scorer' || STATE.userRole === 'arbitro';
     catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
       STATE.categorie.map(c =>
-        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})">${c.nome}</button>`
+        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})${_isScorer?';renderAdminRisultati()':''}">${c.nome}</button>`
       ).join('') + '</div>';
   }
   bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
