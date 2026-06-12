@@ -478,13 +478,28 @@ function renderCatBar() {
       </button>
     </div>`;
   } else if (STATE.isAdmin && multiCat) {
-    // Admin e arbitri: pillole orizzontali scorrevoli
-    // Per gli arbitri onclick chiama anche renderAdminRisultati
     const _isScorer = STATE.userRole === 'scorer' || STATE.userRole === 'arbitro';
-    catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
-      STATE.categorie.map(c =>
-        `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})${_isScorer?';renderAdminRisultati()':''}">${c.nome}</button>`
-      ).join('') + '</div>';
+    const _isRisultatiAdmin = STATE.currentSection === 'a-risultati';
+    if (_isScorer || _isRisultatiAdmin) {
+      // Arbitri e admin in sezione risultati: nome categoria + tasto Cambia
+      catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;">
+        <span style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;">${cat?.nome||''}</span>
+        <div style="display:flex;gap:4px;flex-shrink:0;margin-left:auto;">
+          ${STATE.categorie.map(c =>
+            `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" style="font-size:11px;padding:3px 10px;white-space:nowrap;"
+              onclick="STATE.activeCat=${c.id};_saveSavedCat(${c.id});renderCatBar();${_isScorer?'renderAdminRisultati()':'renderCurrentSection()'}">
+              ${c.nome}
+            </button>`
+          ).join('')}
+        </div>
+      </div>`;
+    } else {
+      // Admin in altre sezioni: pillole orizzontali scorrevoli
+      catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
+        STATE.categorie.map(c =>
+          `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})">${c.nome}</button>`
+        ).join('') + '</div>';
+    }
   }
   bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
   _renderGiornataBar();
