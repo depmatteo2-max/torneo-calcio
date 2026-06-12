@@ -563,8 +563,7 @@ async function _caricaGiornate() {
     const _gCacheKey = 'giornate_' + STATE.activeCat;
     if (window._giornateCache?.[_gCacheKey] && Date.now() - window._giornateCache[_gCacheKey].ts < 300000) {
       STATE._giornateDisponibili = window._giornateCache[_gCacheKey].data;
-      const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
-      STATE.activeGiornata = oggi || 'tutte';
+      STATE.activeGiornata = 'tutte';
       return;
     }
     const dateSet = new Set();
@@ -585,8 +584,7 @@ async function _caricaGiornate() {
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
     if (!window._giornateCache) window._giornateCache = {};
     window._giornateCache['giornate_' + STATE.activeCat] = { data: STATE._giornateDisponibili, ts: Date.now() };
-    const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
-    STATE.activeGiornata = oggi || 'tutte';
+    STATE.activeGiornata = 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
 }
 
