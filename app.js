@@ -350,6 +350,32 @@ function renderTorneoBar() {
 }
 
 async function cambiaCategoria() {
+  // Admin/arbitro in sezione risultati: mostra selezione categorie e torna ai risultati
+  if (STATE.isAdmin) {
+    const _sez = STATE.currentSection;
+    STATE.activeCat = null; _clearSavedCat(); _cancellaHash();
+    STATE.activeGiornata = 'tutte'; STATE._giornateDisponibili = [];
+    document.getElementById('cat-bar').style.display = 'none';
+    document.getElementById('cat-bar').innerHTML = '';
+    // Mostra lista categorie come pulsanti
+    const el = document.getElementById('sec-' + _sez) || document.getElementById('sec-a-risultati');
+    if (el) {
+      el.innerHTML = `<div style="padding:16px;">
+        <div style="font-size:15px;font-weight:800;margin-bottom:14px;">Seleziona categoria</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${STATE.categorie.map(c => `
+            <button onclick="STATE.activeCat=${c.id};_saveSavedCat(${c.id});STATE.activeGiornata='tutte';STATE._giornateDisponibili=[];_caricaGiornate().then(()=>{renderCatBar();renderCurrentSection();})"
+              style="background:white;border:2px solid var(--bordo);border-radius:12px;padding:14px 18px;text-align:left;cursor:pointer;font-family:inherit;font-size:15px;font-weight:700;color:var(--testo);transition:all .15s;"
+              onmouseover="this.style.borderColor='var(--blu)';this.style.background='var(--blu-bg)'"
+              onmouseout="this.style.borderColor='var(--bordo)';this.style.background='white'">
+              ${c.nome}
+            </button>`).join('')}
+        </div>
+      </div>`;
+    }
+    return;
+  }
+  // Utente pubblico
   STATE.activeCat = null; _clearSavedCat(); _cancellaHash();
   STATE.activeGiornata = 'tutte'; STATE._giornateDisponibili = [];
   document.getElementById('cat-bar').style.display = 'none';
@@ -460,57 +486,23 @@ function renderCatBar() {
   bar.style.display = '';
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const multiCat = STATE.categorie.length > 1;
-  // Solo admin vede il selettore pill orizzontale
-  // Utente pubblico: mostra nome categoria + tasto Cambia
   let catHtml = '';
-  if (cat && multiCat && !STATE.isAdmin) {
-    catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
-      <span style="font-size:13px;font-weight:800;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${cat.nome}
-      </span>
+
+  if (cat && multiCat) {
+    // Tutti (cliente, admin, arbitro): nome categoria + tasto Cambia
+    catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--bordo);">
+      <span style="font-size:13px;font-weight:800;color:var(--testo);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${cat.nome}</span>
       <button onclick="cambiaCategoria()"
-        style="flex-shrink:0;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
+        style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:20px;
                padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);
                cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
-        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
-        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-2)'">
+        onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+        onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--text-2)'">
         ⇄ Cambia
       </button>
     </div>`;
-  } else if (STATE.isAdmin && multiCat) {
-    const _isScorer = STATE.userRole === 'scorer' || STATE.userRole === 'arbitro';
-    const _isRisultatiAdmin = STATE.currentSection === 'a-risultati';
-    if (_isScorer || _isRisultatiAdmin) {
-      // Riga 1: nome categoria attiva + tasto Cambia
-      // Riga 2: giornate (gestita da _renderGiornataBar sotto)
-      catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
-        <span style="font-size:14px;font-weight:800;color:var(--testo);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${cat?.nome||''}</span>
-        <button onclick="
-          var _sel=document.getElementById('_cat-sel-popup');
-          if(_sel){_sel.remove();}else{
-            var _d=document.createElement('div');
-            _d.id='_cat-sel-popup';
-            _d.style.cssText='position:fixed;top:90px;left:0;right:0;z-index:999;background:white;border-bottom:2px solid var(--bordo);padding:8px 12px;display:flex;gap:6px;flex-wrap:wrap;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
-            _d.innerHTML='${STATE.categorie.map(c =>
-              `<button onclick=\\"STATE.activeCat=${c.id};_saveSavedCat(${c.id});STATE.activeGiornata=\\'tutte\\';STATE._giornateDisponibili=[];document.getElementById(\\'_cat-sel-popup\\')?.remove();_caricaGiornate().then(()=>{renderCatBar();${_isScorer?'renderAdminRisultati()':'renderCurrentSection()'}})\\"
-                style=\\"padding:6px 14px;border-radius:20px;border:2px solid ${`'+(c.id===STATE.activeCat?'var(--blu)':'var(--bordo)')+'`};background:${`'+(c.id===STATE.activeCat?'var(--blu)':'white')+'`};color:${`'+(c.id===STATE.activeCat?'white':'var(--testo-lt)')+'`};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;\\">${c.nome}</button>`
-            ).join('')}';
-            document.body.appendChild(_d);
-          }"
-          style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
-          onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
-          onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--text-2)'">
-          ⇄ Cambia
-        </button>
-      </div>`;
-    } else {
-      // Admin in altre sezioni: pillole orizzontali scorrevoli
-      catHtml = '<div style="display:flex;align-items:center;overflow-x:auto;border-bottom:1px solid var(--border);scrollbar-width:none;">' +
-        STATE.categorie.map(c =>
-          `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" onclick="selezionaCategoriaPublic(${c.id})">${c.nome}</button>`
-        ).join('') + '</div>';
-    }
   }
+
   bar.innerHTML = catHtml + '<div id="giornata-bar" class="cat-bar-inner" style="flex-wrap:wrap;gap:4px;padding:4px 8px;"></div>';
   _renderGiornataBar();
 }
