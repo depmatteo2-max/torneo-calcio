@@ -803,6 +803,35 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   return null;
 }
 
+// Rimuove doppioni da _clGlobale: ogni squadra appare solo nel girone più avanzato
+// Priorità: Champions/Europa > Gironi 1-9 > Gironi A-I
+function _pulisciDoppioniClGlobale(clG) {
+  if (!clG || !Object.keys(clG).length) return clG;
+  const _sqInFinali = new Set();
+  const _sqIn19 = new Set();
+  Object.keys(clG).forEach(k => {
+    if (!/^GIRONE\s+[A-LI]$/i.test(k) && !/^GIRONE\s+\d+$/i.test(k))
+      (clG[k]||[]).forEach(r => { if (r.sq?.id) _sqInFinali.add(r.sq.id); });
+  });
+  Object.keys(clG).forEach(k => {
+    if (/^GIRONE\s+\d+$/i.test(k))
+      (clG[k]||[]).forEach(r => { if (r.sq?.id) _sqIn19.add(r.sq.id); });
+  });
+  Object.keys(clG).forEach(k => {
+    if (/^GIRONE\s+[A-LI]$/i.test(k)) {
+      clG[k] = (clG[k]||[]).filter(r => !_sqIn19.has(r.sq?.id) && !_sqInFinali.has(r.sq?.id));
+      if (!clG[k].length) delete clG[k];
+    }
+  });
+  Object.keys(clG).forEach(k => {
+    if (/^GIRONE\s+\d+$/i.test(k)) {
+      clG[k] = (clG[k]||[]).filter(r => !_sqInFinali.has(r.sq?.id));
+      if (!clG[k].length) delete clG[k];
+    }
+  });
+  return clG;
+}
+
 async function verificaEGeneraTriangolari(categoriaId, _pass) {
   try {
     const _maxPass = 5; // max 5 passaggi per catene lunghe (es. PRIMI CALCI 2018)
@@ -842,7 +871,8 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
 
     // Aggiorna window._clGlobale con classificheGironi calcolate
     if (Object.keys(classificheGironi).length) {
-      window._clGlobale = Object.assign(window._clGlobale || {}, classificheGironi);
+      const _merged = Object.assign(window._clGlobale || {}, classificheGironi);
+      window._clGlobale = _pulisciDoppioniClGlobale(_merged);
     }
 
     // ── PASSO 2b: clSp — migliori seconde/terze da A-L e 1-10 ──
@@ -972,7 +1002,7 @@ async function verificaEGeneraTriangolari(categoriaId, _pass) {
           if (_mq.length) { clSp['CLASSIFICA MIGLIORI QUARTE '+suf]  = _mq.sort(sortFn); }
         });
         // Aggiorna globale
-        window._clGlobale = Object.assign(window._clGlobale || {}, classificheGironi);
+        window._clGlobale = _pulisciDoppioniClGlobale(Object.assign(window._clGlobale || {}, classificheGironi));
         window._clSpecGlobale = Object.assign(window._clSpecGlobale || {}, clSp);
       }
       // Step 1: raccogli tutti gli slot placeholder UNICI del girone
@@ -4537,7 +4567,7 @@ async function _aggiornaResolver(categoriaId) {
       if (q.length) { clSp['CLASSIFICA MIGLIORI QUARTE '+suf] = q; clSp['CLASSIFICA MIGLIORI QUARTE '+nums.join('-')] = q; }
     });
     // Aggiorna globali subito
-    window._clGlobale = clG;
+    window._clGlobale = _pulisciDoppioniClGlobale(clG);
     window._clSpecGlobale = clSp;
 
     // ── PASSO 3: risolve placeholder per Gironi 1-10 ──
@@ -4714,7 +4744,7 @@ async function _aggiornaResolver(categoriaId) {
       if (cl.length) clG[nome] = cl;
     }
 
-    window._clGlobale = clG;
+    window._clGlobale = _pulisciDoppioniClGlobale(clG);
     window._clSpecGlobale = clSp;
     window._resolveNome = (nome) => {
       const sq = risolviSq(nome);
