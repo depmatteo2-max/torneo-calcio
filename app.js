@@ -2161,11 +2161,11 @@ async function renderAdminRisultati() {
     }
     html+=`<div class="admin-match"><div class="admin-match-header">${orInfo}
       <div style="display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;">
-        <div class="admin-team-name">${logoHTML(p.home,'sm')}<span>${p.home?.nome||'?'}</span></div>
+        <div class="admin-team-name">${logoHTML(p.home,'sm')}<span>${p.home?.nome && !_isPlaceholder(p.home.nome) ? p.home.nome : (p.note_home || p.home?.nome || '?')}</span></div>
         <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_home:''}" placeholder="—" id="sh_${p.id}">
         <span class="score-dash">—</span>
         <input class="score-input" type="number" min="0" max="30" value="${p.giocata?p.gol_away:''}" placeholder="—" id="sa_${p.id}">
-        <div class="admin-team-name right"><span>${p.away?.nome||'?'}</span>${logoHTML(p.away,'sm')}</div>
+        <div class="admin-team-name right"><span>${p.away?.nome && !_isPlaceholder(p.away.nome) ? p.away.nome : (p.note_away || p.away?.nome || '?')}</span>${logoHTML(p.away,'sm')}</div>
         <div class="match-actions">
           <button class="btn btn-p btn-sm" onclick="saveRisultato(${p.id},${p._gironeId})">✓ Conferma</button>
           ${badge}
