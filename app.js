@@ -1494,6 +1494,10 @@ async function renderRisultati() {
   for (const g of gironi) { for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _cat: cat?.nome || '' }); }
   const filtroAttivo = STATE.activeGiornata && STATE.activeGiornata !== 'tutte';
   if (filtroAttivo) tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
+  // Vista pubblica: nascondi partite con placeholder (squadre non ancora determinate)
+  if (!STATE.isAdmin) {
+    tuttePartite = tuttePartite.filter(p => !_isPlaceholder(p.home?.nome) && !_isPlaceholder(p.away?.nome) && p.home_id && p.away_id);
+  }
   tuttePartite.sort((a, b) => _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario));
   const giocate = tuttePartite.filter(p => p.giocata);
   const daFare  = tuttePartite.filter(p => !p.giocata);
