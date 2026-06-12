@@ -487,7 +487,7 @@ function renderCatBar() {
         <div style="display:flex;gap:4px;flex-shrink:0;margin-left:auto;">
           ${STATE.categorie.map(c =>
             `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" style="font-size:11px;padding:3px 10px;white-space:nowrap;"
-              onclick="STATE.activeCat=${c.id};_saveSavedCat(${c.id});renderCatBar();${_isScorer?'renderAdminRisultati()':'renderCurrentSection()'}">
+              onclick="STATE.activeCat=${c.id};_saveSavedCat(${c.id});STATE.activeGiornata='tutte';STATE._giornateDisponibili=[];_caricaGiornate().then(()=>{renderCatBar();${_isScorer?'renderAdminRisultati()':'renderCurrentSection()'}})">
               ${c.nome}
             </button>`
           ).join('')}
@@ -2107,12 +2107,37 @@ async function renderAdminRisultati() {
   const el=document.getElementById('sec-a-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);">⏳ Caricamento...</div>';
+  // Carica giornate se non ancora disponibili per questa categoria
+  if (!STATE._giornateDisponibili?.length) {
+    await _caricaGiornate();
+    _renderGiornataBar();
+  }
   const gironi=await getGironiWithData(STATE.activeCat);
   const campiGiornate = await dbGetCampiGiornate(STATE.activeTorneo);
   const campiMap = {}; campiGiornate.forEach(c => campiMap[c.giorno] = c);
   STATE._campiGiornate = campiMap;
   let tuttePartite = [];
   for (const g of gironi) { for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id }); }
+  // Barra filtro giornate in cima
+  const giornate = STATE._giornateDisponibili || [];
+  let html = '';
+  if (giornate.length > 1) {
+    const oggi = _trovaGiornataOggi(giornate);
+    html += `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 4px;margin-bottom:10px;">
+      <button onclick="STATE.activeGiornata='tutte';renderAdminRisultati()"
+        style="padding:5px 12px;border-radius:20px;border:1.5px solid ${STATE.activeGiornata==='tutte'?'var(--blu)':'var(--bordo)'};background:${STATE.activeGiornata==='tutte'?'var(--blu)':'white'};color:${STATE.activeGiornata==='tutte'?'white':'var(--testo-lt)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
+        📅 Tutte
+      </button>
+      ${giornate.map(g => {
+        const isOggi = g === oggi;
+        const isAtt = STATE.activeGiornata === g;
+        return `<button onclick="STATE.activeGiornata='${g}';renderAdminRisultati()"
+          style="padding:5px 12px;border-radius:20px;border:1.5px solid ${isAtt?'var(--blu)':isOggi?'var(--arancio)':'var(--bordo)'};background:${isAtt?'var(--blu)':isOggi?'var(--arancio-bg)':'white'};color:${isAtt?'white':isOggi?'var(--arancio)':'var(--testo-lt)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
+          ${isOggi?'🔴 ':''}${_labelGiornata(g)}
+        </button>`;
+      }).join('')}
+    </div>`;
+  }
   if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   tuttePartite.sort((a,b) => {
     const mesiOrd = {'venerdì':0,'venerdi':0,'sabato':1,'domenica':2,'lunedì':3,'martedì':4,'mercoledì':5,'giovedì':6};
@@ -2125,7 +2150,7 @@ async function renderAdminRisultati() {
     }
     return _orarioToMinuti(a.orario) - _orarioToMinuti(b.orario);
   });
-  let html='';
+  html += '';
   for (const p of tuttePartite) {
     const key='p'+p.id; const open=!!openScorers[key];
     let badge='';
