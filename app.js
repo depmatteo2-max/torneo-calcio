@@ -481,17 +481,27 @@ function renderCatBar() {
     const _isScorer = STATE.userRole === 'scorer' || STATE.userRole === 'arbitro';
     const _isRisultatiAdmin = STATE.currentSection === 'a-risultati';
     if (_isScorer || _isRisultatiAdmin) {
-      // Arbitri e admin in sezione risultati: nome categoria + tasto Cambia
-      catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;">
-        <span style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;">${cat?.nome||''}</span>
-        <div style="display:flex;gap:4px;flex-shrink:0;margin-left:auto;">
-          ${STATE.categorie.map(c =>
-            `<button class="cat-pill${c.id===STATE.activeCat?' active':''}" style="font-size:11px;padding:3px 10px;white-space:nowrap;"
-              onclick="STATE.activeCat=${c.id};_saveSavedCat(${c.id});STATE.activeGiornata='tutte';STATE._giornateDisponibili=[];_caricaGiornate().then(()=>{renderCatBar();${_isScorer?'renderAdminRisultati()':'renderCurrentSection()'}})">
-              ${c.nome}
-            </button>`
-          ).join('')}
-        </div>
+      // Riga 1: nome categoria attiva + tasto Cambia
+      // Riga 2: giornate (gestita da _renderGiornataBar sotto)
+      catHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);">
+        <span style="font-size:14px;font-weight:800;color:var(--testo);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${cat?.nome||''}</span>
+        <button onclick="
+          var _sel=document.getElementById('_cat-sel-popup');
+          if(_sel){_sel.remove();}else{
+            var _d=document.createElement('div');
+            _d.id='_cat-sel-popup';
+            _d.style.cssText='position:fixed;top:90px;left:0;right:0;z-index:999;background:white;border-bottom:2px solid var(--bordo);padding:8px 12px;display:flex;gap:6px;flex-wrap:wrap;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+            _d.innerHTML='${STATE.categorie.map(c =>
+              `<button onclick=\\"STATE.activeCat=${c.id};_saveSavedCat(${c.id});STATE.activeGiornata=\\'tutte\\';STATE._giornateDisponibili=[];document.getElementById(\\'_cat-sel-popup\\')?.remove();_caricaGiornate().then(()=>{renderCatBar();${_isScorer?'renderAdminRisultati()':'renderCurrentSection()'}})\\"
+                style=\\"padding:6px 14px;border-radius:20px;border:2px solid ${`'+(c.id===STATE.activeCat?'var(--blu)':'var(--bordo)')+'`};background:${`'+(c.id===STATE.activeCat?'var(--blu)':'white')+'`};color:${`'+(c.id===STATE.activeCat?'white':'var(--testo-lt)')+'`};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;\\">${c.nome}</button>`
+            ).join('')}';
+            document.body.appendChild(_d);
+          }"
+          style="flex-shrink:0;background:var(--sfondo);border:1.5px solid var(--bordo);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:var(--text-2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;"
+          onmouseover="this.style.borderColor='var(--blu)';this.style.color='var(--blu)'"
+          onmouseout="this.style.borderColor='var(--bordo)';this.style.color='var(--text-2)'">
+          ⇄ Cambia
+        </button>
       </div>`;
     } else {
       // Admin in altre sezioni: pillole orizzontali scorrevoli
