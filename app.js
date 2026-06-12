@@ -2192,13 +2192,25 @@ async function saveRisultato(partita_id, girone_id) {
   try {
     const result=await dbSavePartita({ id: partita_id, girone_id, gol_home: parseInt(sh), gol_away: parseInt(sa), giocata: true, inserito_da: STATE.userName || null });
     if (result) {
-      toast('✓ Salvato!'); await renderAdminRisultati();
+      toast('✓ Salvato!');
+      // Salva stato corrente prima del resolver
+      const _catId = STATE.activeCat;
+      const _torneoId = STATE.activeTorneo;
+      const _cats = STATE.categorie.slice();
+      const _sez = STATE.currentSection;
+      const _giornata = STATE.activeGiornata;
       const {data:gironeRow}=await db.from('gironi').select('categoria_id').eq('id',girone_id).single();
       if (gironeRow?.categoria_id) {
-        // Invalida cache resolver dopo un risultato
         if (typeof _resolverCache !== 'undefined') delete _resolverCache[gironeRow.categoria_id];
         await verificaEGeneraTriangolari(gironeRow.categoria_id);
       }
+      // Ripristina stato se svuotato dal resolver
+      if (!STATE.activeTorneo) STATE.activeTorneo = _torneoId;
+      if (!STATE.categorie?.length) STATE.categorie = _cats;
+      if (!STATE.activeCat) STATE.activeCat = _catId;
+      if (!STATE.currentSection) STATE.currentSection = _sez;
+      STATE.activeGiornata = _giornata;
+      await renderAdminRisultati();
     } else { toast('Errore nel salvataggio'); }
   } catch(e) { console.error(e); toast('Errore: '+(e.message||'sconosciuto')); }
 }
@@ -2285,7 +2297,12 @@ async function saveKO(match_id) {
   const ko=await dbGetKnockout(STATE.activeCat); const m=ko.find(x=>x.id===match_id); if(!m)return;
   await dbSaveKnockoutMatch({...m, gol_home:parseInt(sh), gol_away:parseInt(sa), giocata:true, inserito_da: STATE.userName||null});
   toast('✓ Risultato salvato');
-  if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+  const _catId=STATE.activeCat, _torneoId=STATE.activeTorneo, _cats=STATE.categorie.slice(), _sez=STATE.currentSection;
+  if (_catId) await verificaEGeneraTriangolari(_catId);
+  if (!STATE.activeTorneo) STATE.activeTorneo=_torneoId;
+  if (!STATE.categorie?.length) STATE.categorie=_cats;
+  if (!STATE.activeCat) STATE.activeCat=_catId;
+  if (!STATE.currentSection) STATE.currentSection=_sez;
   await renderAdminKnockout();
   if (STATE.currentSection==='tabellone') await renderTabellone();
 }
