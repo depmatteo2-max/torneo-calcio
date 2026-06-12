@@ -563,7 +563,8 @@ async function _caricaGiornate() {
     const _gCacheKey = 'giornate_' + STATE.activeCat;
     if (window._giornateCache?.[_gCacheKey] && Date.now() - window._giornateCache[_gCacheKey].ts < 300000) {
       STATE._giornateDisponibili = window._giornateCache[_gCacheKey].data;
-      STATE.activeGiornata = 'tutte';
+      const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
+      STATE.activeGiornata = oggi || 'tutte';
       return;
     }
     const dateSet = new Set();
@@ -584,7 +585,8 @@ async function _caricaGiornate() {
     STATE._giornateDisponibili = [...dateSet].sort((a,b) => parseData(a) - parseData(b));
     if (!window._giornateCache) window._giornateCache = {};
     window._giornateCache['giornate_' + STATE.activeCat] = { data: STATE._giornateDisponibili, ts: Date.now() };
-    STATE.activeGiornata = 'tutte';
+    const oggi = _trovaGiornataOggi(STATE._giornateDisponibili);
+    STATE.activeGiornata = oggi || 'tutte';
   } catch(e) { STATE._giornateDisponibili = []; STATE.activeGiornata = 'tutte'; }
 }
 
@@ -2116,26 +2118,7 @@ async function renderAdminRisultati() {
   STATE._campiGiornate = campiMap;
   let tuttePartite = [];
   for (const g of gironi) { for (const p of g.partite) tuttePartite.push({ ...p, _girone: g.nome, _gironeId: g.id }); }
-  // Barra filtro giornate in cima
-  const giornate = STATE._giornateDisponibili || [];
   let html = '';
-  if (giornate.length > 1) {
-    const oggi = _trovaGiornataOggi(giornate);
-    html += `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 4px;margin-bottom:10px;">
-      <button onclick="STATE.activeGiornata='tutte';renderAdminRisultati()"
-        style="padding:5px 12px;border-radius:20px;border:1.5px solid ${STATE.activeGiornata==='tutte'?'var(--blu)':'var(--bordo)'};background:${STATE.activeGiornata==='tutte'?'var(--blu)':'white'};color:${STATE.activeGiornata==='tutte'?'white':'var(--testo-lt)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
-        📅 Tutte
-      </button>
-      ${giornate.map(g => {
-        const isOggi = g === oggi;
-        const isAtt = STATE.activeGiornata === g;
-        return `<button onclick="STATE.activeGiornata='${g}';renderAdminRisultati()"
-          style="padding:5px 12px;border-radius:20px;border:1.5px solid ${isAtt?'var(--blu)':isOggi?'var(--arancio)':'var(--bordo)'};background:${isAtt?'var(--blu)':isOggi?'var(--arancio-bg)':'white'};color:${isAtt?'white':isOggi?'var(--arancio)':'var(--testo-lt)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
-          ${isOggi?'🔴 ':''}${_labelGiornata(g)}
-        </button>`;
-      }).join('')}
-    </div>`;
-  }
   if (STATE.activeGiornata && STATE.activeGiornata !== 'tutte') tuttePartite = tuttePartite.filter(p => p.giorno === STATE.activeGiornata);
   tuttePartite.sort((a,b) => {
     const mesiOrd = {'venerdì':0,'venerdi':0,'sabato':1,'domenica':2,'lunedì':3,'martedì':4,'mercoledì':5,'giovedì':6};
