@@ -1274,7 +1274,7 @@ async function renderClassifiche() {
 
     var played = g.partite.filter(function(p){return p.giocata;}).length;
     // Mostra sempre se abbiamo una classifica valida (es. gironi Champions risolti ma non ancora giocati)
-    if (played===0 && (!cl || cl.length < 2)) continue;
+    if (played===0) continue;
 
     html += '<div class="card" style="margin-bottom:8px;">';
     html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
