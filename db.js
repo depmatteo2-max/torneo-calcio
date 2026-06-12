@@ -15,7 +15,15 @@ const _TTL = 600000; // 10 minuti
 function _cacheGet(k) { const e=_cache[k]; if(!e||Date.now()-e.ts>_TTL){delete _cache[k];return null;} return e.data; }
 function _cacheSet(k,d) { _cache[k]={data:d,ts:Date.now()}; }
 function _cacheInvalid(p) { Object.keys(_cache).forEach(k=>{if(k.startsWith(p))delete _cache[k];}); }
-function _cacheClear() { Object.keys(_cache).forEach(k=>delete _cache[k]); }
+function _cacheClear() { 
+  Object.keys(_cache).forEach(k => {
+    // Non cancellare categorie e tornei — sono dati stabili
+    if (k.startsWith('cat_') || k.startsWith('tornei_')) return;
+    delete _cache[k];
+  });
+  // Reset promise così la prossima chiamata ricarica i dati freschi
+  _staticLoadingPromise = null;
+}
 
 function initDB() {
   db = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
@@ -33,8 +41,13 @@ async function _precaricaDatiStatici() {
   if (_staticLoadingPromise) return _staticLoadingPromise;
   _staticLoadingPromise = (async () => {
     try {
-      const r = await fetch(KV_WORKER_URL + '/data', { cache: 'no-cache' });
-      if (!r.ok) throw new Error('KV not ok');
+      // Determina il torneo ID da STATE o da cache locale
+      const torneoId = (typeof STATE !== 'undefined' && STATE.activeTorneo) ? STATE.activeTorneo : null;
+      const url = torneoId 
+        ? KV_WORKER_URL + '/data?torneo=' + torneoId
+        : KV_WORKER_URL + '/data';
+      const r = await fetch(url, { cache: 'no-cache' });
+      if (!r.ok) throw new Error('KV not ok: ' + r.status);
       const d = await r.json();
       window._staticData = d;
       _staticLoaded = true;
