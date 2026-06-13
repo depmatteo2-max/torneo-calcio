@@ -2356,6 +2356,16 @@ function enterAdmin(user) {
   document.getElementById('pub-nav').style.display='none';
   document.getElementById('admin-nav').style.display='flex';
   if(document.getElementById('admin-btn'))document.getElementById('admin-btn').textContent='Esci ('+(user.nome||user.username)+')';
+  // Aggiungi tasto Classifiche nella nav admin se non presente
+  const adminNav = document.getElementById('admin-nav');
+  if (adminNav && !adminNav.querySelector('[data-section="classifiche"]')) {
+    const btnCl = document.createElement('button');
+    btnCl.className = 'nav-btn';
+    btnCl.setAttribute('data-section', 'classifiche');
+    btnCl.innerHTML = '📊 Classifiche';
+    btnCl.onclick = function() { showSection('classifiche', btnCl); };
+    adminNav.insertBefore(btnCl, adminNav.firstChild);
+  }
   if (user.role==='scorer'||user.ruolo==='arbitro') {
     _mostraNavArbitro(); STATE.currentSection='a-risultati';
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
@@ -2365,10 +2375,12 @@ function enterAdmin(user) {
     document.getElementById('cat-bar').style.display=''; renderCatBar(); renderAdminRisultati();
   } else {
     document.querySelectorAll('.nav-btn:not(.nav-exit)').forEach(b=>b.classList.remove('active'));
-    const btn=document.querySelector('[data-section="a-tornei"]'); if(btn)btn.classList.add('active');
+    const btn=document.querySelector('[data-section="a-risultati"]'); if(btn)btn.classList.add('active');
     document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
-    document.getElementById('sec-a-tornei').classList.add('active');
-    document.getElementById('cat-bar').style.display='none'; STATE.currentSection='a-tornei'; renderAdminTornei();
+    document.getElementById('sec-a-risultati').classList.add('active');
+    if (!STATE.activeCat && STATE.categorie.length) STATE.activeCat = STATE.categorie[0].id;
+    document.getElementById('cat-bar').style.display=''; renderCatBar();
+    STATE.currentSection='a-risultati'; renderAdminRisultati();
     _addSimBtn();
   }
 }
