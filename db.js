@@ -41,8 +41,11 @@ async function _precaricaDatiStatici() {
   if (_staticLoadingPromise) return _staticLoadingPromise;
   _staticLoadingPromise = (async () => {
     try {
-      // Determina il torneo ID da STATE o da cache locale
-      const torneoId = (typeof STATE !== 'undefined' && STATE.activeTorneo) ? STATE.activeTorneo : null;
+      // Determina il torneo ID da STATE o da localStorage come fallback
+      let torneoId = (typeof STATE !== 'undefined' && STATE.activeTorneo) ? STATE.activeTorneo : null;
+      if (!torneoId) {
+        try { const v = localStorage.getItem('spe_torneo'); if (v) torneoId = parseInt(v); } catch(e) {}
+      }
       const url = torneoId 
         ? KV_WORKER_URL + '/data?torneo=' + torneoId
         : KV_WORKER_URL + '/data';
