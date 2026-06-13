@@ -1292,8 +1292,18 @@ async function renderClassifiche() {
     });
 
     var played = g.partite.filter(function(p){return p.giocata;}).length;
-    // Mostra sempre se abbiamo una classifica valida (es. gironi Champions risolti ma non ancora giocati)
     if (played===0) continue;
+
+    // Aggiungi squadre del girone che non hanno ancora giocato (0 partite)
+    if (cl && cl.length && g.squadre && g.squadre.length > cl.length) {
+      var clIds = new Set(cl.map(function(r){return r.sq&&r.sq.id;}));
+      g.squadre.forEach(function(sq) {
+        if (!sq||!sq.id||isPlaceh(sq.nome)) return;
+        if (!clIds.has(sq.id)) {
+          cl.push({sq:sq,g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0,rigori:0});
+        }
+      });
+    }
 
     html += '<div class="card" style="margin-bottom:8px;">';
     html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
