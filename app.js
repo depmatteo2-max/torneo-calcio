@@ -25,8 +25,8 @@ async function init() {
   try {
     // Rimuovi cache categorie sessionStorage
     Object.keys(sessionStorage).filter(k => k.startsWith('mclion_cats_')).forEach(k => sessionStorage.removeItem(k));
-    // Rimuovi torneo salvato — viene ricalcolato dal KV ogni volta
-    localStorage.removeItem('spe_torneo');
+    // NON rimuovere spe_torneo — il torneo attivo deve essere ricordato tra ricariche
+    // localStorage.removeItem('spe_torneo'); // ← rimosso: causa il bug "Nessuna categoria"
     localStorage.removeItem('spe_cat');
   } catch(e) {}
 
@@ -44,9 +44,11 @@ async function init() {
     STATE.tornei = await dbGetTornei();
     const savedId = _loadSavedTorneo();
     const attivi = STATE.tornei.filter(t => t.attivo);
-    if (savedId && attivi.find(t => t.id === savedId)) STATE.activeTorneo = savedId;
+    if (savedId && STATE.tornei.find(t => t.id === savedId)) STATE.activeTorneo = savedId;
     else if (attivi.length) STATE.activeTorneo = attivi[0].id;
     else if (STATE.tornei.length) STATE.activeTorneo = STATE.tornei[0].id;
+    // Salva sempre il torneo attivo
+    if (STATE.activeTorneo) _saveSavedTorneo(STATE.activeTorneo);
 
     // Nascondi loading SUBITO dopo aver trovato il torneo
     document.getElementById('loading-screen').style.display = 'none';
