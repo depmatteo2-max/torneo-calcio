@@ -166,16 +166,9 @@ async function loadTorneo() {
     STATE.activeCat = catSalvata.id;
     preloadCategoria(catSalvata.id);
   } else if (STATE.categorie.length > 1 && !STATE.activeCat) {
-    // Se admin: auto-seleziona prima categoria per poter inserire risultati
-    if (STATE.isAdmin) {
-      STATE.activeCat = STATE.categorie[0].id;
-    } else {
-      STATE.activeCat = null;
-      renderTorneoBar();
-      document.getElementById('cat-bar').style.display = 'none';
-      mostraSelezioneCat();
-      return;
-    }
+    // Auto-seleziona sempre la prima categoria (sia admin che cliente)
+    STATE.activeCat = STATE.categorie[0].id;
+    _saveSavedCat(STATE.activeCat);
   } else {
     STATE.activeCat = STATE.categorie.length ? STATE.categorie[0].id : null;
   }
