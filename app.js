@@ -670,19 +670,17 @@ async function verificaEGeneraTriangolari(categoriaId) {
     const risultatiKnockout = {};
     for (const ko of (allKo||[])) {
       const rn = (ko.round_name||'').toUpperCase().trim();
-      const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
-      if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2,'0')] = ko;
-      const mQ = rn.match(/QUARTO\s*(\d+)/i);
-      if (mQ) risultatiKnockout['QUARTO ' + mQ[1].padStart(2,'0')] = ko;
-      // Supporto QUARTO DI FINALE 01
-      const mQDF = rn.match(/QUARTO\s+DI\s+FINALE\s*(\d+)/i);
-      if (mQDF) {
-        risultatiKnockout['QUARTO DI FINALE ' + mQDF[1].padStart(2,'0')] = ko;
-        risultatiKnockout['QUARTODEFINALE ' + mQDF[1].padStart(2,'0')] = ko;
-      }
-      // Indicizza anche con chiave esatta per sicurezza
+      // Indicizza con chiave esatta
       risultatiKnockout[rn] = ko;
+      // Indicizza con numero paddato (es. SEMIFINALE 1 → SEMIFINALE 01)
       risultatiKnockout[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+      // Estrai numero e indicizza per tipo
+      const mNum = rn.match(/(.*?)\s*(\d+)$/);
+      if (mNum) {
+        const tipo = mNum[1].trim();
+        const num = mNum[2].padStart(2,'0');
+        risultatiKnockout[tipo + ' ' + num] = ko;
+      }
     }
 
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
@@ -767,16 +765,16 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   if (!placeholder) return null;
   const s = placeholder.trim();
 
-  // Vincente/Perdente SEMIFINALE/QUARTO/FINALE
-  const mVP = s.match(/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO\s+DI\s+FINALE|QUARTO|FINALE)\s*(\d+)/i);
+  // Vincente/Perdente QUALSIASI ROUND (SEMIFINALE, QUARTO DI FINALE, FINALE, ecc.)
+  const mVP = s.match(/^(Vincente|Perdente)\s+(.+?)\s+(\d+)$/i);
   if (mVP) {
     const tipo = mVP[1].toLowerCase();
     const round = mVP[2].toUpperCase().trim();
-    const num = (mVP[3]||'01').padStart(2,'0');
-    // Prova diverse varianti della chiave
-    const match = risultatiKnockout[round + ' ' + num]
-               || risultatiKnockout[round.replace(/\s+/g,' ') + ' ' + num]
-               || risultatiKnockout[round + num];
+    const num = mVP[3].padStart(2,'0');
+    const chiave = round + ' ' + num;
+    const match = risultatiKnockout[chiave]
+               || risultatiKnockout[round + num]
+               || Object.values(risultatiKnockout).find(k => k && (k.round_name||'').toUpperCase().trim() === chiave);
     if (!match?.giocata) return null;
     const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
     const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
