@@ -674,6 +674,15 @@ async function verificaEGeneraTriangolari(categoriaId) {
       if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2,'0')] = ko;
       const mQ = rn.match(/QUARTO\s*(\d+)/i);
       if (mQ) risultatiKnockout['QUARTO ' + mQ[1].padStart(2,'0')] = ko;
+      // Supporto QUARTO DI FINALE 01
+      const mQDF = rn.match(/QUARTO\s+DI\s+FINALE\s*(\d+)/i);
+      if (mQDF) {
+        risultatiKnockout['QUARTO DI FINALE ' + mQDF[1].padStart(2,'0')] = ko;
+        risultatiKnockout['QUARTODEFINALE ' + mQDF[1].padStart(2,'0')] = ko;
+      }
+      // Indicizza anche con chiave esatta per sicurezza
+      risultatiKnockout[rn] = ko;
+      risultatiKnockout[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
     }
 
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
@@ -759,12 +768,15 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   const s = placeholder.trim();
 
   // Vincente/Perdente SEMIFINALE/QUARTO/FINALE
-  const mVP = s.match(/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|FINALE)\s*(\d+)/i);
+  const mVP = s.match(/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO\s+DI\s+FINALE|QUARTO|FINALE)\s*(\d+)/i);
   if (mVP) {
     const tipo = mVP[1].toLowerCase();
-    const round = mVP[2].toUpperCase();
-    const num = mVP[3].padStart(2,'0');
-    const match = risultatiKnockout[round + ' ' + num];
+    const round = mVP[2].toUpperCase().trim();
+    const num = (mVP[3]||'01').padStart(2,'0');
+    // Prova diverse varianti della chiave
+    const match = risultatiKnockout[round + ' ' + num]
+               || risultatiKnockout[round.replace(/\s+/g,' ') + ' ' + num]
+               || risultatiKnockout[round + num];
     if (!match?.giocata) return null;
     const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
     const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
