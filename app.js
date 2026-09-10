@@ -727,7 +727,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
     }
 
     if (risolti > 0) {
-      _mostraNotificaTriangolari();
+      // Notifica disabilitata nella fase gironi
       if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
       if (STATE.currentSection === 'tabellone') await renderTabellone();
       if (STATE.currentSection === 'a-risultati') await renderAdminRisultati();
@@ -823,9 +823,12 @@ async function forzaRisoluzioneAccoppiamenti() {
 }
 
 function _mostraNotificaTriangolari() {
+  // Disabilitata — usare _mostraNotificaFaseFinale() per la fase finale
+}
+function _mostraNotificaFaseFinale() {
   const old=document.getElementById('notifica-triangolari'); if(old)old.remove();
   const div=document.createElement('div'); div.id='notifica-triangolari';
-  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Gironi completati! Triangolari aggiornati.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
+  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Torneo completato! Classifiche finali aggiornate.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
   document.body.appendChild(div);
   setTimeout(()=>{ if(div.parentNode)div.remove(); },6000);
 }
@@ -1747,7 +1750,14 @@ async function risolviManuale() {
       await db.from('knockout').update(upd).eq('id',match.id); risolti++;
     }
   }
-  if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
+  if (risolti>0) {
+    // Mostra notifica solo se la finale è completata
+    const allKoFinal = await dbGetKnockout(STATE.activeCat);
+    const finale = allKoFinal.filter(k => /FINALE/i.test(k.round_name) && !k.is_consolazione);
+    const finaleCompleta = finale.length > 0 && finale.every(k => k.giocata);
+    if (finaleCompleta) _mostraNotificaFaseFinale();
+    await renderAdminKnockout();
+  }
   else toast('ℹ️ Nessun accoppiamento da aggiornare');
 }
 
