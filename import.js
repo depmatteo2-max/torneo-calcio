@@ -9,14 +9,24 @@ const ROUND_META = {
   'BLU'                  : { order: 7,  consolazione: false, emoji: '🔵', desc: 'Fase Blu' },
   'GIRONE 1'             : { order: 8,  consolazione: false, emoji: '1️⃣', desc: 'Girone 1' },
   'GIRONE 2'             : { order: 9,  consolazione: false, emoji: '2️⃣', desc: 'Girone 2' },
-  'FINALE SILVER 1-2 POSTO': { order: 10, consolazione: true,  emoji: '🥈', desc: 'Finale Silver 1°-2°' },
-  'FINALE SILVER 3-4 POSTO': { order: 11, consolazione: true,  emoji: '🥉', desc: 'Finale Silver 3°-4°' },
-  'FINALE GOLD 1-2 POSTO'  : { order: 12, consolazione: false, emoji: '🥇', desc: 'Finale Gold 1°-2°' },
-  'FINALE GOLD 3-4 POSTO'  : { order: 13, consolazione: false, emoji: '🏅', desc: 'Finale Gold 3°-4°' },
   'QUARTO DI FINALE 01'  : { order: 10, consolazione: false, emoji: '⚽', desc: 'Quarto di Finale 1' },
   'QUARTO DI FINALE 02'  : { order: 11, consolazione: false, emoji: '⚽', desc: 'Quarto di Finale 2' },
   'QUARTO DI FINALE 03'  : { order: 12, consolazione: false, emoji: '⚽', desc: 'Quarto di Finale 3' },
   'QUARTO DI FINALE 04'  : { order: 13, consolazione: false, emoji: '⚽', desc: 'Quarto di Finale 4' },
+  'GARA 3 POSTO 01'      : { order: 20, consolazione: true,  emoji: '🏅', desc: 'Gara 3° Posto 1' },
+  'GARA 3 POSTO 02'      : { order: 21, consolazione: true,  emoji: '🏅', desc: 'Gara 3° Posto 2' },
+  'GARA 4 POSTO 01'      : { order: 22, consolazione: true,  emoji: '🏅', desc: 'Gara 4° Posto 1' },
+  'GARA 4 POSTO 02'      : { order: 23, consolazione: true,  emoji: '🏅', desc: 'Gara 4° Posto 2' },
+  'GARA 5 POSTO 01'      : { order: 24, consolazione: true,  emoji: '🏅', desc: 'Gara 5° Posto 1' },
+  'GARA 5 POSTO 02'      : { order: 25, consolazione: true,  emoji: '🏅', desc: 'Gara 5° Posto 2' },
+  'GARA 6 POSTO 01'      : { order: 26, consolazione: true,  emoji: '🏅', desc: 'Gara 6° Posto 1' },
+  'GARA 6 POSTO 02'      : { order: 27, consolazione: true,  emoji: '🏅', desc: 'Gara 6° Posto 2' },
+  'FINALE 1 - 2 POSTO'   : { order: 30, consolazione: false, emoji: '🏆', desc: 'Finale 1°-2° Posto' },
+  'FINALE 3 - 4 POSTO'   : { order: 31, consolazione: true,  emoji: '🥉', desc: 'Finale 3°-4° Posto' },
+  'FINALE SILVER 1-2 POSTO': { order: 10, consolazione: true,  emoji: '🥈', desc: 'Finale Silver 1°-2°' },
+  'FINALE SILVER 3-4 POSTO': { order: 11, consolazione: true,  emoji: '🥉', desc: 'Finale Silver 3°-4°' },
+  'FINALE GOLD 1-2 POSTO'  : { order: 12, consolazione: false, emoji: '🥇', desc: 'Finale Gold 1°-2°' },
+  'FINALE GOLD 3-4 POSTO'  : { order: 13, consolazione: false, emoji: '🏅', desc: 'Finale Gold 3°-4°' },
   'SEMIFINALE 01'        : { order: 14, consolazione: false, emoji: '⚔️', desc: 'Semifinale 1' },
   'SEMIFINALE 02'        : { order: 15, consolazione: false, emoji: '⚔️', desc: 'Semifinale 2' },
   'SEMIFINALE 03'        : { order: 16, consolazione: false, emoji: '⚔️', desc: 'Semifinale 3' },
@@ -38,10 +48,10 @@ function _getRoundMeta(roundRaw) {
   if (ROUND_META[r]) return { key: r, meta: ROUND_META[r] };
   if (/^FINALE\s+\d+[-\u2013]\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '\uD83C\uDF96\uFE0F', desc: r } };
   if (/^FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 18, consolazione: false, emoji: '\uD83C\uDFC6', desc: r } };
-  if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '⚔️', desc: r } };
+  if (/^SEMIFINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 14, consolazione: false, emoji: '\u2694\uFE0F', desc: r } };
   if (/^QUARTO\s+DI\s+FINALE\s+\d+$/.test(r)) return { key: r, meta: { order: 10, consolazione: false, emoji: '⚽', desc: r } };
   if (/^GARA\s+\d+\s+POSTO\s+\d+$/.test(r)) return { key: r, meta: { order: 20, consolazione: true, emoji: '🏅', desc: r } };
-  if (/^FINALE\s+\d+\s*-\s*\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 25, consolazione: true, emoji: '🏅', desc: r } };
+  if (/^FINALE\s+\d+\s*-\s*\d+\s+POSTO$/.test(r)) return { key: r, meta: { order: 30, consolazione: true, emoji: '🏅', desc: r } };
   if (/^GIRONE\s+\w+$/.test(r)) return { key: r, meta: { order: 5, consolazione: false, emoji: '\uD83C\uDFDF\uFE0F', desc: r } };
   const m = r.match(/^FINALE\s+(\d+)/);
   if (m) { const p1=parseInt(m[1]); return { key: r, meta: { order: 18+Math.floor((p1-1)/2), consolazione: p1>2, emoji: p1===1?'\uD83C\uDFC6':p1===3?'\uD83E\uDD49':'\uD83C\uDF96\uFE0F', desc: r } }; }
@@ -55,9 +65,14 @@ const ROUND_COLORS = {
   'GIRONE 1': '#90CAF9', 'GIRONE 2': '#A5D6A7',
   'FINALE SILVER 1-2 POSTO': '#A9D18E', 'FINALE SILVER 3-4 POSTO': '#C8E6C9',
   'FINALE GOLD 1-2 POSTO': '#FFD700',   'FINALE GOLD 3-4 POSTO': '#FFE082',
+  'QUARTO DI FINALE 01': '#81D784', 'QUARTO DI FINALE 02': '#81D784',
+  'QUARTO DI FINALE 03': '#81D784', 'QUARTO DI FINALE 04': '#81D784',
+  'GARA 3 POSTO 01': '#FFE082', 'GARA 3 POSTO 02': '#FFE082',
+  'GARA 4 POSTO 01': '#FFE082', 'GARA 4 POSTO 02': '#FFE082',
+  'GARA 5 POSTO 01': '#CFD8DC', 'GARA 5 POSTO 02': '#CFD8DC',
+  'GARA 6 POSTO 01': '#ECEFF1', 'GARA 6 POSTO 02': '#ECEFF1',
+  'FINALE 1 - 2 POSTO': '#FFD700', 'FINALE 3 - 4 POSTO': '#CD7F32',
   'SEMIFINALE 01': '#90CAF9', 'SEMIFINALE 02': '#90CAF9',
-  'QUARTO DI FINALE 01': '#81C784', 'QUARTO DI FINALE 02': '#81C784',
-  'QUARTO DI FINALE 03': '#81C784', 'QUARTO DI FINALE 04': '#81C784',
   'SEMIFINALE 03': '#90CAF9', 'SEMIFINALE 04': '#90CAF9',
   'FINALE 1': '#FFD700', 'FINALE 2': '#90CAF9', 'FINALE 3': '#A5D6A7',
   'FINALE 1-2 POSTO': '#FFD700', 'FINALE 3-4 POSTO': '#CD7F32',
@@ -89,6 +104,7 @@ function _isPlaceholder(nome) {
   if (/^\d+[°º][A-Za-z]+$/.test(n)) return true;
   // Vincente/Perdente
   if (/^(Vincente|Perdente)\s+(Finale|FINALE|SEMIFINALE|QUARTO)/i.test(n)) return true;
+  if (/^(Vincente|Perdente)\s+QUARTO\s+DI\s+FINALE/i.test(n)) return true;
   if (/^(Vincente|Perdente)\s+(GOLD|SILVER|PLATINO|BRONZO|ARANCIO|VERDE|BLU)/i.test(n)) return true;
   if (/^\d+\s+(SILVER|GOLD|PLATINO|BRONZO|ARANCIO|VERDE|BLU)\s+\d+$/i.test(n)) return true;
   if (/^\d+[°ºoa*]?\s*(Arancio|Verde|Blu)$/i.test(n)) return true;
