@@ -1256,7 +1256,80 @@ async function renderTabellone() {
     }
     return h;
   };
-  el.innerHTML=renderRounds(ko.filter(m=>!m.is_consolazione),'🏆 Tabellone')+renderRounds(ko.filter(m=>m.is_consolazione),'🥉 Consolazione');
+  // Costruisce classifica finale dal tabellone
+  let classificaHTML = '';
+  try {
+    const sqMap2 = {}; squadre.forEach(s => sqMap2[s.id] = s);
+
+    // Trova finale 1°/2°
+    const finale12 = ko.find(k =>
+      !k.is_consolazione &&
+      /FINALE/i.test(k.round_name) &&
+      k.giocata && k.home_id && k.away_id
+    );
+
+    // Trova finale 3°/4°
+    const finale34 = ko.find(k =>
+      k.is_consolazione &&
+      /FINALE/i.test(k.round_name) &&
+      k.giocata && k.home_id && k.away_id
+    );
+
+    if (finale12) {
+      const sq1 = sqMap2[finale12.home_id];
+      const sq2 = sqMap2[finale12.away_id];
+      const primo  = finale12.gol_home >= finale12.gol_away ? sq1 : sq2;
+      const secondo = finale12.gol_home >= finale12.gol_away ? sq2 : sq1;
+
+      classificaHTML = `
+        <div style="margin-top:16px;">
+          <div class="section-label">🏆 Classifica Finale</div>
+          <div class="card" style="background:linear-gradient(135deg,#0f172a,#1e3a8a);border:2px solid #FFD700;padding:16px;">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:center;gap:12px;background:rgba(255,215,0,0.15);border-radius:10px;padding:10px 14px;border:1px solid rgba(255,215,0,0.3);">
+                <span style="font-size:28px;">🥇</span>
+                <div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Campione</div>
+                  <div style="font-size:18px;font-weight:900;color:#FFD700;">${primo?.nome || '—'}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;background:rgba(192,192,192,0.1);border-radius:10px;padding:10px 14px;border:1px solid rgba(192,192,192,0.2);">
+                <span style="font-size:24px;">🥈</span>
+                <div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">2° Posto</div>
+                  <div style="font-size:16px;font-weight:800;color:#C0C0C0;">${secondo?.nome || '—'}</div>
+                </div>
+              </div>
+              ${finale34 ? (() => {
+                const sq3 = sqMap2[finale34.home_id];
+                const sq4 = sqMap2[finale34.away_id];
+                const terzo  = finale34.gol_home >= finale34.gol_away ? sq3 : sq4;
+                const quarto = finale34.gol_home >= finale34.gol_away ? sq4 : sq3;
+                return `
+              <div style="display:flex;align-items:center;gap:12px;background:rgba(205,127,50,0.1);border-radius:10px;padding:10px 14px;border:1px solid rgba(205,127,50,0.2);">
+                <span style="font-size:22px;">🥉</span>
+                <div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">3° Posto</div>
+                  <div style="font-size:15px;font-weight:800;color:#CD7F32;">${terzo?.nome || '—'}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 14px;border:1px solid rgba(255,255,255,0.08);">
+                <span style="font-size:20px;">4️⃣</span>
+                <div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">4° Posto</div>
+                  <div style="font-size:14px;font-weight:700;color:rgba(255,255,255,0.7);">${quarto?.nome || '—'}</div>
+                </div>
+              </div>`;
+              })() : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+  } catch(e) {}
+
+  el.innerHTML = renderRounds(ko.filter(m=>!m.is_consolazione),'🏆 Tabellone')
+               + renderRounds(ko.filter(m=>m.is_consolazione),'🥉 Consolazione')
+               + classificaHTML;
 }
 
 // ============================================================
