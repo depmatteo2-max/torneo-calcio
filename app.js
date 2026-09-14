@@ -669,18 +669,32 @@ async function verificaEGeneraTriangolari(categoriaId) {
       .eq('categoria_id', categoriaId);
     const risultatiKnockout = {};
     for (const ko of (allKo||[])) {
-      const rn = (ko.round_name||'').toUpperCase().trim();
-      // Indicizza con chiave esatta
+      // Estrai il nome "pulito" dal round_name che può contenere emoji e descrizione
+      // es. "⚽ QUARTO DI FINALE 01 — Quarto di Finale 1" → "QUARTO DI FINALE 01"
+      let rn = (ko.round_name||'').trim();
+      // Rimuovi emoji e descrizione dopo " — "
+      rn = rn.replace(/^[^a-zA-Z0-9]+/, '').split(' — ')[0].trim().toUpperCase();
+
+      // Indicizza con chiave esatta normalizzata
       risultatiKnockout[rn] = ko;
-      // Indicizza con numero paddato (es. SEMIFINALE 1 → SEMIFINALE 01)
+      // Indicizza con numero paddato
       risultatiKnockout[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
-      // Estrai numero e indicizza per tipo
-      const mNum = rn.match(/(.*?)\s*(\d+)$/);
-      if (mNum) {
-        const tipo = mNum[1].trim();
-        const num = mNum[2].padStart(2,'0');
-        risultatiKnockout[tipo + ' ' + num] = ko;
-      }
+
+      // Pattern SEMIFINALE XX
+      const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
+      if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2,'0')] = ko;
+
+      // Pattern QUARTO DI FINALE XX
+      const mQDF = rn.match(/QUARTO\s+DI\s+FINALE\s*(\d+)/i);
+      if (mQDF) risultatiKnockout['QUARTO DI FINALE ' + mQDF[1].padStart(2,'0')] = ko;
+
+      // Pattern GARA X POSTO XX
+      const mGara = rn.match(/GARA\s+(\d+)\s+POSTO\s*(\d+)/i);
+      if (mGara) risultatiKnockout['GARA ' + mGara[1] + ' POSTO ' + mGara[2].padStart(2,'0')] = ko;
+
+      // Pattern FINALE X - Y POSTO
+      const mFin = rn.match(/FINALE\s+(\d+)\s*-\s*(\d+)\s+POSTO/i);
+      if (mFin) risultatiKnockout['FINALE ' + mFin[1] + ' - ' + mFin[2] + ' POSTO'] = ko;
     }
 
     if (!Object.keys(classificheGironi).length && !Object.keys(risultatiKnockout).length) return;
@@ -727,7 +741,7 @@ async function verificaEGeneraTriangolari(categoriaId) {
     }
 
     if (risolti > 0) {
-      // Notifica disabilitata nella fase gironi
+      _mostraNotificaTriangolari();
       if (STATE.currentSection === 'a-knockout') await renderAdminKnockout();
       if (STATE.currentSection === 'tabellone') await renderTabellone();
       if (STATE.currentSection === 'a-risultati') await renderAdminRisultati();
@@ -758,6 +772,7 @@ function _isPlaceholder(nome) {
   if (/^\d+[\u00b0\u00ba*]?\s*\w+$/.test(s) && !/^\d+$/.test(s)) return true;
   if (/^(miglior|peggio)/i.test(s)) return true;
   if (/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|Finale)/i.test(s)) return true;
+  if (/^(Vincente|Perdente)\s+QUARTO\s+DI\s+FINALE/i.test(s)) return true;
   return false;
 }
 
@@ -765,16 +780,13 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   if (!placeholder) return null;
   const s = placeholder.trim();
 
-  // Vincente/Perdente QUALSIASI ROUND (SEMIFINALE, QUARTO DI FINALE, FINALE, ecc.)
-  const mVP = s.match(/^(Vincente|Perdente)\s+(.+?)\s+(\d+)$/i);
+  // Vincente/Perdente SEMIFINALE/QUARTO/FINALE
+  const mVP = s.match(/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|FINALE)\s*(\d+)/i);
   if (mVP) {
     const tipo = mVP[1].toLowerCase();
-    const round = mVP[2].toUpperCase().trim();
+    const round = mVP[2].toUpperCase();
     const num = mVP[3].padStart(2,'0');
-    const chiave = round + ' ' + num;
-    const match = risultatiKnockout[chiave]
-               || risultatiKnockout[round + num]
-               || Object.values(risultatiKnockout).find(k => k && (k.round_name||'').toUpperCase().trim() === chiave);
+    const match = risultatiKnockout[round + ' ' + num];
     if (!match?.giocata) return null;
     const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
     const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
@@ -823,12 +835,9 @@ async function forzaRisoluzioneAccoppiamenti() {
 }
 
 function _mostraNotificaTriangolari() {
-  // Disabilitata — usare _mostraNotificaFaseFinale() per la fase finale
-}
-function _mostraNotificaFaseFinale() {
   const old=document.getElementById('notifica-triangolari'); if(old)old.remove();
   const div=document.createElement('div'); div.id='notifica-triangolari';
-  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Torneo completato! Classifiche finali aggiornate.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
+  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Gironi completati! Triangolari aggiornati.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
   document.body.appendChild(div);
   setTimeout(()=>{ if(div.parentNode)div.remove(); },6000);
 }
@@ -1740,24 +1749,37 @@ async function risolviManuale() {
     const squadre=(gsRows||[]).map(r=>({id:r.squadra_id,nome:r.squadre?.nome||'',logo:r.squadre?.logo||null}));
     classificheGironi[g.nome]=calcGironeClassifica({squadre,partite:partite||[]});
   }
-  const {data:matches}=await db.from('knockout').select('id,note_home,note_away,home_id,away_id').eq('categoria_id',STATE.activeCat);
+  // Carica TUTTI i knockout con risultati per risolvere Vincente/Perdente
+  const {data:allKoFull}=await db.from('knockout')
+    .select('id,round_name,note_home,note_away,home_id,away_id,gol_home,gol_away,giocata')
+    .eq('categoria_id',STATE.activeCat);
+
+  // Costruisce indice risultatiKnockout (stesso metodo del PASSO 3)
+  const risultatiKnockout = {};
+  for (const ko of (allKoFull||[])) {
+    let rn = (ko.round_name||'').trim();
+    rn = rn.replace(/^[^a-zA-Z0-9]+/, '').split(' — ')[0].trim().toUpperCase();
+    risultatiKnockout[rn] = ko;
+    risultatiKnockout[rn.replace(/(\d+)$/, m => m.padStart(2,'0'))] = ko;
+    const mSem = rn.match(/SEMIFINALE\s*(\d+)/i);
+    if (mSem) risultatiKnockout['SEMIFINALE ' + mSem[1].padStart(2,'0')] = ko;
+    const mQDF = rn.match(/QUARTO\s+DI\s+FINALE\s*(\d+)/i);
+    if (mQDF) risultatiKnockout['QUARTO DI FINALE ' + mQDF[1].padStart(2,'0')] = ko;
+    const mGara = rn.match(/GARA\s+(\d+)\s+POSTO\s*(\d+)/i);
+    if (mGara) risultatiKnockout['GARA ' + mGara[1] + ' POSTO ' + mGara[2].padStart(2,'0')] = ko;
+  }
+
+  const matches = allKoFull || [];
   let risolti=0;
-  for (const match of (matches||[])) {
-    const newH=_resolvePlaceholder(match.note_home,classificheGironi);
-    const newA=_resolvePlaceholder(match.note_away,classificheGironi);
+  for (const match of matches) {
+    const newH=_resolvePlaceholder(match.note_home, classificheGironi, risultatiKnockout);
+    const newA=_resolvePlaceholder(match.note_away, classificheGironi, risultatiKnockout);
     if ((newH&&newH!==match.home_id)||(newA&&newA!==match.away_id)) {
       const upd={}; if(newH)upd.home_id=newH; if(newA)upd.away_id=newA;
       await db.from('knockout').update(upd).eq('id',match.id); risolti++;
     }
   }
-  if (risolti>0) {
-    // Mostra notifica solo se la finale è completata
-    const allKoFinal = await dbGetKnockout(STATE.activeCat);
-    const finale = allKoFinal.filter(k => /FINALE/i.test(k.round_name) && !k.is_consolazione);
-    const finaleCompleta = finale.length > 0 && finale.every(k => k.giocata);
-    if (finaleCompleta) _mostraNotificaFaseFinale();
-    await renderAdminKnockout();
-  }
+  if (risolti>0) { _mostraNotificaTriangolari(); await renderAdminKnockout(); }
   else toast('ℹ️ Nessun accoppiamento da aggiornare');
 }
 
