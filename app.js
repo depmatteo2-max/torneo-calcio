@@ -780,17 +780,34 @@ function _resolvePlaceholder(placeholder, classificheGironi, risultatiKnockout={
   if (!placeholder) return null;
   const s = placeholder.trim();
 
-  // Vincente/Perdente SEMIFINALE/QUARTO/FINALE
-  const mVP = s.match(/^(Vincente|Perdente)\s+(SEMIFINALE|QUARTO|FINALE)\s*(\d+)/i);
+  // Vincente/Perdente QUALSIASI ROUND
+  // Gestisce: "Vincente QUARTO DI FINALE 01", "Vincente SEMIFINALE 01", "Perdente GARA 3 POSTO 01"
+  const mVP = s.match(/^(Vincente|Perdente)\s+(.+)$/i);
   if (mVP) {
     const tipo = mVP[1].toLowerCase();
-    const round = mVP[2].toUpperCase();
-    const num = mVP[3].padStart(2,'0');
-    const match = risultatiKnockout[round + ' ' + num];
-    if (!match?.giocata) return null;
-    const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
-    const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
-    return tipo === 'vincente' ? vince : perde;
+    const roundRaw = mVP[2].trim().toUpperCase();
+    // Estrai numero finale
+    const mNum = roundRaw.match(/^(.+?)\s+(\d{1,2})$/);
+    if (mNum) {
+      const roundTipo = mNum[1].trim();
+      const num = mNum[2].padStart(2,'0');
+      // Prova varianti della chiave
+      const chiavi = [
+        roundTipo + ' ' + num,
+        roundTipo + num,
+        roundRaw,
+        roundRaw.replace(/(\d+)$/, m => m.padStart(2,'0'))
+      ];
+      for (const chiave of chiavi) {
+        const match = risultatiKnockout[chiave];
+        if (match?.giocata) {
+          const vince = match.gol_home >= match.gol_away ? match.home_id : match.away_id;
+          const perde = match.gol_home <= match.gol_away ? match.home_id : match.away_id;
+          return tipo === 'vincente' ? vince : perde;
+        }
+      }
+    }
+    return null;
   }
 
   // Formato principale: "N° NOME GIRONE"
@@ -1646,7 +1663,11 @@ async function saveRisultato(partita_id, girone_id) {
     if (result) {
       toast('✓ Salvato!'); await renderAdminRisultati();
       const {data:gironeRow}=await db.from('gironi').select('categoria_id').eq('id',girone_id).single();
-      if (gironeRow?.categoria_id) await verificaEGeneraTriangolari(gironeRow.categoria_id);
+      if (gironeRow?.categoria_id) {
+        await verificaEGeneraTriangolari(gironeRow.categoria_id);
+        // Secondo passaggio per propagare a cascata ai round successivi
+        await verificaEGeneraTriangolari(gironeRow.categoria_id);
+      }
     } else { toast('Errore nel salvataggio'); }
   } catch(e) { console.error(e); toast('Errore: '+(e.message||'sconosciuto')); }
 }
@@ -1733,7 +1754,12 @@ async function saveKO(match_id) {
   const ko=await dbGetKnockout(STATE.activeCat); const m=ko.find(x=>x.id===match_id); if(!m)return;
   await dbSaveKnockoutMatch({...m, gol_home:parseInt(sh), gol_away:parseInt(sa), giocata:true, inserito_da: STATE.userName||null});
   toast('✓ Risultato salvato');
-  if (STATE.activeCat) await verificaEGeneraTriangolari(STATE.activeCat);
+  // Aggiorna automaticamente gli accoppiamenti successivi
+  if (STATE.activeCat) {
+    await verificaEGeneraTriangolari(STATE.activeCat);
+    // Secondo passaggio per risolvere a cascata (es. semifinale → finale)
+    await verificaEGeneraTriangolari(STATE.activeCat);
+  }
   await renderAdminKnockout();
   if (STATE.currentSection==='tabellone') await renderTabellone();
 }
