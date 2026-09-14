@@ -1261,25 +1261,52 @@ async function renderTabellone() {
   try {
     const sqMap2 = {}; squadre.forEach(s => sqMap2[s.id] = s);
 
-    // Trova finale 1°/2°
-    const finale12 = ko.find(k =>
-      !k.is_consolazione &&
-      /FINALE/i.test(k.round_name) &&
-      k.giocata && k.home_id && k.away_id
-    );
+    // Cerca FINALE 1-2 POSTO: esclude QUARTO DI FINALE e SEMIFINALE
+    const isFin12 = k => {
+      const rn = (k.round_name||'').toUpperCase();
+      if (/QUARTO|SEMIFINAL/i.test(rn)) return false;
+      if (!/FINALE/i.test(rn)) return false;
+      // Pattern con 1 e 2 nel nome: "1 - 2", "1-2", "1°/2°"
+      return /1[^0-9]*2/.test(rn);
+    };
+    const isFin34 = k => {
+      const rn = (k.round_name||'').toUpperCase();
+      if (/QUARTO|SEMIFINAL/i.test(rn)) return false;
+      if (!/FINALE/i.test(rn)) return false;
+      return /3[^0-9]*4/.test(rn);
+    };
 
-    // Trova finale 3°/4°
-    const finale34 = ko.find(k =>
-      k.is_consolazione &&
-      /FINALE/i.test(k.round_name) &&
-      k.giocata && k.home_id && k.away_id
-    );
+    const finale12 = ko.find(k => isFin12(k) && k.giocata && k.home_id && k.away_id);
+    const finale34 = ko.find(k => isFin34(k) && k.giocata && k.home_id && k.away_id);
 
     if (finale12) {
       const sq1 = sqMap2[finale12.home_id];
       const sq2 = sqMap2[finale12.away_id];
-      const primo  = finale12.gol_home >= finale12.gol_away ? sq1 : sq2;
+      const primo   = finale12.gol_home >= finale12.gol_away ? sq1 : sq2;
       const secondo = finale12.gol_home >= finale12.gol_away ? sq2 : sq1;
+
+      let righe34 = '';
+      if (finale34) {
+        const sq3 = sqMap2[finale34.home_id];
+        const sq4 = sqMap2[finale34.away_id];
+        const terzo  = finale34.gol_home >= finale34.gol_away ? sq3 : sq4;
+        const quarto = finale34.gol_home >= finale34.gol_away ? sq4 : sq3;
+        righe34 = `
+          <div style="display:flex;align-items:center;gap:12px;background:rgba(205,127,50,0.1);border-radius:10px;padding:10px 14px;border:1px solid rgba(205,127,50,0.2);">
+            <span style="font-size:22px;">🥉</span>
+            <div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">3° Posto</div>
+              <div style="font-size:15px;font-weight:800;color:#CD7F32;">${terzo?.nome || '—'}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 14px;border:1px solid rgba(255,255,255,0.08);">
+            <span style="font-size:20px;">4️⃣</span>
+            <div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">4° Posto</div>
+              <div style="font-size:14px;font-weight:700;color:rgba(255,255,255,0.7);">${quarto?.nome || '—'}</div>
+            </div>
+          </div>`;
+      }
 
       classificaHTML = `
         <div style="margin-top:16px;">
@@ -1300,27 +1327,7 @@ async function renderTabellone() {
                   <div style="font-size:16px;font-weight:800;color:#C0C0C0;">${secondo?.nome || '—'}</div>
                 </div>
               </div>
-              ${finale34 ? (() => {
-                const sq3 = sqMap2[finale34.home_id];
-                const sq4 = sqMap2[finale34.away_id];
-                const terzo  = finale34.gol_home >= finale34.gol_away ? sq3 : sq4;
-                const quarto = finale34.gol_home >= finale34.gol_away ? sq4 : sq3;
-                return `
-              <div style="display:flex;align-items:center;gap:12px;background:rgba(205,127,50,0.1);border-radius:10px;padding:10px 14px;border:1px solid rgba(205,127,50,0.2);">
-                <span style="font-size:22px;">🥉</span>
-                <div>
-                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">3° Posto</div>
-                  <div style="font-size:15px;font-weight:800;color:#CD7F32;">${terzo?.nome || '—'}</div>
-                </div>
-              </div>
-              <div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 14px;border:1px solid rgba(255,255,255,0.08);">
-                <span style="font-size:20px;">4️⃣</span>
-                <div>
-                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">4° Posto</div>
-                  <div style="font-size:14px;font-weight:700;color:rgba(255,255,255,0.7);">${quarto?.nome || '—'}</div>
-                </div>
-              </div>`;
-              })() : ''}
+              ${righe34}
             </div>
           </div>
         </div>`;
