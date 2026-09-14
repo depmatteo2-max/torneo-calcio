@@ -852,11 +852,93 @@ async function forzaRisoluzioneAccoppiamenti() {
 }
 
 function _mostraNotificaTriangolari() {
-  const old=document.getElementById('notifica-triangolari'); if(old)old.remove();
-  const div=document.createElement('div'); div.id='notifica-triangolari';
-  div.innerHTML=`<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e8449;color:white;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:90vw;">🏆 Gironi completati! Triangolari aggiornati.<button onclick="document.getElementById('notifica-triangolari').remove()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;">✕</button></div>`;
-  document.body.appendChild(div);
-  setTimeout(()=>{ if(div.parentNode)div.remove(); },6000);
+  // Controlla se il torneo è completato — se sì, mostra podio
+  if (STATE.activeCat) {
+    _verificaEMostraPodio(STATE.activeCat);
+  }
+}
+
+async function _verificaEMostraPodio(catId) {
+  try {
+    const ko = await dbGetKnockout(catId);
+    const squadre = await dbGetSquadre(STATE.activeTorneo);
+    const sqMap = {}; squadre.forEach(s => sqMap[s.id] = s);
+
+    // Trova la finale principale 1°/2° posto
+    const finale = ko.find(k =>
+      !k.is_consolazione &&
+      /FINALE/i.test(k.round_name) &&
+      k.giocata &&
+      k.home_id && k.away_id
+    );
+    if (!finale) return; // finale non ancora giocata
+
+    // Trova finale 3°/4° posto
+    const finalina = ko.find(k =>
+      k.is_consolazione &&
+      /FINALE/i.test(k.round_name) &&
+      k.giocata &&
+      k.home_id && k.away_id
+    );
+
+    const sq1 = sqMap[finale.home_id];
+    const sq2 = sqMap[finale.away_id];
+    const vince1 = finale.gol_home >= finale.gol_away ? sq1 : sq2;
+    const perde1 = finale.gol_home >= finale.gol_away ? sq2 : sq1;
+
+    let podioHTML = `
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:220px;">
+        <div style="font-size:13px;font-weight:800;color:#FFD700;text-align:center;margin-bottom:4px;">🏆 CLASSIFICA FINALE</div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,215,0,0.15);border-radius:8px;padding:6px 10px;">
+          <span style="font-size:20px;">🥇</span>
+          <span style="font-weight:800;font-size:14px;">${vince1?.nome || '—'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(192,192,192,0.15);border-radius:8px;padding:6px 10px;">
+          <span style="font-size:20px;">🥈</span>
+          <span style="font-weight:700;font-size:13px;">${perde1?.nome || '—'}</span>
+        </div>`;
+
+    if (finalina) {
+      const sq3 = sqMap[finalina.home_id];
+      const sq4 = sqMap[finalina.away_id];
+      const vince3 = finalina.gol_home >= finalina.gol_away ? sq3 : sq4;
+      const perde3 = finalina.gol_home >= finalina.gol_away ? sq4 : sq3;
+      podioHTML += `
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(205,127,50,0.15);border-radius:8px;padding:6px 10px;">
+          <span style="font-size:20px;">🥉</span>
+          <span style="font-weight:700;font-size:13px;">${vince3?.nome || '—'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border-radius:8px;padding:6px 10px;">
+          <span style="font-size:20px;">4️⃣</span>
+          <span style="font-weight:600;font-size:13px;">${perde3?.nome || '—'}</span>
+        </div>`;
+    }
+
+    podioHTML += `</div>`;
+
+    const old = document.getElementById('notifica-triangolari');
+    if (old) old.remove();
+    const div = document.createElement('div');
+    div.id = 'notifica-triangolari';
+    div.innerHTML = `
+      <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+        background:linear-gradient(135deg,#0f172a,#1e3a8a);
+        color:white;padding:16px 20px;border-radius:16px;
+        border:2px solid #FFD700;
+        z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+        max-width:92vw;min-width:240px;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+          <button onclick="document.getElementById('notifica-triangolari').remove()"
+            style="background:rgba(255,255,255,0.1);border:none;color:white;
+            padding:2px 8px;border-radius:6px;cursor:pointer;font-size:13px;">✕</button>
+        </div>
+        ${podioHTML}
+      </div>`;
+    document.body.appendChild(div);
+    // Non si chiude da solo — rimane finché non si preme ✕
+  } catch(e) {
+    console.warn('_verificaEMostraPodio:', e);
+  }
 }
 
 function _orarioToMinuti(orario) {
