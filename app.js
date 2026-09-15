@@ -3958,67 +3958,71 @@ async function _aggiornaResolver(categoriaId) {
 
     const isClassif = g => { const n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori'); };
 
-    // PASSO 1: Gironi A-L (squadre reali)
+    // ══ RISOLUZIONE A CASCATA — UNICO CICLO PER TUTTI I GIRONI ══
+    // 1. Processa i gironi con SOLO squadre reali (nessun placeholder)
     for (const g of gironi) {
       if (isClassif(g)) continue;
       const sqMap = {};
+      let hasPlaceholder = false;
       for (const p of g.partite) {
+        if (p.home?.nome && isPlaceh(p.home.nome)) hasPlaceholder = true;
+        if (p.away?.nome && isPlaceh(p.away.nome)) hasPlaceholder = true;
         if (p.home?.id && !isPlaceh(p.home.nome)) sqMap[p.home.id] = p.home;
         if (p.away?.id && !isPlaceh(p.away.nome)) sqMap[p.away.id] = p.away;
       }
+      // Solo gironi SENZA placeholder e con almeno 2 squadre reali
+      if (hasPlaceholder) continue;
       const sq = Object.values(sqMap);
       if (sq.length < 2) continue;
       const cl = calcGironeClassifica({squadre: sq, partite: g.partite});
       if (cl.length) clG[g.nome.toUpperCase().trim()] = cl;
     }
 
-    // PASSO 2: Classifiche speciali da A-L
-    const keysAL = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
-    clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpeciale(keysAL, 1);
-    clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpeciale(keysAL, 2);
-    clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpeciale(keysAL, 3);
+    // 2. Classifiche speciali (migliori seconde/terze da gironi A-L)
+    const aggiornaSpeciali = () => {
+      const kAL = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
+      if (kAL.length) {
+        clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpeciale(kAL, 1);
+        clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpeciale(kAL, 2);
+        clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpeciale(kAL, 3);
+      }
+      clSp['CLASSIFICA MIGLIORI SECONDE 123'] = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 1);
+      clSp['CLASSIFICA MIGLIORI TERZE 123']   = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 2);
+      clSp['CLASSIFICA MIGLIORI SECONDE 456'] = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 1);
+      clSp['CLASSIFICA MIGLIORI TERZE 456']   = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 2);
+    };
+    aggiornaSpeciali();
 
-    // PASSO 3: Gironi 1-10 (usano placeholder dai gironi A-L e dalle classifiche speciali)
-    for (const g of gironi) {
-      if (isClassif(g)) continue;
-      const key = g.nome.toUpperCase().trim();
-      if (clG[key]?.length >= 4) continue;
-      if (!/GIRONE\s+\d+$/i.test(g.nome)) continue; // solo gironi numerati
-      const cl = processGirone(g);
-      if (cl?.length) clG[key] = cl;
-    }
-
-    // PASSO 4: Classifiche speciali 123 e 456
-    clSp['CLASSIFICA MIGLIORI SECONDE 123'] = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 1);
-    clSp['CLASSIFICA MIGLIORI TERZE 123']   = makeSpeciale(['GIRONE 1','GIRONE 2','GIRONE 3'], 2);
-    clSp['CLASSIFICA MIGLIORI SECONDE 456'] = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 1);
-    clSp['CLASSIFICA MIGLIORI TERZE 456']   = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 2);
-
-    // PASSO 5: Gironi a cascata (triangolari → qualificazioni → GOLD/SILVER/BRONZE)
-    // Ripete finché non risolve più nulla (max 6 passaggi per catene lunghe)
-    for (let ciclo = 0; ciclo < 6; ciclo++) {
-      let nuoviRisolti = 0;
+    // 3. CICLO A CASCATA: processa i gironi CON placeholder finché si risolvono
+    //    Ad ogni giro, i placeholder risolti diventano classifiche che sbloccano il giro dopo
+    for (let ciclo = 0; ciclo < 8; ciclo++) {
+      let nuovi = 0;
       for (const g of gironi) {
         if (isClassif(g)) continue;
         const key = g.nome.toUpperCase().trim();
-        // Se già ha una classifica completa, salta
-        const numSquadre = (g.squadre||[]).length || 3;
-        if (clG[key]?.length >= numSquadre) continue;
-        if (/^GIRONE\s+[A-Z]$/i.test(g.nome)) continue; // gironi A-L già in PASSO 1
+        const numSquadre = (g.squadre||[]).length || g.partite.length;
+        // Se ha già una classifica "completa", salta
+        if (clG[key]?.length >= 2 && clG[key].length >= Math.min(numSquadre, 3)) {
+          // verifica che tutte le partite giocate siano contate
+          const giocate = g.partite.filter(p => p.giocata).length;
+          if (giocate === 0) continue;
+        }
+        // Prova a risolvere tutti i placeholder di questo girone
         const cl = processGirone(g);
-        if (cl?.length && (!clG[key] || cl.length > clG[key].length)) {
-          clG[key] = cl;
-          nuoviRisolti++;
+        if (cl?.length) {
+          const before = clG[key]?.length || 0;
+          // Aggiorna se è una classifica migliore (più squadre risolte)
+          if (cl.length > before || !clG[key]) {
+            clG[key] = cl;
+            nuovi++;
+          } else if (clG[key]) {
+            // Ricalcola comunque per aggiornare i punteggi
+            clG[key] = cl;
+          }
         }
       }
-      // Ricalcola classifiche speciali dopo ogni ciclo
-      const keysALc = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
-      if (keysALc.length) {
-        clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpeciale(keysALc, 1);
-        clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpeciale(keysALc, 2);
-        clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpeciale(keysALc, 3);
-      }
-      if (nuoviRisolti === 0) break; // niente di nuovo, catena completa
+      aggiornaSpeciali();
+      if (nuovi === 0 && ciclo > 0) break;
     }
 
     _clGlobale = clG;
