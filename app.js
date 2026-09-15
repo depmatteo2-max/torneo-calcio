@@ -3993,36 +3993,29 @@ async function _aggiornaResolver(categoriaId) {
     };
     aggiornaSpeciali();
 
-    // 3. CICLO A CASCATA: processa i gironi CON placeholder finché si risolvono
-    //    Ad ogni giro, i placeholder risolti diventano classifiche che sbloccano il giro dopo
-    for (let ciclo = 0; ciclo < 8; ciclo++) {
-      let nuovi = 0;
+    // 3. CICLO A CASCATA: processa TUTTI i gironi ripetutamente
+    //    Ad ogni giro i placeholder risolti sbloccano il giro successivo
+    for (let ciclo = 0; ciclo < 10; ciclo++) {
+      let cambiamenti = 0;
       for (const g of gironi) {
         if (isClassif(g)) continue;
         const key = g.nome.toUpperCase().trim();
-        const numSquadre = (g.squadre||[]).length || g.partite.length;
-        // Se ha già una classifica "completa", salta
-        if (clG[key]?.length >= 2 && clG[key].length >= Math.min(numSquadre, 3)) {
-          // verifica che tutte le partite giocate siano contate
-          const giocate = g.partite.filter(p => p.giocata).length;
-          if (giocate === 0) continue;
-        }
-        // Prova a risolvere tutti i placeholder di questo girone
+        // Conta quante squadre reali riesco a risolvere ORA
         const cl = processGirone(g);
-        if (cl?.length) {
-          const before = clG[key]?.length || 0;
-          // Aggiorna se è una classifica migliore (più squadre risolte)
-          if (cl.length > before || !clG[key]) {
-            clG[key] = cl;
-            nuovi++;
-          } else if (clG[key]) {
-            // Ricalcola comunque per aggiornare i punteggi
-            clG[key] = cl;
-          }
+        if (!cl?.length) continue;
+        // Confronta con quello che avevo prima
+        const before = clG[key];
+        const beforeLen = before?.length || 0;
+        const beforeIds = before ? before.map(r => r.sq?.id).join(',') : '';
+        const afterIds = cl.map(r => r.sq?.id).join(',');
+        // Aggiorna sempre se ci sono più squadre O se cambiano gli id (placeholder risolti)
+        if (cl.length > beforeLen || afterIds !== beforeIds) {
+          clG[key] = cl;
+          cambiamenti++;
         }
       }
       aggiornaSpeciali();
-      if (nuovi === 0 && ciclo > 0) break;
+      if (cambiamenti === 0 && ciclo > 0) break;
     }
 
     _clGlobale = clG;
