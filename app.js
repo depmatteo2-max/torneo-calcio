@@ -826,22 +826,52 @@ async function renderClassifiche() {
   var classificheGironi = {};
   var html = '';
 
+  // Funzione per risolvere un oggetto squadra (placeholder → reale)
+  var resolveSquadra = function(sqObj) {
+    if (!sqObj) return null;
+    if (sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
+    // È un placeholder — risolvi con il resolver
+    if (window._resolveSquadraObj) {
+      var r = window._resolveSquadraObj(sqObj.nome);
+      if (r) return r;
+    }
+    return null;
+  };
+
   for (var gi=0; gi<gironi.length; gi++) {
     var g = gironi[gi];
     if (isClassif(g)) continue;
 
-    // Squadre valide
+    // Squadre valide — risolve anche i placeholder
     var sqMap = {};
     for (var pi=0; pi<g.partite.length; pi++) {
       var p = g.partite[pi];
-      if (p.home && p.home.id && !isPlaceh(p.home.nome)) sqMap[p.home.id]=p.home;
-      if (p.away && p.away.id && !isPlaceh(p.away.nome)) sqMap[p.away.id]=p.away;
+      var hR = resolveSquadra(p.home);
+      var aR = resolveSquadra(p.away);
+      if (hR && hR.id) sqMap[hR.id]=hR;
+      if (aR && aR.id) sqMap[aR.id]=aR;
     }
-    var sq = (g.squadre||[]).filter(function(s){return s&&s.id&&!isPlaceh(s.nome);});
-    if (sq.length < 2) sq = Object.values(sqMap);
+    // Aggiungi anche squadre reali da g.squadre
+    (g.squadre||[]).forEach(function(s){
+      var r = resolveSquadra(s);
+      if (r && r.id) sqMap[r.id] = r;
+    });
+    var sq = Object.values(sqMap);
     if (sq.length < 2) continue;
 
-    var cl = calcGironeClassifica({squadre:sq, partite:g.partite});
+    // Costruisci partite con squadre risolte
+    var partiteRisolte = g.partite.map(function(p){
+      var hR = resolveSquadra(p.home);
+      var aR = resolveSquadra(p.away);
+      return {
+        home_id: hR ? hR.id : null,
+        away_id: aR ? aR.id : null,
+        gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata,
+        marcatori: p.marcatori
+      };
+    });
+
+    var cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
     if (!cl.length) continue;
     var key = g.nome.toUpperCase().trim();
     classificheGironi[key] = cl;
@@ -4021,6 +4051,7 @@ async function _aggiornaResolver(categoriaId) {
     _clGlobale = clG;
     _clSpecGlobale = clSp;
     window._resolveNome = (nome) => { const sq = resolveSq(nome); return sq ? sq.nome : nome; };
+    window._resolveSquadraObj = (nome) => resolveSq(nome);
 
   } catch(e) { console.warn('_aggiornaResolver:', e); }
 }
