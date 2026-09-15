@@ -852,7 +852,7 @@ async function forzaRisoluzioneAccoppiamenti() {
 }
 
 function _mostraNotificaTriangolari() {
-  // Notifica disabilitata — la classifica appare nel tabellone
+  // Notifiche disabilitate
 }
 
 
@@ -1171,87 +1171,69 @@ async function renderTabellone() {
     }
     return h;
   };
-  // Costruisce classifica finale dal tabellone
-  let classificaHTML = '';
+
+
+
+  // ── PODIO: cerca ESATTAMENTE FINALE 1-2 POSTO e FINALE 3-4 POSTO ──
+  let podioHTML = '';
   try {
-    const sqMap2 = {}; squadre.forEach(s => sqMap2[s.id] = s);
+    // Pulisce il round_name da emoji e descrizioni
+    const pulisci = (rn) => (rn||'').replace(/^[^a-zA-Z0-9]+/, '').split(' — ')[0].trim().toUpperCase();
 
-    // Cerca FINALE 1-2 POSTO: esclude QUARTO DI FINALE e SEMIFINALE
-    const isFin12 = k => {
-      const rn = (k.round_name||'').toUpperCase();
-      if (/QUARTO|SEMIFINAL/i.test(rn)) return false;
-      if (!/FINALE/i.test(rn)) return false;
-      // Pattern con 1 e 2 nel nome: "1 - 2", "1-2", "1°/2°"
-      return /1[^0-9]*2/.test(rn);
-    };
-    const isFin34 = k => {
-      const rn = (k.round_name||'').toUpperCase();
-      if (/QUARTO|SEMIFINAL/i.test(rn)) return false;
-      if (!/FINALE/i.test(rn)) return false;
-      return /3[^0-9]*4/.test(rn);
-    };
+    // Trova FINALE 1 - 2 POSTO (contiene FINALE, 1, 2 — ma NON QUARTO, SEMIFINALE, GARA)
+    const finale12 = ko.find(m => {
+      const rn = pulisci(m.round_name);
+      return /^FINALE\s+1\s*-\s*2\s+POSTO/.test(rn) && m.giocata && m.home_id && m.away_id;
+    });
 
-    const finale12 = ko.find(k => isFin12(k) && k.giocata && k.home_id && k.away_id);
-    const finale34 = ko.find(k => isFin34(k) && k.giocata && k.home_id && k.away_id);
+    // Trova FINALE 3 - 4 POSTO
+    const finale34 = ko.find(m => {
+      const rn = pulisci(m.round_name);
+      return /^FINALE\s+3\s*-\s*4\s+POSTO/.test(rn) && m.giocata && m.home_id && m.away_id;
+    });
 
     if (finale12) {
-      const sq1 = sqMap2[finale12.home_id];
-      const sq2 = sqMap2[finale12.away_id];
-      const primo   = finale12.gol_home >= finale12.gol_away ? sq1 : sq2;
-      const secondo = finale12.gol_home >= finale12.gol_away ? sq2 : sq1;
+      const primo   = finale12.gol_home >= finale12.gol_away ? sqMap[finale12.home_id] : sqMap[finale12.away_id];
+      const secondo = finale12.gol_home >= finale12.gol_away ? sqMap[finale12.away_id] : sqMap[finale12.home_id];
 
-      let righe34 = '';
+      let terzoQuarto = '';
       if (finale34) {
-        const sq3 = sqMap2[finale34.home_id];
-        const sq4 = sqMap2[finale34.away_id];
-        const terzo  = finale34.gol_home >= finale34.gol_away ? sq3 : sq4;
-        const quarto = finale34.gol_home >= finale34.gol_away ? sq4 : sq3;
-        righe34 = `
-          <div style="display:flex;align-items:center;gap:12px;background:rgba(205,127,50,0.1);border-radius:10px;padding:10px 14px;border:1px solid rgba(205,127,50,0.2);">
-            <span style="font-size:22px;">🥉</span>
-            <div>
-              <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">3° Posto</div>
-              <div style="font-size:15px;font-weight:800;color:#CD7F32;">${terzo?.nome || '—'}</div>
-            </div>
+        const terzo  = finale34.gol_home >= finale34.gol_away ? sqMap[finale34.home_id] : sqMap[finale34.away_id];
+        const quarto = finale34.gol_home >= finale34.gol_away ? sqMap[finale34.away_id] : sqMap[finale34.home_id];
+        terzoQuarto = `
+          <div style="display:flex;align-items:center;gap:12px;background:rgba(205,127,50,0.12);border-radius:10px;padding:11px 14px;">
+            <span style="font-size:24px;">🥉</span>
+            <div><div style="font-size:10px;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">3° Classificato</div>
+            <div style="font-size:16px;font-weight:800;color:#CD7F32;">${terzo?.nome||'—'}</div></div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 14px;border:1px solid rgba(255,255,255,0.08);">
-            <span style="font-size:20px;">4️⃣</span>
-            <div>
-              <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">4° Posto</div>
-              <div style="font-size:14px;font-weight:700;color:rgba(255,255,255,0.7);">${quarto?.nome || '—'}</div>
-            </div>
+          <div style="display:flex;align-items:center;gap:12px;background:rgba(120,120,120,0.1);border-radius:10px;padding:11px 14px;">
+            <span style="font-size:22px;">4️⃣</span>
+            <div><div style="font-size:10px;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">4° Classificato</div>
+            <div style="font-size:15px;font-weight:700;color:#666;">${quarto?.nome||'—'}</div></div>
           </div>`;
       }
 
-      classificaHTML = `
-        <div style="margin-top:16px;">
-          <div class="section-label">🏆 Classifica Finale</div>
-          <div class="card" style="background:linear-gradient(135deg,#0f172a,#1e3a8a);border:2px solid #FFD700;padding:16px;">
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="display:flex;align-items:center;gap:12px;background:rgba(255,215,0,0.15);border-radius:10px;padding:10px 14px;border:1px solid rgba(255,215,0,0.3);">
-                <span style="font-size:28px;">🥇</span>
-                <div>
-                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">Campione</div>
-                  <div style="font-size:18px;font-weight:900;color:#FFD700;">${primo?.nome || '—'}</div>
-                </div>
-              </div>
-              <div style="display:flex;align-items:center;gap:12px;background:rgba(192,192,192,0.1);border-radius:10px;padding:10px 14px;border:1px solid rgba(192,192,192,0.2);">
-                <span style="font-size:24px;">🥈</span>
-                <div>
-                  <div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">2° Posto</div>
-                  <div style="font-size:16px;font-weight:800;color:#C0C0C0;">${secondo?.nome || '—'}</div>
-                </div>
-              </div>
-              ${righe34}
+      podioHTML = `
+        <div class="section-label" style="margin-top:20px;">🏆 Classifica Finale</div>
+        <div class="card" style="background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid #FFD700;padding:16px;">
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            <div style="display:flex;align-items:center;gap:12px;background:rgba(255,215,0,0.18);border-radius:10px;padding:13px 14px;border:1px solid rgba(255,215,0,0.35);">
+              <span style="font-size:32px;">🥇</span>
+              <div><div style="font-size:11px;color:#FFD700;font-weight:700;text-transform:uppercase;letter-spacing:.1em;">Campione</div>
+              <div style="font-size:20px;font-weight:900;color:#FFD700;">${primo?.nome||'—'}</div></div>
             </div>
+            <div style="display:flex;align-items:center;gap:12px;background:rgba(192,192,192,0.12);border-radius:10px;padding:11px 14px;">
+              <span style="font-size:26px;">🥈</span>
+              <div><div style="font-size:10px;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">2° Classificato</div>
+              <div style="font-size:17px;font-weight:800;color:#C0C0C0;">${secondo?.nome||'—'}</div></div>
+            </div>
+            ${terzoQuarto}
           </div>
         </div>`;
     }
-  } catch(e) {}
+  } catch(e) { console.warn('podio:', e); }
 
-  el.innerHTML = renderRounds(ko.filter(m=>!m.is_consolazione),'🏆 Tabellone')
-               + renderRounds(ko.filter(m=>m.is_consolazione),'🥉 Consolazione')
-               + classificaHTML;
+  el.innerHTML=renderRounds(ko.filter(m=>!m.is_consolazione),'🏆 Tabellone')+renderRounds(ko.filter(m=>m.is_consolazione),'🥉 Consolazione')+podioHTML;
 }
 
 // ============================================================
