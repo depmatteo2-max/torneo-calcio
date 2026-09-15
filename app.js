@@ -1723,9 +1723,11 @@ async function saveRisultato(partita_id, girone_id) {
       toast('✓ Salvato!'); await renderAdminRisultati();
       const {data:gironeRow}=await db.from('gironi').select('categoria_id').eq('id',girone_id).single();
       if (gironeRow?.categoria_id) {
-        await verificaEGeneraTriangolari(gironeRow.categoria_id);
-        // Secondo passaggio per propagare a cascata ai round successivi
-        await verificaEGeneraTriangolari(gironeRow.categoria_id);
+        // Cicla per risolvere catene lunghe (triangolari → qualificazioni → GOLD/SILVER/BRONZE)
+        for (let i = 0; i < 5; i++) {
+          if (typeof _cacheClear === 'function') _cacheClear();
+          await verificaEGeneraTriangolari(gironeRow.categoria_id);
+        }
       }
     } else { toast('Errore nel salvataggio'); }
   } catch(e) { console.error(e); toast('Errore: '+(e.message||'sconosciuto')); }
@@ -1815,9 +1817,10 @@ async function saveKO(match_id) {
   toast('✓ Risultato salvato');
   // Aggiorna automaticamente gli accoppiamenti successivi
   if (STATE.activeCat) {
-    await verificaEGeneraTriangolari(STATE.activeCat);
-    // Secondo passaggio per risolvere a cascata (es. semifinale → finale)
-    await verificaEGeneraTriangolari(STATE.activeCat);
+    for (let i = 0; i < 5; i++) {
+      if (typeof _cacheClear === 'function') _cacheClear();
+      await verificaEGeneraTriangolari(STATE.activeCat);
+    }
   }
   await renderAdminKnockout();
   if (STATE.currentSection==='tabellone') await renderTabellone();
@@ -4062,14 +4065,31 @@ async function _aggiornaResolver(categoriaId) {
     clSp['CLASSIFICA MIGLIORI SECONDE 456'] = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 1);
     clSp['CLASSIFICA MIGLIORI TERZE 456']   = makeSpeciale(['GIRONE 4','GIRONE 5','GIRONE 6'], 2);
 
-    // PASSO 5: Gironi Champions/Europa (usano tutti i placeholder precedenti)
-    for (const g of gironi) {
-      if (isClassif(g)) continue;
-      const key = g.nome.toUpperCase().trim();
-      if (clG[key]?.length >= 3) continue;
-      if (/GIRONE\s+\d+$/i.test(g.nome)) continue; // già processati
-      const cl = processGirone(g);
-      if (cl?.length) clG[key] = cl;
+    // PASSO 5: Gironi a cascata (triangolari → qualificazioni → GOLD/SILVER/BRONZE)
+    // Ripete finché non risolve più nulla (max 6 passaggi per catene lunghe)
+    for (let ciclo = 0; ciclo < 6; ciclo++) {
+      let nuoviRisolti = 0;
+      for (const g of gironi) {
+        if (isClassif(g)) continue;
+        const key = g.nome.toUpperCase().trim();
+        // Se già ha una classifica completa, salta
+        const numSquadre = (g.squadre||[]).length || 3;
+        if (clG[key]?.length >= numSquadre) continue;
+        if (/^GIRONE\s+[A-Z]$/i.test(g.nome)) continue; // gironi A-L già in PASSO 1
+        const cl = processGirone(g);
+        if (cl?.length && (!clG[key] || cl.length > clG[key].length)) {
+          clG[key] = cl;
+          nuoviRisolti++;
+        }
+      }
+      // Ricalcola classifiche speciali dopo ogni ciclo
+      const keysALc = Object.keys(clG).filter(k => /^GIRONE [A-Z]$/.test(k));
+      if (keysALc.length) {
+        clSp['CLASSIFICA MIGLIORI SECONDE'] = makeSpeciale(keysALc, 1);
+        clSp['CLASSIFICA MIGLIORI TERZE']   = makeSpeciale(keysALc, 2);
+        clSp['CLASSIFICA MIGLIORI QUARTE']  = makeSpeciale(keysALc, 3);
+      }
+      if (nuoviRisolti === 0) break; // niente di nuovo, catena completa
     }
 
     _clGlobale = clG;
