@@ -813,7 +813,8 @@ async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
-  if (typeof _cacheInvalid === 'function') _cacheInvalid('gwd_');
+  // Invalida cache e forza il resolver a lavorare su dati freschi
+  if (typeof _cacheClear === 'function') _cacheClear();
   await _aggiornaResolver(STATE.activeCat);
   var gironi = await getGironiWithData(STATE.activeCat);
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
@@ -986,6 +987,7 @@ async function renderRisultati() {
   const el = document.getElementById('sec-risultati');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  if (typeof _cacheClear === 'function') _cacheClear();
   await _aggiornaResolver(STATE.activeCat);
   const cat = STATE.categorie.find(c => c.id === STATE.activeCat);
   const gironi = await getGironiWithData(STATE.activeCat);
