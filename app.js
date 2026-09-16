@@ -571,6 +571,10 @@ function _risolviGruppi(lista, giocate) {
 // ============================================================
 async function verificaEGeneraTriangolari(categoriaId) {
   try {
+    // Carica i gironi della categoria
+    const { data: gironi } = await db.from('gironi').select('id,nome').eq('categoria_id', categoriaId);
+    if (!gironi?.length) return;
+
     // 1. Calcola tutte le classifiche a cascata IN MEMORIA
     await _aggiornaResolver(categoriaId);
     const clG = window._clGlobale || {};
