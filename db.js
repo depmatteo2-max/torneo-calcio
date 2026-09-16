@@ -175,10 +175,10 @@ async function getGironiWithData(categoriaId) {
 
   const gironeIds=gironi.map(g=>g.id);
 
-  // Query 2 e 3 in parallelo
+  // Query 2 e 3 in parallelo — AGGIUNTO note_home,note_away per risolvere placeholder
   const [r1,r2]=await Promise.all([
     db.from('partite')
-      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
+      .select('id,girone_id,home_id,away_id,gol_home,gol_away,giocata,orario,campo,giorno,giornata,inserito_da,note_home,note_away,home:squadre!home_id(id,nome,logo),away:squadre!away_id(id,nome,logo)')
       .in('girone_id',gironeIds)
       .order('orario'),
     db.from('girone_squadre')
