@@ -1129,6 +1129,7 @@ async function renderRisultati() {
 async function renderTabellone() {
   const el=document.getElementById('sec-tabellone');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
+  await _aggiornaResolver(STATE.activeCat);
   const ko=await dbGetKnockout(STATE.activeCat);
   const squadre=await dbGetSquadre(STATE.activeTorneo);
   const sqMap={}; squadre.forEach(s=>sqMap[s.id]=s);
@@ -1143,7 +1144,14 @@ async function renderTabellone() {
       const color=ROUND_COLORS[rkey]||'#E85C00';
       h+=`<div class="card" style="border-top:4px solid ${color};margin-bottom:12px;"><div class="card-title">${rname}</div>`;
       for (const m of rmatch) {
-        const hm=m.home_id?sqMap[m.home_id]:null; const am=m.away_id?sqMap[m.away_id]:null;
+        let hm=m.home_id?sqMap[m.home_id]:null; let am=m.away_id?sqMap[m.away_id]:null;
+        // Risolve placeholder da note anche nella vista pubblica
+        if ((!hm || _isPlaceholder(hm.nome)) && m.note_home && window._resolveSquadraObj) {
+          const r = window._resolveSquadraObj(m.note_home); if (r) hm = sqMap[r.id] || r;
+        }
+        if ((!am || _isPlaceholder(am.nome)) && m.note_away && window._resolveSquadraObj) {
+          const r = window._resolveSquadraObj(m.note_away); if (r) am = sqMap[r.id] || r;
+        }
         const hmNome=hm?hm.nome:(m.note_home||'In attesa...'); const amNome=am?am.nome:(m.note_away||'In attesa...');
         const isPending=!hm||!am;
         const orario=m.orario||m.campo?`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">${m.orario?`<span style="font-size:11px;font-weight:700;color:#E85C00;">🕐 ${m.orario}</span>`:''}${m.campo?`<span style="font-size:11px;color:#888;">📍 ${m.campo}</span>`:''}${m.inserito_da?`<span style="font-size:10px;color:#bbb;margin-left:auto;">✏️ ${m.inserito_da}</span>`:''}</div>`:'';
@@ -1760,7 +1768,18 @@ async function renderAdminKnockout() {
     const done=rmatch.filter(m=>m.giocata).length;
     html+=`<div class="card" style="border-top:4px solid ${color};margin-bottom:14px;"><div class="card-title">${rname}<span class="badge badge-gray">${done}/${rmatch.length} giocate</span></div>`;
     for (const m of rmatch) {
-      const hm=m.home_id?sqMap[m.home_id]:null; const am=m.away_id?sqMap[m.away_id]:null;
+      // Risolve home/away: prima da sqMap, poi risolvendo il placeholder note_home/away
+      let hm=m.home_id?sqMap[m.home_id]:null;
+      let am=m.away_id?sqMap[m.away_id]:null;
+      // Se non risolto o punta a placeholder, prova con note tramite il resolver
+      if ((!hm || _isPlaceholder(hm.nome)) && m.note_home && window._resolveSquadraObj) {
+        const r = window._resolveSquadraObj(m.note_home);
+        if (r) hm = sqMap[r.id] || r;
+      }
+      if ((!am || _isPlaceholder(am.nome)) && m.note_away && window._resolveSquadraObj) {
+        const r = window._resolveSquadraObj(m.note_away);
+        if (r) am = sqMap[r.id] || r;
+      }
       const hmNome=hm?hm.nome:`<em style="color:#e67e22;">${m.note_home||'?'}</em>`;
       const amNome=am?am.nome:`<em style="color:#e67e22;">${m.note_away||'?'}</em>`;
       const risolto=!!(hm&&am);
