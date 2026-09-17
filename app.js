@@ -901,9 +901,15 @@ async function renderClassifiche() {
       };
     });
 
-    var cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
-    if (!cl.length) continue;
     var key = g.nome.toUpperCase().trim();
+    // Usa la classifica GIÀ calcolata dal resolver (a cascata) se disponibile
+    var cl;
+    if (window._clGlobale && window._clGlobale[key] && window._clGlobale[key].length) {
+      cl = window._clGlobale[key];
+    } else {
+      cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
+    }
+    if (!cl.length) continue;
     classificheGironi[key] = cl;
 
     cl.forEach(function(row,idx){
@@ -4102,7 +4108,6 @@ async function _aggiornaResolver(categoriaId) {
     _clSpecGlobale = clSp;
     window._clGlobale = clG;
     window._clSpecGlobale = clSp;
-    console.log('[RESOLVER] clG popolato con:', Object.keys(clG).length, 'gironi →', Object.keys(clG).join(', '));
     window._resolveNome = (nome) => { const sq = resolveSq(nome); return sq ? sq.nome : nome; };
     window._resolveSquadraObj = (nome) => resolveSq(nome);
 
