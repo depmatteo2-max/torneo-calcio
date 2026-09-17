@@ -3910,10 +3910,19 @@ async function resetCompleto() {
   try {
     const cats = STATE.categorie.map(c => c.id);
     for (const catId of cats) {
-      // 1. Azzera risultati partite gironi
+      // 1. Azzera risultati partite gironi E ripristina placeholder
       const gironi = await dbGetGironi(catId);
       for (const g of gironi) {
+        // Azzera risultati
         await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
+        // Ripristina home_id/away_id a null per le partite che hanno un placeholder (note)
+        const { data: partiteG } = await db.from('partite').select('id,note_home,note_away').eq('girone_id', g.id);
+        for (const p of (partiteG||[])) {
+          const upd = {};
+          if (p.note_home && p.note_home.trim()) upd.home_id = null;
+          if (p.note_away && p.note_away.trim()) upd.away_id = null;
+          if (Object.keys(upd).length) await db.from('partite').update(upd).eq('id', p.id);
+        }
       }
       // 2. Azzera marcatori
       const gironiIds = gironi.map(g => g.id);
