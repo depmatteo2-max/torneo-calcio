@@ -867,6 +867,10 @@ async function renderClassifiche() {
     };
 
     var sqMap = {};
+    // Controlla se il girone ha partite con placeholder (note_home/away)
+    var gironeHaPlaceholder = g.partite.some(function(p){
+      return (p.note_home && p.note_home.trim()) || (p.note_away && p.note_away.trim());
+    });
     for (var pi=0; pi<g.partite.length; pi++) {
       var p = g.partite[pi];
       var hR = resolvePartitaSq(p.home, p.note_home);
@@ -874,10 +878,14 @@ async function renderClassifiche() {
       if (hR && hR.id) sqMap[hR.id]=hR;
       if (aR && aR.id) sqMap[aR.id]=aR;
     }
-    (g.squadre||[]).forEach(function(s){
-      var r = resolveSquadra(s);
-      if (r && r.id) sqMap[r.id] = r;
-    });
+    // Aggiungi squadre da girone_squadre SOLO se il girone NON ha placeholder
+    // (per gironi con placeholder, girone_squadre può essere obsoleto)
+    if (!gironeHaPlaceholder) {
+      (g.squadre||[]).forEach(function(s){
+        var r = resolveSquadra(s);
+        if (r && r.id) sqMap[r.id] = r;
+      });
+    }
     var sq = Object.values(sqMap);
     if (sq.length < 2) continue;
 
