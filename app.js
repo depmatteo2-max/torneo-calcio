@@ -4100,6 +4100,8 @@ async function _aggiornaResolver(categoriaId) {
 
     _clGlobale = clG;
     _clSpecGlobale = clSp;
+    window._clGlobale = clG;
+    window._clSpecGlobale = clSp;
     window._resolveNome = (nome) => { const sq = resolveSq(nome); return sq ? sq.nome : nome; };
     window._resolveSquadraObj = (nome) => resolveSq(nome);
 
