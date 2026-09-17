@@ -4102,6 +4102,7 @@ async function _aggiornaResolver(categoriaId) {
     _clSpecGlobale = clSp;
     window._clGlobale = clG;
     window._clSpecGlobale = clSp;
+    console.log('[RESOLVER] clG popolato con:', Object.keys(clG).length, 'gironi →', Object.keys(clG).join(', '));
     window._resolveNome = (nome) => { const sq = resolveSq(nome); return sq ? sq.nome : nome; };
     window._resolveSquadraObj = (nome) => resolveSq(nome);
 
