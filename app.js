@@ -828,21 +828,24 @@ async function renderClassifiche() {
 
   var clG = {};
 
-  // Risolve UNA squadra (oggetto o placeholder) SENZA effetti collaterali
+  // Risolve UNA squadra. PRIORITÀ:
+  // 1. Se l'oggetto squadra è REALE (id valido + nome non placeholder) → usa QUELLO
+  //    (gli id nel DB sono già stati risolti, il note è solo un residuo)
+  // 2. Altrimenti risolvi il placeholder dal note o dal nome
   function risolviSquadra(sqObj, note) {
-    // Placeholder testuale ha SEMPRE priorità
+    // 1. Oggetto squadra reale ha priorità (id già risolto nel DB)
+    if (sqObj && sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
+    // 2. Placeholder dal note
     if (note && note.trim()) {
       var m = String(note).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
       if (m) {
         var key = m[2].trim().toUpperCase();
         var pos = parseInt(m[1]) - 1;
         if (clG[key] && clG[key][pos]) return clG[key][pos].sq;
-        return null; // non ancora risolvibile
+        return null;
       }
     }
-    // Oggetto squadra reale (non placeholder)
-    if (sqObj && sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
-    // Oggetto è esso stesso un placeholder testuale nel nome
+    // 3. Placeholder nel nome dell'oggetto
     if (sqObj && sqObj.nome) {
       var m2 = String(sqObj.nome).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
       if (m2) {
