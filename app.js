@@ -1,3 +1,5 @@
+// VERSIONE DEFINITIVA 2026-09-16 v19 — renderClassifiche usa resolver
+window._APP_VERSION = 'v20-idpriority';
 // ============================================================
 //  SOCCER PRO EXPERIENCE - App principale completa
 //  Include: classifica con spareggio + risoluzione automatica triangolari
@@ -817,189 +819,131 @@ async function renderClassifiche() {
   var el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;">⏳ Caricamento...</div>';
-  // Invalida cache e forza il resolver a lavorare su dati freschi
   if (typeof _cacheClear === 'function') _cacheClear();
-  await _aggiornaResolver(STATE.activeCat);
+
   var gironi = await getGironiWithData(STATE.activeCat);
   var cat = STATE.categorie.find(function(c){return c.id===STATE.activeCat;});
-
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
-  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior)/i.test(s); };
+  var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior|vincente|perdente)/i.test(s); };
 
-  // Costruisce statsPerSquadra da gironi normali
-  var statsPerSquadra = {};
-  var classificheGironi = {};
-  var html = '';
+  var clG = {};
 
-  // Funzione per risolvere un oggetto squadra (placeholder → reale)
-  var resolveSquadra = function(sqObj) {
-    if (!sqObj) return null;
-    if (sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
-    // È un placeholder — risolvi con il resolver
-    if (window._resolveSquadraObj) {
-      var r = window._resolveSquadraObj(sqObj.nome);
-      if (r) return r;
+  // Risolve UNA squadra. PRIORITÀ:
+  // 1. Se l'oggetto squadra è REALE (id valido + nome non placeholder) → usa QUELLO
+  //    (gli id nel DB sono già stati risolti, il note è solo un residuo)
+  // 2. Altrimenti risolvi il placeholder dal note o dal nome
+  function risolviSquadra(sqObj, note) {
+    // 1. Oggetto squadra reale ha priorità (id già risolto nel DB)
+    if (sqObj && sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
+    // 2. Placeholder dal note
+    if (note && note.trim()) {
+      var m = String(note).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
+      if (m) {
+        var key = m[2].trim().toUpperCase();
+        var pos = parseInt(m[1]) - 1;
+        if (clG[key] && clG[key][pos]) return clG[key][pos].sq;
+        return null;
+      }
+    }
+    // 3. Placeholder nel nome dell'oggetto
+    if (sqObj && sqObj.nome) {
+      var m2 = String(sqObj.nome).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
+      if (m2) {
+        var key2 = m2[2].trim().toUpperCase();
+        var pos2 = parseInt(m2[1]) - 1;
+        if (clG[key2] && clG[key2][pos2]) return clG[key2][pos2].sq;
+      }
     }
     return null;
-  };
+  }
 
-  for (var gi=0; gi<gironi.length; gi++) {
-    var g = gironi[gi];
-    if (isClassif(g)) continue;
-
-    // Squadre valide — risolve placeholder usando p.home/away O note_home/away
-    // IMPORTANTE: se c'è un note (placeholder), lo usa SEMPRE per primo
-    // perché home_id potrebbe puntare a una squadra-placeholder fantasma
-    var resolvePartitaSq = function(sqObj, note) {
-      // Se c'è un note placeholder, risolvilo PRIMA (ha priorità)
-      if (note && note.trim()) {
-        var r2 = resolveSquadra({nome: note});
-        if (r2) return r2;
-      }
-      // Altrimenti usa l'oggetto squadra (se è reale, non placeholder)
-      if (sqObj && sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
-      // Ultimo tentativo: risolvi l'oggetto (può essere placeholder)
-      if (sqObj) {
-        var r = resolveSquadra(sqObj);
-        if (r) return r;
-      }
-      return null;
-    };
-
+  function calcolaGirone(g) {
+    var partiteRisolte = [];
     var sqMap = {};
-    for (var pi=0; pi<g.partite.length; pi++) {
-      var p = g.partite[pi];
-      var hR = resolvePartitaSq(p.home, p.note_home);
-      var aR = resolvePartitaSq(p.away, p.note_away);
-      if (hR && hR.id) sqMap[hR.id]=hR;
-      if (aR && aR.id) sqMap[aR.id]=aR;
+    for (var i=0; i<g.partite.length; i++) {
+      var p = g.partite[i];
+      var h = risolviSquadra(p.home, p.note_home);
+      var a = risolviSquadra(p.away, p.note_away);
+      if (h && h.id) sqMap[h.id] = h;
+      if (a && a.id) sqMap[a.id] = a;
+      partiteRisolte.push({ home_id: h?h.id:null, away_id: a?a.id:null, gol_home:p.gol_home, gol_away:p.gol_away, giocata:p.giocata });
     }
-    (g.squadre||[]).forEach(function(s){
-      var r = resolveSquadra(s);
-      if (r && r.id) sqMap[r.id] = r;
+    var squadre = Object.values(sqMap);
+    if (squadre.length < 2) return null;
+
+    var map = {};
+    squadre.forEach(function(s){ map[s.id] = {sq:s, g:0, v:0, p:0, s:0, gf:0, gs:0, pts:0}; });
+    partiteRisolte.forEach(function(p){
+      if (!p.giocata || !p.home_id || !p.away_id) return;
+      var mh = map[p.home_id], ma = map[p.away_id];
+      if (!mh || !ma) return;
+      mh.g++; ma.g++;
+      mh.gf += p.gol_home; mh.gs += p.gol_away;
+      ma.gf += p.gol_away; ma.gs += p.gol_home;
+      if (p.gol_home > p.gol_away) { mh.v++; mh.pts+=3; ma.s++; }
+      else if (p.gol_home < p.gol_away) { ma.v++; ma.pts+=3; mh.s++; }
+      else { mh.p++; ma.p++; mh.pts++; ma.pts++; }
     });
-    var sq = Object.values(sqMap);
-    if (sq.length < 2) continue;
-
-    // Costruisci partite con squadre risolte (usa anche note_home/away)
-    var partiteRisolte = g.partite.map(function(p){
-      var hR = resolvePartitaSq(p.home, p.note_home);
-      var aR = resolvePartitaSq(p.away, p.note_away);
-      return {
-        home_id: hR ? hR.id : null,
-        away_id: aR ? aR.id : null,
-        gol_home: p.gol_home, gol_away: p.gol_away, giocata: p.giocata,
-        marcatori: p.marcatori
-      };
+    var lista = Object.values(map);
+    lista.sort(function(x,y){
+      if (y.pts !== x.pts) return y.pts - x.pts;
+      var dx = x.gf-x.gs, dy = y.gf-y.gs;
+      if (dy !== dx) return dy - dx;
+      if (y.gf !== x.gf) return y.gf - x.gf;
+      return x.sq.id - y.sq.id;
     });
+    return lista;
+  }
 
-    var cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
-    if (!cl.length) continue;
-    var key = g.nome.toUpperCase().trim();
-    classificheGironi[key] = cl;
+  // Cascata: fino a 10 giri, SEMPRE ricalcola tutto da capo (nessun side-effect residuo)
+  var gironiValidi = gironi.filter(function(g){ return !isClassif(g); });
+  for (var ciclo = 0; ciclo < 10; ciclo++) {
+    var nuovoClG = {};
+    var cambiati = 0;
+    for (var gi=0; gi<gironiValidi.length; gi++) {
+      var g = gironiValidi[gi];
+      var key = g.nome.toUpperCase().trim();
+      var risultato = calcolaGirone(g);
+      if (risultato) {
+        nuovoClG[key] = risultato;
+        var vecchio = clG[key];
+        var vOk = vecchio ? vecchio.map(function(r){return r.sq.id+':'+r.g;}).join(',') : '';
+        var nOk = risultato.map(function(r){return r.sq.id+':'+r.g;}).join(',');
+        if (vOk !== nOk) cambiati++;
+      }
+    }
+    clG = nuovoClG;
+    if (cambiati === 0 && ciclo > 0) break;
+  }
 
-    cl.forEach(function(row,idx){
-      if (!row.sq||!row.sq.id) return;
-      statsPerSquadra[row.sq.id] = {sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,gironeNome:key};
-    });
+  window._clGlobale = clG;
 
-    var played = g.partite.filter(function(p){return p.giocata;}).length;
-    if (played===0) continue;
+  var html = '';
+  for (var gi2=0; gi2<gironiValidi.length; gi2++) {
+    var g2 = gironiValidi[gi2];
+    var key2 = g2.nome.toUpperCase().trim();
+    var cl = clG[key2];
+    if (!cl || !cl.length) continue;
+    var played = g2.partite.filter(function(p){return p.giocata;}).length;
+    if (played === 0) continue;
 
     html += '<div class="card" style="margin-bottom:8px;">';
-    html += '<div class="card-title">'+g.nome+'<span class="badge badge-gray">'+played+'/'+g.partite.length+'</span></div>';
+    html += '<div class="card-title">'+g2.nome+'<span class="badge badge-gray">'+played+'/'+g2.partite.length+'</span></div>';
     html += '<table class="standings-table"><thead><tr><th></th><th colspan="2">Squadra</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>';
     cl.forEach(function(row,idx){
-      var q=idx<(cat&&cat.qualificate||1);
-      var diff=row.gf-row.gs;
+      var q = idx < (cat && cat.qualificate || 1);
+      var diff = row.gf - row.gs;
       html += '<tr class="'+(q?'qualifies':'')+'"><td><span class="'+(q?'q-dot':'nq-dot')+'"></span></td>';
       html += '<td>'+logoHTML(row.sq,'sm')+'</td><td>'+row.sq.nome+'</td>';
       html += '<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
-      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'>'+(diff>0?'+':'')+diff+'</td>';
+      html += '<td class="'+(diff>0?'diff-pos':diff<0?'diff-neg':'')+'">'+(diff>0?'+':'')+diff+'</td>';
       html += '<td class="pts-col">'+row.pts+'</td></tr>';
     });
     html += '</tbody></table></div>';
   }
 
-  // Classifiche speciali
-  var mkSpeciale = function(lista, titolo, colore) {
-    if (!lista.length) return '';
-    var rows='';
-    lista.forEach(function(row,idx){
-      var dr=row.gf-row.gs;
-      rows+='<tr class="'+(idx===0?'qualifies':'')+'"><td style="text-align:center;font-weight:800;color:'+colore+';">'+(idx+1)+'</td>';
-      rows+='<td>'+logoHTML(row.sq,'sm')+'</td><td style="font-weight:600;">'+row.sq.nome+'</td>';
-      rows+='<td style="font-size:11px;color:var(--testo-xs);">'+(row.girone||'')+'</td>';
-      rows+='<td>'+row.g+'</td><td>'+row.v+'</td><td>'+row.p+'</td><td>'+row.s+'</td>';
-      rows+='<td class="'+(dr>0?'diff-pos':dr<0?'diff-neg':'')+'">'+( dr>0?'+':'')+dr+'</td>';
-      rows+='<td class="pts-col">'+row.pts+'</td></tr>';
-    });
-    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+colore+';"><div class="card-title" style="color:'+colore+';">'+titolo+'<span class="badge badge-gray">'+lista.length+' squadre</span></div><table class="standings-table"><thead><tr><th>#</th><th colspan="2">Squadra</th><th>G.ne</th><th>G</th><th>V</th><th>P</th><th>S</th><th>GD</th><th>Pt</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-  };
-
-  var buildPos = function(pos, chiavi) {
-    var lista=[];
-    (chiavi||Object.keys(classificheGironi).filter(function(k){return /^GIRONE [A-Z]$/.test(k);})).forEach(function(k){
-      var cl=classificheGironi[k]; if(!cl||cl.length<=pos) return;
-      var row=cl[pos]; if(!row||!row.sq||row.g===0) return;
-      lista.push({sq:row.sq,pts:row.pts,g:row.g,v:row.v,p:row.p,s:row.s,gf:row.gf,gs:row.gs,girone:k.replace('GIRONE ','')});
-    });
-    lista.sort(function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;});
-    return lista;
-  };
-
-  var buildGironeVirt = function(nomeConj) {
-    var gv=gironi.find(function(g){return isClassif(g)&&(g.nome||'').toLowerCase().includes(nomeConj.toLowerCase());});
-    if(!gv) return [];
-    var lista=[];
-    (gv.squadre||[]).forEach(function(sq){
-      if(!sq||!sq.id||isPlaceh(sq.nome)) return;
-      var stat=statsPerSquadra[sq.id];
-      if(stat&&stat.g>0) lista.push({sq:stat.sq,pts:stat.pts,g:stat.g,v:stat.v,p:stat.p,s:stat.s,gf:stat.gf,gs:stat.gs,girone:stat.gironeNome.replace('GIRONE ','')});
-    });
-    lista.sort(function(a,b){return b.pts!==a.pts?b.pts-a.pts:(b.gf-b.gs)!==(a.gf-a.gs)?(b.gf-b.gs)-(a.gf-a.gs):b.gf-a.gf;});
-    return lista;
-  };
-
-  var getList = function(pos, chiavi, nomeConj) {
-    var r=buildPos(pos,chiavi); return r.length?r:buildGironeVirt(nomeConj);
-  };
-
-  // Usa _clGlobale/_clSpecGlobale calcolati da _aggiornaResolver (già chiamato sopra)
-  var clG = window._clGlobale || {};
-  var clSp = window._clSpecGlobale || {};
-  var fmtG = function(lista) {
-    return (lista||[]).filter(function(r){return r&&r.sq&&r.g>0;}).map(function(r){
-      var gn = '';
-      Object.keys(clG).forEach(function(k){ 
-        if(clG[k] && clG[k].some(function(x){return x.sq&&x.sq.id===r.sq.id;})) gn=k.replace('GIRONE ',''); 
-      });
-      return {sq:r.sq,pts:r.pts,g:r.g,v:r.v,p:r.p,s:r.s,gf:r.gf,gs:r.gs,girone:gn};
-    });
-  };
-  var sec=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE']);
-  var ter=fmtG(clSp['CLASSIFICA MIGLIORI TERZE']);
-  var qua=fmtG(clSp['CLASSIFICA MIGLIORI QUARTE']);
-  if(sec.length) html+=mkSpeciale(sec,'🥈 Classifica Migliori Seconde (A-L)','#d97706');
-  if(ter.length) html+=mkSpeciale(ter,'🥉 Classifica Migliori Terze (A-L)','#78716c');
-  if(qua.length) html+=mkSpeciale(qua,'4️⃣ Classifica Migliori Quarte (A-L)','#6366f1');
-
-  var s123=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 123']);
-  var t123=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 123']);
-  if(s123.length) html+=mkSpeciale(s123,'🥈 Migliori Seconde Gironi 1-2-3','#0891b2');
-  if(t123.length) html+=mkSpeciale(t123,'🥉 Migliori Terze Gironi 1-2-3','#0891b2');
-
-  var s456=fmtG(clSp['CLASSIFICA MIGLIORI SECONDE 456']);
-  var t456=fmtG(clSp['CLASSIFICA MIGLIORI TERZE 456']);
-  if(s456.length) html+=mkSpeciale(s456,'🥈 Migliori Seconde Gironi 4-5-6','#7c3aed');
-  if(t456.length) html+=mkSpeciale(t456,'🥉 Migliori Terze Gironi 4-5-6','#7c3aed');
-
   el.innerHTML = html || '<div class="empty-state" style="padding:40px;text-align:center;">⏳ Nessun risultato inserito.<br><span style="font-size:13px;">Le classifiche appariranno dopo le prime partite.</span></div>';
-};
-
-
-
-
+}
 
 // ============================================================
 //  PUBLIC: RISULTATI
@@ -3896,10 +3840,19 @@ async function resetCompleto() {
   try {
     const cats = STATE.categorie.map(c => c.id);
     for (const catId of cats) {
-      // 1. Azzera risultati partite gironi
+      // 1. Azzera risultati partite gironi E ripristina placeholder
       const gironi = await dbGetGironi(catId);
       for (const g of gironi) {
+        // Azzera risultati
         await db.from('partite').update({ gol_home: 0, gol_away: 0, giocata: false, inserito_da: null }).eq('girone_id', g.id);
+        // Ripristina home_id/away_id a null per le partite che hanno un placeholder (note)
+        const { data: partiteG } = await db.from('partite').select('id,note_home,note_away').eq('girone_id', g.id);
+        for (const p of (partiteG||[])) {
+          const upd = {};
+          if (p.note_home && p.note_home.trim()) upd.home_id = null;
+          if (p.note_away && p.note_away.trim()) upd.away_id = null;
+          if (Object.keys(upd).length) await db.from('partite').update(upd).eq('id', p.id);
+        }
       }
       // 2. Azzera marcatori
       const gironiIds = gironi.map(g => g.id);
@@ -4092,6 +4045,8 @@ async function _aggiornaResolver(categoriaId) {
 
     _clGlobale = clG;
     _clSpecGlobale = clSp;
+    window._clGlobale = clG;
+    window._clSpecGlobale = clSp;
     window._resolveNome = (nome) => { const sq = resolveSq(nome); return sq ? sq.nome : nome; };
     window._resolveSquadraObj = (nome) => resolveSq(nome);
 
