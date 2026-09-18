@@ -1,3 +1,5 @@
+// VERSIONE DEFINITIVA 2026-09-16 v19 — renderClassifiche usa resolver
+window._APP_VERSION = 'v19-definitiva';
 // ============================================================
 //  SOCCER PRO EXPERIENCE - App principale completa
 //  Include: classifica con spareggio + risoluzione automatica triangolari
