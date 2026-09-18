@@ -1,5 +1,5 @@
 // VERSIONE DEFINITIVA 2026-09-16 v19 — renderClassifiche usa resolver
-window._APP_VERSION = 'v21-idsempre';
+window._APP_VERSION = 'v22-notefresh';
 // ============================================================
 //  SOCCER PRO EXPERIENCE - App principale completa
 //  Include: classifica con spareggio + risoluzione automatica triangolari
@@ -828,32 +828,33 @@ async function renderClassifiche() {
 
   var clG = {};
 
-  // Risolve UNA squadra. REGOLA FONDAMENTALE:
-  // Se la partita ha un id squadra REALE (esiste nel torneo, non è placeholder),
-  // quella è la squadra — SEMPRE, anche se c'è un note residuo.
-  // Il note si usa SOLO quando l'id manca del tutto.
+  // Risolve UNA squadra. REGOLA FONDAMENTALE (v22):
+  // Il NOTE placeholder ha SEMPRE priorità, perché gli id salvati nel DB
+  // dal resolver possono essere SBAGLIATI/incoerenti tra simulazioni.
+  // Ricalcoliamo sempre fresco dalla classifica corrente.
   function risolviSquadra(sqObj, note) {
-    // 1. L'oggetto squadra dal DB esiste ed è una squadra REALE → è quella, punto.
-    if (sqObj && sqObj.id && sqObj.nome && !isPlaceh(sqObj.nome)) return sqObj;
-    // 2. L'id manca o punta a un placeholder: risolvi dal note
+    // 1. Se c'è un NOTE placeholder, risolvilo dalla classifica FRESCA
     if (note && note.trim()) {
       var m = String(note).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
       if (m) {
         var key = m[2].trim().toUpperCase();
         var pos = parseInt(m[1]) - 1;
         if (clG[key] && clG[key][pos]) return clG[key][pos].sq;
-        return null;
+        return null; // non ancora risolvibile in questo ciclo
       }
     }
-    // 3. L'oggetto stesso ha un nome placeholder: risolvilo
-    if (sqObj && sqObj.nome) {
+    // 2. Se l'oggetto ha un nome placeholder, risolvilo fresco
+    if (sqObj && sqObj.nome && isPlaceh(sqObj.nome)) {
       var m2 = String(sqObj.nome).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
       if (m2) {
         var key2 = m2[2].trim().toUpperCase();
         var pos2 = parseInt(m2[1]) - 1;
         if (clG[key2] && clG[key2][pos2]) return clG[key2][pos2].sq;
       }
+      return null;
     }
+    // 3. Squadra reale senza note: usa l'oggetto
+    if (sqObj && sqObj.id && sqObj.nome && !isPlaceh(sqObj.nome)) return sqObj;
     return null;
   }
 
