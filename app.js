@@ -826,50 +826,54 @@ async function renderClassifiche() {
   var isClassif = function(g) { var n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori')||g.partite.length===0; };
   var isPlaceh = function(s) { if(!s)return true; return /^\d+[°º]?\s/.test(s)||/^(miglior|peggior|vincente|perdente)/i.test(s); };
 
-  // ══ RISOLUZIONE UNICA E SEMPLICE: costruisce una mappa NOME-GIRONE → CLASSIFICA ══
-  // usando SOLO i dati delle partite, ricalcolata ogni volta in modo deterministico,
-  // ripetuta a cascata finché tutti i placeholder sono risolti (max 8 giri)
   var clG = {};
 
+  // Risolve UNA squadra (oggetto o placeholder) SENZA effetti collaterali
+  function risolviSquadra(sqObj, note) {
+    // Placeholder testuale ha SEMPRE priorità
+    if (note && note.trim()) {
+      var m = String(note).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
+      if (m) {
+        var key = m[2].trim().toUpperCase();
+        var pos = parseInt(m[1]) - 1;
+        if (clG[key] && clG[key][pos]) return clG[key][pos].sq;
+        return null; // non ancora risolvibile
+      }
+    }
+    // Oggetto squadra reale (non placeholder)
+    if (sqObj && sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
+    // Oggetto è esso stesso un placeholder testuale nel nome
+    if (sqObj && sqObj.nome) {
+      var m2 = String(sqObj.nome).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
+      if (m2) {
+        var key2 = m2[2].trim().toUpperCase();
+        var pos2 = parseInt(m2[1]) - 1;
+        if (clG[key2] && clG[key2][pos2]) return clG[key2][pos2].sq;
+      }
+    }
+    return null;
+  }
+
   function calcolaGirone(g) {
-    // Prende le squadre REALI dalle partite del girone (ignora girone_squadre)
+    var partiteRisolte = [];
     var sqMap = {};
     for (var i=0; i<g.partite.length; i++) {
       var p = g.partite[i];
-      var h = p.home, a = p.away;
-      // Se home è placeholder, prova a risolverlo dal note_home
-      if ((!h || isPlaceh(h.nome)) && p.note_home) {
-        var mh = String(p.note_home).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
-        if (mh) {
-          var keyH = mh[2].trim().toUpperCase();
-          var posH = parseInt(mh[1]) - 1;
-          if (clG[keyH] && clG[keyH][posH]) h = clG[keyH][posH].sq;
-        }
-      }
-      if ((!a || isPlaceh(a.nome)) && p.note_away) {
-        var ma = String(p.note_away).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
-        if (ma) {
-          var keyA = ma[2].trim().toUpperCase();
-          var posA = parseInt(ma[1]) - 1;
-          if (clG[keyA] && clG[keyA][posA]) a = clG[keyA][posA].sq;
-        }
-      }
-      if (h && h.id && !isPlaceh(h.nome)) sqMap[h.id] = h;
-      if (a && a.id && !isPlaceh(a.nome)) sqMap[a.id] = a;
-      // Salva le squadre risolte sulla partita stessa per il calcolo dopo
-      p._hResolved = h; p._aResolved = a;
+      var h = risolviSquadra(p.home, p.note_home);
+      var a = risolviSquadra(p.away, p.note_away);
+      if (h && h.id) sqMap[h.id] = h;
+      if (a && a.id) sqMap[a.id] = a;
+      partiteRisolte.push({ home_id: h?h.id:null, away_id: a?a.id:null, gol_home:p.gol_home, gol_away:p.gol_away, giocata:p.giocata });
     }
     var squadre = Object.values(sqMap);
     if (squadre.length < 2) return null;
 
-    // Calcola punti/gol usando le squadre risolte
     var map = {};
     squadre.forEach(function(s){ map[s.id] = {sq:s, g:0, v:0, p:0, s:0, gf:0, gs:0, pts:0}; });
-    g.partite.forEach(function(p){
-      if (!p.giocata) return;
-      var h = p._hResolved, a = p._aResolved;
-      if (!h || !a || !map[h.id] || !map[a.id]) return;
-      var mh = map[h.id], ma = map[a.id];
+    partiteRisolte.forEach(function(p){
+      if (!p.giocata || !p.home_id || !p.away_id) return;
+      var mh = map[p.home_id], ma = map[p.away_id];
+      if (!mh || !ma) return;
       mh.g++; ma.g++;
       mh.gf += p.gol_home; mh.gs += p.gol_away;
       ma.gf += p.gol_away; ma.gs += p.gol_home;
@@ -883,39 +887,37 @@ async function renderClassifiche() {
       var dx = x.gf-x.gs, dy = y.gf-y.gs;
       if (dy !== dx) return dy - dx;
       if (y.gf !== x.gf) return y.gf - x.gf;
-      return x.sq.id - y.sq.id; // spareggio deterministico finale: id crescente
+      return x.sq.id - y.sq.id;
     });
     return lista;
   }
 
-  // Cascata: ripete finché ogni girone risolvibile ha una classifica stabile
-  for (var ciclo = 0; ciclo < 8; ciclo++) {
+  // Cascata: fino a 10 giri, SEMPRE ricalcola tutto da capo (nessun side-effect residuo)
+  var gironiValidi = gironi.filter(function(g){ return !isClassif(g); });
+  for (var ciclo = 0; ciclo < 10; ciclo++) {
+    var nuovoClG = {};
     var cambiati = 0;
-    for (var gi=0; gi<gironi.length; gi++) {
-      var g = gironi[gi];
-      if (isClassif(g)) continue;
+    for (var gi=0; gi<gironiValidi.length; gi++) {
+      var g = gironiValidi[gi];
       var key = g.nome.toUpperCase().trim();
-      var nuova = calcolaGirone(g);
-      if (!nuova) continue;
-      var vecchia = clG[key];
-      var vecchiaIds = vecchia ? vecchia.map(function(r){return r.sq.id;}).join(',') : '';
-      var nuovaIds = nuova.map(function(r){return r.sq.id;}).join(',');
-      if (nuovaIds !== vecchiaIds || (vecchia && JSON.stringify(vecchia.map(function(r){return r.g;})) !== JSON.stringify(nuova.map(function(r){return r.g;})))) {
-        clG[key] = nuova;
-        cambiati++;
+      var risultato = calcolaGirone(g);
+      if (risultato) {
+        nuovoClG[key] = risultato;
+        var vecchio = clG[key];
+        var vOk = vecchio ? vecchio.map(function(r){return r.sq.id+':'+r.g;}).join(',') : '';
+        var nOk = risultato.map(function(r){return r.sq.id+':'+r.g;}).join(',');
+        if (vOk !== nOk) cambiati++;
       }
     }
+    clG = nuovoClG;
     if (cambiati === 0 && ciclo > 0) break;
   }
 
-  // Espone per compatibilità con altre funzioni (tabellone, knockout)
   window._clGlobale = clG;
 
-  // ══ DISEGNA LE TABELLE ══
   var html = '';
-  for (var gi2=0; gi2<gironi.length; gi2++) {
-    var g2 = gironi[gi2];
-    if (isClassif(g2)) continue;
+  for (var gi2=0; gi2<gironiValidi.length; gi2++) {
+    var g2 = gironiValidi[gi2];
     var key2 = g2.nome.toUpperCase().trim();
     var cl = clG[key2];
     if (!cl || !cl.length) continue;
