@@ -904,14 +904,11 @@ async function renderClassifiche() {
     });
 
     var key = g.nome.toUpperCase().trim();
-    // Usa la classifica GIÀ calcolata dal resolver (a cascata) se disponibile
-    var cl;
-    if (window._clGlobale && window._clGlobale[key] && window._clGlobale[key].length) {
-      cl = window._clGlobale[key];
-    } else {
-      cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
-    }
+    // SOLUZIONE STABILE: costruisci SEMPRE dalle partite risolte (deterministico)
+    // NON usare window._clGlobale che può essere instabile
+    var cl = calcGironeClassifica({squadre:sq, partite:partiteRisolte});
     if (!cl.length) continue;
+    console.log('[CLASSIFICA] ' + key + ':', cl.map(function(r){return r.sq.nome+'='+r.g+'g';}).join(', '));
     classificheGironi[key] = cl;
 
     cl.forEach(function(row,idx){
