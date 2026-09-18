@@ -2,64 +2,77 @@ window.renderClassifiche = async function() {
   const el = document.getElementById('sec-classifiche');
   if (!STATE.activeCat) { el.innerHTML='<div class="empty-state">Nessuna categoria.</div>'; return; }
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--testo-xs);">⏳ Caricamento...</div>';
+  if (typeof _cacheClear === 'function') _cacheClear();
   const cat = STATE.categorie.find(c=>c.id===STATE.activeCat);
-  const gironi = await getGironiWithData(STATE.activeCat); // usa cache db.js
+  const gironi = await getGironiWithData(STATE.activeCat);
   if (!gironi.length) { el.innerHTML='<div class="empty-state">Nessun girone trovato.</div>'; return; }
-  let html = '';
 
-  // Banner vincitori gironi — mostrato una sola volta per sessione per categoria
-  const bannerKey = 'vincitori_shown_' + STATE.activeCat;
-  const tuttiCompleti = gironi.every(g => g.partite.length > 0 && g.partite.filter(p=>p.giocata).length === g.partite.length);
-  if (tuttiCompleti && !sessionStorage.getItem(bannerKey)) {
-    sessionStorage.setItem(bannerKey, '1');
-    html += `<div id="vincitori-banner" style="
-      background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);
-      border-radius:16px;padding:18px 16px;margin-bottom:16px;
-      border:1px solid rgba(255,255,255,0.1);position:relative;
-      animation:bannerSlideIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards;">
-      <button onclick="document.getElementById('vincitori-banner').remove()"
-        style="position:absolute;top:10px;right:12px;background:rgba(255,255,255,0.15);
-        border:none;color:white;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:13px;">✕</button>
-      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);
-        text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">🏆 Classifiche finali gironi</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">`;
-    for (const g of gironi) {
-      const cl = calcGironeClassifica(g);
-      const top3 = cl.slice(0, 3);
-      const medaglie = ['🥇','🥈','🥉'];
-      html += `<div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 14px;">
-        <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);
-          text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">${g.nome}</div>`;
-      top3.forEach((row, idx) => {
-        const isVincitore = idx === 0;
-        html += `<div style="display:flex;align-items:center;gap:10px;
-          padding:${isVincitore?'8px 10px':'5px 10px'};
-          background:${isVincitore?'rgba(255,215,0,0.12)':'rgba(255,255,255,0.04)'};
-          border-radius:8px;margin-bottom:4px;
-          border:${isVincitore?'1px solid rgba(255,215,0,0.3)':'1px solid transparent'};">
-          <span style="font-size:${isVincitore?'22px':'16px'}">${medaglie[idx]}</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:${isVincitore?'15px':'13px'};font-weight:${isVincitore?'800':'600'};
-              color:${isVincitore?'#FFD700':'rgba(255,255,255,0.8)'};
-              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              ${row.sq.nome}
-            </div>
-            ${isVincitore?`<div style="font-size:10px;color:rgba(255,215,0,0.6);margin-top:2px;font-weight:600;">VINCITORE GIRONE</div>`:''}
-          </div>
-          <div style="font-size:${isVincitore?'18px':'14px'};font-weight:800;
-            color:${isVincitore?'#FFD700':'rgba(255,255,255,0.5)'};flex-shrink:0;">
-            ${row.pts} pt
-          </div>
-        </div>`;
-      });
-      html += `</div>`;
+  const isPlaceh = s => !s || /^\d+[°º]?\s/.test(s) || /^(miglior|peggior|vincente|perdente)/i.test(s);
+  const isClassif = g => { const n=(g.nome||'').toLowerCase(); return n.includes('classif')||n.includes('migliori'); };
+
+  // clG: classifiche calcolate a cascata, risolvendo i placeholder
+  let clG = {};
+  function risolviSquadra(sqObj, note) {
+    // NOTE placeholder ha priorità (gli id nel DB possono essere incoerenti)
+    if (note && note.trim()) {
+      const m = String(note).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
+      if (m) { const k=m[2].trim().toUpperCase(); const p=parseInt(m[1])-1; if(clG[k]&&clG[k][p])return clG[k][p].sq; return null; }
     }
-    html += `</div></div>`;
+    if (sqObj && sqObj.nome && isPlaceh(sqObj.nome)) {
+      const m2 = String(sqObj.nome).trim().match(/^(\d+)[°º]?\s+(.+)$/i);
+      if (m2) { const k=m2[2].trim().toUpperCase(); const p=parseInt(m2[1])-1; if(clG[k]&&clG[k][p])return clG[k][p].sq; }
+      return null;
+    }
+    if (sqObj && sqObj.id && sqObj.nome && !isPlaceh(sqObj.nome)) return sqObj;
+    return null;
   }
+  function calcolaGirone(g) {
+    const pr=[]; const sqMap={};
+    for (const p of g.partite) {
+      const h=risolviSquadra(p.home,p.note_home);
+      const a=risolviSquadra(p.away,p.note_away);
+      if(h&&h.id)sqMap[h.id]=h; if(a&&a.id)sqMap[a.id]=a;
+      pr.push({home_id:h?h.id:null,away_id:a?a.id:null,gol_home:p.gol_home,gol_away:p.gol_away,giocata:p.giocata});
+    }
+    const squadre=Object.values(sqMap);
+    if(squadre.length<2)return null;
+    const map={};
+    squadre.forEach(s=>map[s.id]={sq:s,g:0,v:0,p:0,s:0,gf:0,gs:0,pts:0});
+    pr.forEach(p=>{
+      if(!p.giocata||!p.home_id||!p.away_id)return;
+      const mh=map[p.home_id],ma=map[p.away_id];if(!mh||!ma)return;
+      mh.g++;ma.g++;mh.gf+=p.gol_home;mh.gs+=p.gol_away;ma.gf+=p.gol_away;ma.gs+=p.gol_home;
+      if(p.gol_home>p.gol_away){mh.v++;mh.pts+=3;ma.s++;}
+      else if(p.gol_home<p.gol_away){ma.v++;ma.pts+=3;mh.s++;}
+      else{mh.p++;ma.p++;mh.pts++;ma.pts++;}
+    });
+    return Object.values(map).sort((x,y)=>{
+      if(y.pts!==x.pts)return y.pts-x.pts;
+      const dx=x.gf-x.gs,dy=y.gf-y.gs; if(dy!==dx)return dy-dx;
+      if(y.gf!==x.gf)return y.gf-x.gf; return x.sq.id-y.sq.id;
+    });
+  }
+  // Cascata
+  const gval = gironi.filter(g=>!isClassif(g));
+  for (let ciclo=0; ciclo<10; ciclo++) {
+    const nuovo={}; let camb=0;
+    for (const g of gval) {
+      const key=g.nome.toUpperCase().trim();
+      const r=calcolaGirone(g);
+      if(r){nuovo[key]=r; const o=clG[key]?clG[key].map(x=>x.sq.id+':'+x.g).join(','):''; const n=r.map(x=>x.sq.id+':'+x.g).join(','); if(o!==n)camb++;}
+    }
+    clG=nuovo;
+    if(camb===0&&ciclo>0)break;
+  }
+  window._clGlobale = clG;
 
-  for (const g of gironi) {
-    const cl = calcGironeClassifica(g);
-    const played = g.partite.filter(p=>p.giocata).length;
+  let html = '';
+  for (const g of gval) {
+    const key=g.nome.toUpperCase().trim();
+    const cl=clG[key];
+    if(!cl||!cl.length)continue;
+    const played=g.partite.filter(p=>p.giocata).length;
+    if(played===0)continue;
     html += `<div class="card">
       <div class="card-title">${g.nome}<span class="badge badge-gray">${played}/${g.partite.length}</span></div>
       <div style="overflow-x:auto;">
@@ -67,8 +80,7 @@ window.renderClassifiche = async function() {
         <thead><tr>
           <th></th><th colspan="2">Squadra</th>
           <th>G</th><th>V</th><th>P</th><th>S</th>
-          <th style="color:#27ae60;">GF</th>
-          <th style="color:#e74c3c;">GS</th>
+          <th style="color:#27ae60;">GF</th><th style="color:#e74c3c;">GS</th>
           <th>GD</th><th>Pt</th>
         </tr></thead><tbody>`;
     cl.forEach((row,idx) => {
@@ -89,11 +101,10 @@ window.renderClassifiche = async function() {
       <div style="font-size:10px;color:var(--testo-xs);margin-top:6px;padding-top:6px;border-top:1px solid var(--bordo-lt);">
         Spareggio: punti → scontro diretto → diff. reti → gol fatti → rigori
       </div></div>`;
-    if (played === g.partite.length && g.partite.length > 0)
-      checkTrophyAnimation(cl[0]?.sq?.nome, cat?.nome);
   }
-  el.innerHTML = html;
+  el.innerHTML = html || '<div class="empty-state">Nessun risultato inserito.</div>';
 };
+
 window.saveRisultato = async function(partita_id, girone_id) {
   const sh = document.getElementById('sh_'+partita_id)?.value;
   const sa = document.getElementById('sa_'+partita_id)?.value;
@@ -120,18 +131,18 @@ window.saveRisultato = async function(partita_id, girone_id) {
 };
 function mostraNotificaRisultato(home, golH, away, golA) {
   document.getElementById('result-notification')?.remove();
-  const v = golH>golA ? `🏆 ${home} vince!` : golA>golH ? `🏆 ${away} vince!` : '🤝 Pareggio!';
+  const v = golH>golA ? `\U0001F3C6 ${home} vince!` : golA>golH ? `\U0001F3C6 ${away} vince!` : '\U0001F91D Pareggio!';
   const div = document.createElement('div');
   div.id = 'result-notification';
   div.innerHTML = `<div class="notif-inner">
-    <div class="notif-label">⚽ RISULTATO</div>
+    <div class="notif-label">\u26BD RISULTATO</div>
     <div class="notif-score">
       <span class="notif-team ${golH>golA?'notif-winner':''}">${home}</span>
-      <span class="notif-goals">${golH} — ${golA}</span>
+      <span class="notif-goals">${golH} \u2014 ${golA}</span>
       <span class="notif-team ${golA>golH?'notif-winner':''}">${away}</span>
     </div>
     <div class="notif-vincitore">${v}</div>
-    <button onclick="document.getElementById('result-notification').remove()" class="notif-close">✕</button>
+    <button onclick="document.getElementById('result-notification').remove()" class="notif-close">\u2715</button>
   </div>`;
   document.body.appendChild(div);
   setTimeout(()=>{ const e=document.getElementById('result-notification'); if(e){e.style.animation='notifFadeOut 0.5s ease forwards';setTimeout(()=>e.remove(),500);} },6000);
@@ -147,7 +158,7 @@ function mostraCoppa(v, cat) {
   const div=document.createElement('div'); div.id='trophy-overlay';
   div.innerHTML=`<div class="trophy-box">
     <div class="trophy-confetti" id="trophy-confetti"></div>
-    <div class="trophy-emoji">🏆</div>
+    <div class="trophy-emoji">\U0001F3C6</div>
     <div class="trophy-title">CAMPIONE!</div>
     <div class="trophy-categoria">${cat}</div>
     <div class="trophy-nome">${v}</div>
