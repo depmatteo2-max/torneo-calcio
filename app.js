@@ -848,16 +848,20 @@ async function renderClassifiche() {
     if (isClassif(g)) continue;
 
     // Squadre valide — risolve placeholder usando p.home/away O note_home/away
+    // IMPORTANTE: se c'è un note (placeholder), lo usa SEMPRE per primo
+    // perché home_id potrebbe puntare a una squadra-placeholder fantasma
     var resolvePartitaSq = function(sqObj, note) {
-      // Prova prima l'oggetto squadra
+      // Se c'è un note placeholder, risolvilo PRIMA (ha priorità)
+      if (note && note.trim()) {
+        var r2 = resolveSquadra({nome: note});
+        if (r2) return r2;
+      }
+      // Altrimenti usa l'oggetto squadra (se è reale, non placeholder)
+      if (sqObj && sqObj.id && !isPlaceh(sqObj.nome)) return sqObj;
+      // Ultimo tentativo: risolvi l'oggetto (può essere placeholder)
       if (sqObj) {
         var r = resolveSquadra(sqObj);
         if (r) return r;
-      }
-      // Se null, prova il note (placeholder testuale)
-      if (note) {
-        var r2 = resolveSquadra({nome: note});
-        if (r2) return r2;
       }
       return null;
     };
