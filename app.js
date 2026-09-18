@@ -847,29 +847,16 @@ async function renderClassifiche() {
     var g = gironi[gi];
     if (isClassif(g)) continue;
 
-    // Squadre valide — risolve placeholder usando p.home/away O note_home/away
-    var resolvePartitaSq = function(sqObj, note) {
-      // Prova prima l'oggetto squadra
-      if (sqObj) {
-        var r = resolveSquadra(sqObj);
-        if (r) return r;
-      }
-      // Se null, prova il note (placeholder testuale)
-      if (note) {
-        var r2 = resolveSquadra({nome: note});
-        if (r2) return r2;
-      }
-      return null;
-    };
-
+    // Squadre valide — risolve anche i placeholder
     var sqMap = {};
     for (var pi=0; pi<g.partite.length; pi++) {
       var p = g.partite[pi];
-      var hR = resolvePartitaSq(p.home, p.note_home);
-      var aR = resolvePartitaSq(p.away, p.note_away);
+      var hR = resolveSquadra(p.home);
+      var aR = resolveSquadra(p.away);
       if (hR && hR.id) sqMap[hR.id]=hR;
       if (aR && aR.id) sqMap[aR.id]=aR;
     }
+    // Aggiungi anche squadre reali da g.squadre
     (g.squadre||[]).forEach(function(s){
       var r = resolveSquadra(s);
       if (r && r.id) sqMap[r.id] = r;
@@ -877,10 +864,10 @@ async function renderClassifiche() {
     var sq = Object.values(sqMap);
     if (sq.length < 2) continue;
 
-    // Costruisci partite con squadre risolte (usa anche note_home/away)
+    // Costruisci partite con squadre risolte
     var partiteRisolte = g.partite.map(function(p){
-      var hR = resolvePartitaSq(p.home, p.note_home);
-      var aR = resolvePartitaSq(p.away, p.note_away);
+      var hR = resolveSquadra(p.home);
+      var aR = resolveSquadra(p.away);
       return {
         home_id: hR ? hR.id : null,
         away_id: aR ? aR.id : null,
@@ -3784,7 +3771,7 @@ async function simulaRisultati() {
       }
       const gironi = await getGironiWithData(catId); let nuovi = 0;
       for (const g of gironi) {
-        const daGiocare = g.partite.filter(p => !p.giocata && (p.home_id || p.note_home) && (p.away_id || p.note_away));
+        const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
         if (!daGiocare.length) continue;
         _simLog('Pass ' + pass + ' — ' + g.nome + ': ' + daGiocare.length + ' partite');
         for (const p of daGiocare) {
@@ -3809,7 +3796,7 @@ async function simulaRisultatiGirone() {
   try {
     const gironi = await getGironiWithData(STATE.activeCat); let totale = 0;
     for (const g of gironi) {
-      const daGiocare = g.partite.filter(p => !p.giocata && (p.home_id || p.note_home) && (p.away_id || p.note_away));
+      const daGiocare = g.partite.filter(p => !p.giocata && p.home_id && p.away_id);
       if (!daGiocare.length) continue;
       _simLog('📋 Simulo ' + g.nome + ' (' + daGiocare.length + ' partite)...');
       for (const p of daGiocare) {
